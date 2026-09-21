@@ -1,0 +1,13 @@
+{
+  "name": "@usc/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./theme": "./src/theme.js",
+    "./domain": "./src/domain.js"
+  },
+  "scripts": { "build": "echo \"shared is plain ESM, nothing to build\"" }
+}

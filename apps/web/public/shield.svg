@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="USA Security Connect">
+  <path d="M32 3 8 12v22c0 14 10 23 24 27 14-4 24-13 24-27V12L32 3Z" fill="#001F3F"/>
+  <path d="M32 9 14 16v18c0 11 7.6 17.8 18 21.3 10.4-3.5 18-10.3 18-21.3V16L32 9Z" fill="#AA2F19"/>
+  <path d="M32 20a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2Z" fill="#fff"/>
+</svg>

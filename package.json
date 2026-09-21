@@ -1,0 +1,28 @@
+{
+  "name": "usa-security-connect",
+  "version": "1.0.0",
+  "private": true,
+  "description": "USA Security Connect - workforce management platform for USA Security & Protection Group",
+  "workspaces": [
+    "packages/*",
+    "apps/server",
+    "apps/web",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev --workspace @usc/server",
+    "dev:web": "npm run dev --workspace @usc/web",
+    "build": "npm run build --workspace @usc/shared && npm run build --workspace @usc/web",
+    "seed": "npm run seed --workspace @usc/server",
+    "mobile": "npm run start --workspace @usc/mobile",
+    "mobile:check": "npm run bundle:check --workspace @usc/mobile",
+    "test": "npm run test --workspace @usc/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

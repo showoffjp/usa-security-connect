@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "USA Security Connect",
+    "slug": "usa-security-connect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "usasecurityconnect",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#001F3F"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.usasecuritygroup.connect",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "USA Security Connect confirms you are at your assigned post when you clock in, answer a status check-in, or scan a checkpoint.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Location is used to verify your post while you are on shift.",
+        "NSCameraUsageDescription": "Attach photos to incident reports from your post.",
+        "NSPhotoLibraryUsageDescription": "Attach existing photos to an incident report.",
+        "NFCReaderUsageDescription": "Scan the NFC tag at each patrol checkpoint."
+      }
+    },
+    "android": {
+      "package": "com.usasecuritygroup.connect",
+      "adaptiveIcon": { "backgroundColor": "#001F3F" },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "NFC",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-location", {
+        "locationWhenInUsePermission": "USA Security Connect verifies you are at your assigned post when you clock in or check in."
+      }],
+      ["expo-image-picker", {
+        "photosPermission": "Attach photos to an incident report.",
+        "cameraPermission": "Take photos for an incident report."
+      }]
+    ],
+    "extra": {
+      "apiUrl": "http://10.0.2.2:4000/api"
+    }
+  }
+}
