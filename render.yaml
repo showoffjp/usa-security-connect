@@ -1,0 +1,38 @@
+# Render blueprint. Import the repo at render.com/blueprints and it provisions
+# both services. Railway and Fly work the same way from the Dockerfile.
+services:
+  - type: web
+    name: usc-api
+    runtime: docker
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    plan: starter          # a persistent disk requires a paid instance
+    disk:
+      name: usc-data
+      mountPath: /data     # SQLite file + incident photos
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: USC_DATA_DIR
+        value: /data
+      - key: USC_JWT_SECRET
+        generateValue: true
+      - key: USC_ALLOWED_ORIGINS
+        sync: false        # set to the web app's URL after the first deploy
+      - key: USC_MAPS_API_KEY
+        sync: false
+
+  - type: web
+    name: usc-web
+    runtime: static
+    buildCommand: npm install && npm run build --workspace @usc/web
+    staticPublishPath: ./apps/web/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false        # https://usc-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

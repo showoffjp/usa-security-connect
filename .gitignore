@@ -11,3 +11,7 @@ build/
 .env.local
 uploads/
 .DS_Store
+data/
+apps/server/data/
+.ci-android/
+.ci-ios/
