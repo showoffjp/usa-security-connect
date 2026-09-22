@@ -5,13 +5,13 @@ on:
     branches: [main]
   pull_request:
 
-# Node 22+ is required: the database driver is node:sqlite, built into Node.
+# Node 22+ is required by the toolchain and by PGlite's WebAssembly build.
 env:
   NODE_VERSION: '22'
 
 jobs:
   api:
-    name: API (both suites)
+    name: API (all suites)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,11 +23,11 @@ jobs:
 
       - run: npm ci
 
-      # verify.mjs reseeds, starts the API, runs both suites and stops it, in
+      # verify.mjs reseeds, starts the API, runs every suite and stops it, in
       # that order: PGlite is single-writer, so seeding a running server would
       # corrupt the data directory. No database service is needed - PGlite is
       # Postgres compiled to WebAssembly.
-      - name: Seed, start and run both suites
+      - name: Seed, start and run every suite
         run: npm run verify --workspace @usc/server
         env:
           USC_JWT_SECRET: ci-only-secret-not-used-anywhere-real
