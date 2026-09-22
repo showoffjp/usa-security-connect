@@ -53,13 +53,23 @@ if (fresh) {
   console.log('Removed the local database.\n');
 }
 
-console.log('1/7  Seeding\n');
+// Pure unit test of the SQL translation layer. It needs no database and no
+// server, and if it is wrong then every failure downstream is noise, so it
+// runs first and stops the run.
+console.log('1/8  SQL dialect translation\n');
+const dialect = await run('test/dialect.mjs');
+if (dialect !== 0) {
+  console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
+  process.exit(1);
+}
+
+console.log('\n2/8  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n2/7  Starting the API');
+console.log('\n3/8  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -88,24 +98,24 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('3/7  Core suite\n');
+console.log('4/8  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n4/7  Feature suite\n');
+console.log('\n5/8  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n5/7  Shift request suite\n');
+console.log('\n6/8  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n6/7  Client portal suite\n');
+console.log('\n7/8  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n7/7  Invoicing suite\n');
+console.log('\n8/8  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
 stop();
 
-const failed = core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0;
+const failed = dialect !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

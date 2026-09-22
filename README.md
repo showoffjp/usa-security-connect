@@ -326,5 +326,14 @@ the server is running corrupts the data directory.
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.
 
-See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the rule reference — thresholds, flag
-types, roles, the PIN lifecycle and the pay calculation.
+---
+
+## Documentation
+
+- [docs/HANDOVER.md](docs/HANDOVER.md) — **start here if you are picking this up.** Why
+  it is shaped the way it is, the traps that have already bitten, and what is not
+  finished.
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — the rule reference: thresholds, flag types,
+  roles, the PIN lifecycle and the pay calculation.
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — GitHub, Neon and Vercel, step by step.
+- [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) — store builds, NFC and push.
