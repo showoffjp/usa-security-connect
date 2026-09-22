@@ -507,6 +507,11 @@ CREATE TABLE IF NOT EXISTS client_users (
   company         text,
   password_hash   text,
   password_salt   text,
+  -- Bumped whenever the password changes. A token carries the version it was
+  -- issued against, so a reset ends every session the contact had open
+  -- elsewhere. A counter rather than a timestamp, because JWT `iat` is whole
+  -- seconds and a reset moments after a sign-in would not be caught.
+  token_version   integer NOT NULL DEFAULT 0,
   status          text NOT NULL DEFAULT 'active',
   last_login_at   timestamptz,
   failed_attempts integer NOT NULL DEFAULT 0,

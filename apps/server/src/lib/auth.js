@@ -55,7 +55,7 @@ export async function generateEmployeeCode() {
 
 export function issueToken(user) {
   return jwt.sign(
-    { sub: user.id, code: user.employee_code, role: user.role },
+    { sub: user.id, code: user.employee_code, role: user.role, kind: 'staff' },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }
   );
@@ -63,7 +63,11 @@ export function issueToken(user) {
 
 export function readToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    const claims = jwt.verify(token, JWT_SECRET);
+    // Client-portal tokens are signed with the same secret and their `sub` is a
+    // client_users id, which would otherwise be read as a users id. Anything
+    // that is not explicitly staff is refused here.
+    return claims?.kind === 'client' ? null : claims;
   } catch {
     return null;
   }

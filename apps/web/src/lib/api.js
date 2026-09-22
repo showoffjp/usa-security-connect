@@ -1,24 +1,34 @@
 /** Thin API client. Attaches the bearer token and normalises server errors. */
 
-const TOKEN_KEY = 'usc.token';
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
-export const tokenStore = {
-  get: () => {
-    try {
-      return localStorage.getItem(TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  },
-  set: (t) => {
-    try {
-      t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY);
-    } catch {
-      /* private browsing - the session simply will not persist */
-    }
-  },
-};
+/**
+ * Staff and client contacts are separate identities with separate tokens, and
+ * one browser may well hold both - an account manager checking what a client
+ * sees. Two stores under two keys keeps signing out of one from signing out
+ * of the other.
+ */
+function makeTokenStore(key) {
+  return {
+    get: () => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set: (t) => {
+      try {
+        t ? localStorage.setItem(key, t) : localStorage.removeItem(key);
+      } catch {
+        /* private browsing - the session simply will not persist */
+      }
+    },
+  };
+}
+
+export const tokenStore = makeTokenStore('usc.token');
+export const clientTokenStore = makeTokenStore('usc.client.token');
 
 export class ApiError extends Error {
   constructor(status, message, details) {
@@ -33,15 +43,22 @@ export class ApiError extends Error {
   }
 }
 
-/** Fired when the server rejects our token so the app can bounce to sign-in. */
+/**
+ * Fired when the server rejects our token so the app can bounce to sign-in.
+ * Handlers are told which store was rejected, so the client portal's 401 does
+ * not sign a staff user out of the console in another tab.
+ */
 const onUnauthorized = new Set();
 export const subscribeUnauthorized = (fn) => {
   onUnauthorized.add(fn);
   return () => onUnauthorized.delete(fn);
 };
 
-export async function request(path, { method = 'GET', body, formData, signal } = {}) {
-  const token = tokenStore.get();
+export async function request(
+  path,
+  { method = 'GET', body, formData, signal, store = tokenStore, raw = false } = {}
+) {
+  const token = store.get();
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body) headers['Content-Type'] = 'application/json';
@@ -61,13 +78,17 @@ export async function request(path, { method = 'GET', body, formData, signal } =
 
   if (res.status === 204) return null;
 
+  // An <img src> cannot carry a bearer token, so a caller wanting a file that
+  // sits behind auth asks for the bytes and makes its own object URL.
+  if (raw && res.ok) return res.blob();
+
   const isJson = (res.headers.get('content-type') || '').includes('application/json');
   const payload = isJson ? await res.json().catch(() => null) : await res.text();
 
   if (!res.ok) {
     if (res.status === 401 && token) {
-      tokenStore.set(null);
-      onUnauthorized.forEach((fn) => fn());
+      store.set(null);
+      onUnauthorized.forEach((fn) => fn(store));
     }
     throw new ApiError(
       res.status,
@@ -78,10 +99,17 @@ export async function request(path, { method = 'GET', body, formData, signal } =
   return payload;
 }
 
-export const api = {
-  get: (p, opts) => request(p, opts),
-  post: (p, body, opts) => request(p, { ...opts, method: 'POST', body }),
-  patch: (p, body, opts) => request(p, { ...opts, method: 'PATCH', body }),
-  del: (p, opts) => request(p, { ...opts, method: 'DELETE' }),
-  upload: (p, formData) => request(p, { method: 'POST', formData }),
-};
+function makeApi(store) {
+  return {
+    get: (p, opts) => request(p, { ...opts, store }),
+    post: (p, body, opts) => request(p, { ...opts, store, method: 'POST', body }),
+    patch: (p, body, opts) => request(p, { ...opts, store, method: 'PATCH', body }),
+    del: (p, opts) => request(p, { ...opts, store, method: 'DELETE' }),
+    upload: (p, formData) => request(p, { store, method: 'POST', formData }),
+  };
+}
+
+export const api = makeApi(tokenStore);
+
+/** The same client, pointed at the portal's own token. */
+export const clientApi = makeApi(clientTokenStore);

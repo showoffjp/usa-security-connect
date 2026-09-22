@@ -54,8 +54,12 @@ export function AuthProvider({ children }) {
     };
   }, [signOutLocal]);
 
-  // If any request comes back 401, drop straight to the sign-in screen.
-  useEffect(() => subscribeUnauthorized(signOutLocal), [signOutLocal]);
+  // If a staff request comes back 401, drop straight to the sign-in screen.
+  // A 401 from the client portal is not ours to react to.
+  useEffect(
+    () => subscribeUnauthorized((store) => (store === tokenStore ? signOutLocal() : undefined)),
+    [signOutLocal]
+  );
 
   const signIn = useCallback(async (employeeCode, pin) => {
     const res = await api.post('/auth/login', { employeeCode, pin, deviceId: deviceId() });

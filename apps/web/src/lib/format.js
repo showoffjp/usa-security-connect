@@ -1,25 +1,42 @@
 /** Display helpers. Everything renders in the browser's local timezone. */
 
-const invalid = (d) => !d || Number.isNaN(new Date(d).getTime());
+/**
+ * A bare YYYY-MM-DD is a calendar date, not an instant, and `new Date()` reads
+ * it as UTC midnight - which renders as the day before anywhere west of
+ * Greenwich. Postgres hands back every `date` column in that form (licence
+ * expiry, time off, the daily report), so they are rebuilt in local time.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function toDate(d) {
+  if (d instanceof Date) return d;
+  if (typeof d === 'string' && DATE_ONLY.test(d.trim())) {
+    const [y, m, day] = d.trim().split('-').map(Number);
+    return new Date(y, m - 1, day);
+  }
+  return new Date(d);
+}
+
+const invalid = (d) => !d || Number.isNaN(toDate(d).getTime());
 
 export const fmtTime = (d) =>
-  invalid(d) ? '--' : new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  invalid(d) ? '--' : toDate(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 export const fmtDate = (d) =>
-  invalid(d) ? '--' : new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  invalid(d) ? '--' : toDate(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 export const fmtDateShort = (d) =>
-  invalid(d) ? '--' : new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  invalid(d) ? '--' : toDate(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
 
 export const fmtDateTime = (d) => (invalid(d) ? '--' : `${fmtDateShort(d)}, ${fmtTime(d)}`);
 
 export const fmtWeekday = (d) =>
-  invalid(d) ? '--' : new Date(d).toLocaleDateString([], { weekday: 'short' });
+  invalid(d) ? '--' : toDate(d).toLocaleDateString([], { weekday: 'short' });
 
 /** "Today", "Tomorrow", "Yesterday", or a short date. */
 export function fmtDay(d) {
   if (invalid(d)) return '--';
-  const date = new Date(d);
+  const date = toDate(d);
   const today = new Date();
   const days = Math.round(
     (new Date(date).setHours(0, 0, 0, 0) - new Date(today).setHours(0, 0, 0, 0)) / 86400000
@@ -33,7 +50,7 @@ export function fmtDay(d) {
 /** "in 12m", "3h ago". */
 export function fmtRelative(d) {
   if (invalid(d)) return '--';
-  const diff = new Date(d).getTime() - Date.now();
+  const diff = toDate(d).getTime() - Date.now();
   const mins = Math.round(Math.abs(diff) / 60000);
   const ahead = diff > 0;
   let text;
@@ -61,7 +78,7 @@ export function fmtCountdown(seconds) {
 
 /** Value for an <input type="datetime-local">, in local time. */
 export function toLocalInput(d) {
-  const date = d ? new Date(d) : new Date();
+  const date = d ? toDate(d) : new Date();
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

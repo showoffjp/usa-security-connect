@@ -27,6 +27,34 @@ export function parse(schema, payload) {
 /** SQLite stores naive UTC strings; normalise everything through here. */
 export const nowIso = () => new Date().toISOString();
 
+/**
+ * A ?date=YYYY-MM-DD parameter, read as a calendar day in the server's
+ * timezone. `new Date('2026-09-22')` is UTC midnight, which is the previous
+ * day's evening in Florida - so a report asked for by date would silently
+ * cover the wrong 24 hours.
+ *
+ * Returns local midnight, or null when the value cannot be read.
+ */
+export function parseDay(value) {
+  const day = value ? String(value).trim() : '';
+  if (!day) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (parts) return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 0, 0, 0, 0);
+
+  const parsed = new Date(day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+/** A local calendar date as YYYY-MM-DD; toISOString would shift the day. */
+export const toDateString = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 /** Convert a SQLite "YYYY-MM-DD HH:MM:SS" (UTC) value into a real ISO string. */
 export function sqlToIso(value) {
   if (!value) return null;

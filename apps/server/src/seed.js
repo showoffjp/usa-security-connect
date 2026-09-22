@@ -10,6 +10,7 @@
 
 import { db, migrate } from './lib/db.js';
 import { hashPin } from './lib/auth.js';
+import { hashPassword } from './lib/clientAuth.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
 
 const RESET = process.argv.includes('--reset');
@@ -648,6 +649,37 @@ const insertTimeOff = db.prepare(
   'Reached the officer by radio in under a minute. Aggressive driver at gate 1 had left the property. Tampa PD advised, no injuries, no damage.'
 ));
 
+/* --------------------------------------------------------- client portal -- */
+
+// Each contact sees only their own property. Keeping them on separate sites is
+// the point: it is what the portal's scoping is tested against.
+const clientLogins = [
+  {
+    email: 'dana.whitfield@riverfrontholdings.com', name: 'Dana Whitfield',
+    company: 'Riverfront Holdings LLC', password: 'riverfront-portal-01', sites: [siteIds.riverfront],
+  },
+  {
+    email: 'marcus.reyes@palmettoridgehoa.org', name: 'Marcus Reyes',
+    company: 'Palmetto Ridge HOA', password: 'palmetto-portal-02', sites: [siteIds.palmetto],
+  },
+  {
+    email: 'alicia.grant@gulfportfreight.com', name: 'Alicia Grant',
+    company: 'Gulfport Freight Co', password: 'gulfport-portal-03', sites: [siteIds.gulfport],
+  },
+];
+
+for (const c of clientLogins) {
+  const { hash, salt } = hashPassword(c.password);
+  const id = Number((await db.prepare(
+    `INSERT INTO client_users (email, name, company, password_hash, password_salt, created_by)
+     VALUES (?,?,?,?,?,?)`
+  ).run(c.email, c.name, c.company, hash, salt, users.admin)).lastInsertRowid);
+
+  for (const siteId of c.sites) {
+    await db.prepare(`INSERT INTO client_sites (client_user_id, site_id) VALUES (?,?)`).run(id, siteId);
+  }
+}
+
 // Derive flags from everything above.
 await sweep();
 
@@ -673,6 +705,11 @@ Sign-in codes (demo PINs):
   1006 / 7285   Alicia Nunez      Officer            W-2 hourly
   1007 / 8140   Kevin Osei        Officer            W-2, must change PIN
   1008 / 9351   Renee Okafor      Officer            1099 contractor, per shift
+
+Client portal logins (/portal):
+  dana.whitfield@riverfrontholdings.com / riverfront-portal-01   Riverfront Commerce Center
+  marcus.reyes@palmettoridgehoa.org     / palmetto-portal-02     Palmetto Ridge Residences
+  alicia.grant@gulfportfreight.com      / gulfport-portal-03     Gulfport Logistics Yard
 `);
 
 db.close();

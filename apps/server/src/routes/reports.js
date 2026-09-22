@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/db.js';
-import { HttpError, wrap, isoFields, sqlToIso } from '../lib/http.js';
+import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, toHours, minutesBetween } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -18,9 +18,8 @@ reportsRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
 reportsRouter.get(
   '/dar',
   wrap(async (req, res) => {
-    const day = req.query.date ? new Date(req.query.date) : new Date();
-    const start = new Date(day);
-    start.setHours(0, 0, 0, 0);
+    const start = parseDay(req.query.date);
+    if (!start) throw new HttpError(422, 'That date is not valid.');
     const end = new Date(start.getTime() + 86400000);
 
     const siteId = req.query.siteId ? Number(req.query.siteId) : null;
@@ -113,7 +112,7 @@ reportsRouter.get(
     const checkTotals = Object.fromEntries(checks.map((c) => [c.status, c.n]));
 
     res.json({
-      date: start.toISOString().slice(0, 10),
+      date: toDateString(start),
       site: site ? { id: site.id, name: site.name, address: site.address, client: site.client_name } : null,
       summary: {
         officers: new Set(shifts.map((s) => s.user_id)).size,

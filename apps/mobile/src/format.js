@@ -1,13 +1,30 @@
-const bad = (d) => !d || Number.isNaN(new Date(d).getTime());
+/**
+ * A bare YYYY-MM-DD is a calendar date, not an instant, and `new Date()` reads
+ * it as UTC midnight - which renders as the day before anywhere west of
+ * Greenwich. Postgres hands back every `date` column in that form (licence
+ * expiry, time off), so they are rebuilt in local time.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function toDate(d) {
+  if (d instanceof Date) return d;
+  if (typeof d === 'string' && DATE_ONLY.test(d.trim())) {
+    const [y, m, day] = d.trim().split('-').map(Number);
+    return new Date(y, m - 1, day);
+  }
+  return new Date(d);
+}
+
+const bad = (d) => !d || Number.isNaN(toDate(d).getTime());
 
 export const fmtTime = (d) =>
-  bad(d) ? '--' : new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  bad(d) ? '--' : toDate(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 export const fmtDate = (d) =>
-  bad(d) ? '--' : new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  bad(d) ? '--' : toDate(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 export const fmtDateShort = (d) =>
-  bad(d) ? '--' : new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  bad(d) ? '--' : toDate(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
 
 export const fmtDateTime = (d) => (bad(d) ? '--' : `${fmtDateShort(d)}, ${fmtTime(d)}`);
 
@@ -15,7 +32,7 @@ export const fmtRange = (a, b) => `${fmtTime(a)} - ${fmtTime(b)}`;
 
 export function fmtDay(d) {
   if (bad(d)) return '--';
-  const date = new Date(d);
+  const date = toDate(d);
   const days = Math.round(
     (new Date(date).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000
   );
@@ -27,7 +44,7 @@ export function fmtDay(d) {
 
 export function fmtRelative(d) {
   if (bad(d)) return '--';
-  const diff = new Date(d).getTime() - Date.now();
+  const diff = toDate(d).getTime() - Date.now();
   const mins = Math.round(Math.abs(diff) / 60000);
   let text;
   if (mins < 1) return 'just now';

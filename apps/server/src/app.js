@@ -25,6 +25,8 @@ import { certificationsRouter, availabilityRouter, timeOffRouter } from './route
 import { panicRouter, breaksRouter } from './routes/safety.js';
 import { reportsRouter } from './routes/reports.js';
 import { shiftRequestsRouter } from './routes/shiftRequests.js';
+import { clientRouter } from './routes/client.js';
+import { clientAdminRouter } from './routes/clientAdmin.js';
 
 export const app = express();
 
@@ -111,6 +113,9 @@ app.use('/api/panic', panicRouter);
 app.use('/api/breaks', breaksRouter);
 app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/client', clientRouter);
+// Mounted ahead of adminRouter so /api/admin/clients reaches this router.
+app.use('/api/admin/clients', clientAdminRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

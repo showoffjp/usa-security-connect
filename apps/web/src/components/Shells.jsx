@@ -203,6 +203,7 @@ export function AdminShell() {
       title: 'Configuration',
       items: [
         { to: '/admin/sites', icon: 'building', label: 'Sites & posts' },
+        { to: '/admin/clients', icon: 'users', label: 'Client portal' },
         { to: '/admin/audit', icon: 'clipboard', label: 'Audit log' },
       ],
     },
