@@ -24,6 +24,7 @@ import { devicesRouter } from './routes/devices.js';
 import { certificationsRouter, availabilityRouter, timeOffRouter } from './routes/workforce.js';
 import { panicRouter, breaksRouter } from './routes/safety.js';
 import { reportsRouter } from './routes/reports.js';
+import { shiftRequestsRouter } from './routes/shiftRequests.js';
 
 export const app = express();
 
@@ -108,6 +109,7 @@ app.use('/api/availability', availabilityRouter);
 app.use('/api/time-off', timeOffRouter);
 app.use('/api/panic', panicRouter);
 app.use('/api/breaks', breaksRouter);
+app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin', adminRouter);
 

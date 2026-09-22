@@ -185,6 +185,7 @@ export function AdminShell() {
       items: [
         { to: '/admin/employees', icon: 'users', label: 'Employees' },
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
+        { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay' },
         { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
         { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },

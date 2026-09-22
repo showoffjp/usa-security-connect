@@ -263,6 +263,12 @@ for (let day = -14; day <= 14; day++) {
 }
 // An unfilled shift for the admin to assign, plus a supervisor rotation.
 shifts.push({ user: null, post: postIds.riverfrontPatrol, start: at(2, 22), end: at(3, 6), status: 'scheduled' });
+
+// An open shift at the armed post. Only an officer holding a current Class G
+// can claim it, which is what makes the eligibility rule worth having.
+// Placed on day 6, which the loop above leaves clear for the armed officer -
+// otherwise his own roster would conflict and mask the licence rule.
+shifts.push({ user: null, post: postIds.gulfportYard, start: at(6, 18), end: at(7, 2), status: 'scheduled' });
 shifts.push({ user: users.supervisor, post: postIds.riverfrontPatrol, start: at(1, 8), end: at(1, 16), status: 'scheduled' });
 
 // Two shifts nobody ever clocked into. Left as 'scheduled' in the past so the

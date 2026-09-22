@@ -104,6 +104,15 @@ adminRouter.get(
       .prepare(`SELECT COUNT(*) AS n FROM time_off_requests WHERE status = 'pending'`)
       .get()).n;
 
+    // A swap still waiting on the other officer is not the supervisor's to act
+    // on yet, so it is not counted here.
+    const openShiftRequests = (await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM shift_requests
+         WHERE status = 'accepted' OR (status = 'pending' AND kind != 'swap')`
+      )
+      .get()).n;
+
     // Anything that lapses within 60 days, across certifications, state
     // licences and contractor insurance.
     const expiringCredentials =
@@ -148,6 +157,7 @@ adminRouter.get(
         unfilledShifts: unfilled,
         activeAlerts,
         pendingTimeOff,
+        openShiftRequests,
         expiringCredentials,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),

@@ -90,6 +90,87 @@ export const WEEKDAYS = [
 /** Break types. Florida follows the federal rule: meal breaks over 30 min are unpaid. */
 export const BREAK_TYPES = ['meal', 'rest'];
 
+/* --------------------------------------------------- shift requests --- */
+
+export const SHIFT_REQUEST_KINDS = ['claim', 'swap', 'drop'];
+
+export const SHIFT_REQUEST_LABEL = {
+  claim: 'Open shift claim',
+  swap: 'Shift swap',
+  drop: 'Drop request',
+};
+
+/**
+ * Statuses a request moves through.
+ *
+ * A swap needs two yeses: the other officer accepts, then a supervisor
+ * approves. A claim or drop only needs the supervisor.
+ */
+export const SHIFT_REQUEST_STATUS = [
+  'pending',   // waiting on the other officer (swap) or a supervisor
+  'accepted',  // the other officer agreed; now waiting on a supervisor
+  'declined',  // the other officer said no
+  'approved',
+  'denied',
+  'cancelled', // withdrawn by the requester
+];
+
+/**
+ * Why an officer may not take a given shift.
+ *
+ * Returned as a list so the UI can show every reason at once rather than
+ * making someone fix them one at a time. An empty list means eligible.
+ */
+export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null }) {
+  const reasons = [];
+
+  if (officer?.status !== 'active') {
+    reasons.push({ code: 'inactive', message: 'The officer is not active.' });
+  }
+
+  // An armed post needs a current Class G. This is the rule that actually
+  // matters: working one on a lapsed licence is a licensing violation.
+  if (post?.armed) {
+    const armedLicence = [
+      ...certifications.map((c) => ({ type: c.type, expires: c.expires_on })),
+      { type: officer?.license_type, expires: officer?.license_expires_on },
+    ].find((c) => /class g|firearm/i.test(c.type || ''));
+
+    if (!armedLicence) {
+      reasons.push({ code: 'no_armed_licence', message: 'Armed post: no Class G licence on file.' });
+    } else if (armedLicence.expires && expiryState(armedLicence.expires).state === 'expired') {
+      reasons.push({ code: 'expired_armed_licence', message: 'Armed post: their Class G licence has expired.' });
+    }
+  }
+
+  if (officer?.license_expires_on && expiryState(officer.license_expires_on).state === 'expired') {
+    reasons.push({ code: 'expired_licence', message: 'Their security licence has expired.' });
+  }
+
+  if (conflicts.length) {
+    reasons.push({ code: 'conflict', message: 'They already have a shift overlapping this one.' });
+  }
+
+  if (timeOff.length) {
+    reasons.push({ code: 'time_off', message: 'They have approved time off covering this date.' });
+  }
+
+  // Availability is advisory: officers pick up shifts outside their stated
+  // hours all the time, so this warns rather than blocks.
+  if (availability && availability.available === false) {
+    reasons.push({
+      code: 'unavailable',
+      message: 'Outside the hours they said they can work.',
+      advisory: true,
+    });
+  }
+
+  return reasons;
+}
+
+/** Only non-advisory reasons actually prevent an assignment. */
+export const blocksAssignment = (reasons = []) => reasons.some((r) => !r.advisory);
+
 export const PANIC_STATUS = ['active', 'acknowledged', 'resolved', 'false_alarm'];
 
 export const INCIDENT_CATEGORIES = [
