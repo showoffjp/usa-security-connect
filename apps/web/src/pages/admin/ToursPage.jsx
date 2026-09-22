@@ -226,6 +226,7 @@ export default function AdminToursPage() {
       </div>
 
       <Segmented
+          label="Tour view"
         value={tab}
         onChange={setTab}
         options={[

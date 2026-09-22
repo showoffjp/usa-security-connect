@@ -204,6 +204,7 @@ export default function EmployeeDetailPage() {
         <div className="card">
           <div className="card-head">
             <Segmented
+          label="Employee record section"
               value={tab}
               onChange={setTab}
               options={[

@@ -158,10 +158,12 @@ export default function EmployeesPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search employees"
             placeholder="Search name, code or email"
           />
         </div>
         <Segmented
+          label="Employee status"
           value={status}
           onChange={setStatus}
           options={[

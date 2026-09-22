@@ -125,8 +125,12 @@ export function OfficerShell() {
 
   return (
     <div className="app">
+      {/* First thing in the tab order, so a keyboard user can jump the nav. */}
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <TopBar dutyState={status} />
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         <Outlet context={{ status }} />
       </main>
       <nav className="tabbar" aria-label="Main">
@@ -134,7 +138,17 @@ export function OfficerShell() {
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? 'active' : '')}>
             <Icon name={t.icon} size={21} />
             {t.label}
-            {t.badge > 0 && <span className="badge">{t.badge > 9 ? '9+' : t.badge}</span>}
+            {t.badge > 0 && (
+              <>
+                <span className="badge" aria-hidden="true">
+                  {t.badge > 9 ? '9+' : t.badge}
+                </span>
+                {/* A bare "3" beside a label tells a screen reader nothing. */}
+                <span className="sr-only">
+                  {t.badge} needing attention
+                </span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -217,6 +231,9 @@ export function AdminShell() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <TopBar onMenu={() => setOpen((v) => !v)} />
       <div className="admin-layout">
         {open && <div className="scrim" onClick={() => setOpen(false)} />}
@@ -228,7 +245,16 @@ export function AdminShell() {
                 <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => (isActive ? 'active' : '')}>
                   <Icon name={i.icon} size={17} />
                   {i.label}
-                  {i.count > 0 && <span className="count">{i.count}</span>}
+                  {i.count > 0 && (
+                    <>
+                      <span className="count" aria-hidden="true">
+                        {i.count}
+                      </span>
+                      <span className="sr-only">
+                        {i.count} {i.urgent ? 'needing attention now' : 'outstanding'}
+                      </span>
+                    </>
+                  )}
                 </NavLink>
               ))}
             </div>
@@ -240,7 +266,7 @@ export function AdminShell() {
             </NavLink>
           </div>
         </nav>
-        <main className="admin-main">
+        <main className="admin-main" id="main" tabIndex={-1}>
           <Outlet />
         </main>
       </div>

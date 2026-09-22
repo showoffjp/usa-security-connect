@@ -348,13 +348,13 @@ export default function AdminSchedulePage() {
 
       <div className="row-between wrap">
         <div className="row">
-          <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)}>
+          <button className="btn btn-ghost btn-sm" aria-label="Previous week" onClick={() => setWeekOffset((w) => w - 1)}>
             <Icon name="back" size={15} />
           </button>
           <span className="strong small nowrap">
             {fmtDate(range.start)} - {fmtDate(new Date(range.end.getTime() - 86400000))}
           </span>
-          <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w + 1)}>
+          <button className="btn btn-ghost btn-sm" aria-label="Next week" onClick={() => setWeekOffset((w) => w + 1)}>
             <Icon name="chevron" size={15} />
           </button>
           {weekOffset !== 0 && (
@@ -364,7 +364,12 @@ export default function AdminSchedulePage() {
           )}
         </div>
         <div className="row">
-          <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)} style={{ width: 'auto' }}>
+          <select
+            aria-label="Filter by site"
+            value={siteFilter}
+            onChange={(e) => setSiteFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
             <option value="">All sites</option>
             {sites.map(([id, name]) => (
               <option key={id} value={id}>

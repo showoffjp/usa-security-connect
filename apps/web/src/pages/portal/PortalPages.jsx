@@ -101,6 +101,7 @@ function SitePicker({ sites, value, onChange }) {
 function DaysPicker({ value, onChange }) {
   return (
     <Segmented
+      label="Time range"
       value={String(value)}
       onChange={(v) => onChange(Number(v))}
       options={[

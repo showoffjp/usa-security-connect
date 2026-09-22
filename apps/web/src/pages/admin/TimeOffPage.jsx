@@ -129,6 +129,7 @@ export default function TimeOffPage() {
       </div>
 
       <Segmented
+          label="Time-off status"
         value={filter}
         onChange={setFilter}
         options={[

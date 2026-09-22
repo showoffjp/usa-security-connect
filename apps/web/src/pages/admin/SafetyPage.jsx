@@ -284,6 +284,7 @@ export default function SafetyPage() {
       <div className="row-between">
         <h3>Alert history</h3>
         <Segmented
+          label="Safety view"
           value={scope}
           onChange={setScope}
           options={[

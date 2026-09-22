@@ -237,6 +237,7 @@ export default function AdminIncidentsPage() {
 
       <div className="row-between wrap">
         <Segmented
+          label="Incident status"
           value={status}
           onChange={setStatus}
           options={[
@@ -250,6 +251,7 @@ export default function AdminIncidentsPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search incidents"
           placeholder="Search reference or description"
           style={{ maxWidth: 300 }}
         />

@@ -177,7 +177,8 @@ a { color: var(--navy-600); }
 /* ---------------------------------------------------------------- forms -- */
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field > label { font-size: 0.82rem; font-weight: 600; color: var(--ink-2); }
+.field > label,
+.field > .field-label { font-size: 0.82rem; font-weight: 600; color: var(--ink-2); }
 .field .hint { font-size: 0.76rem; color: var(--muted); }
 .field .error { font-size: 0.78rem; color: var(--danger); font-weight: 550; }
 
@@ -508,4 +509,60 @@ table.data tr.clickable { cursor: pointer; }
   .topbar, .tabbar, .sidebar, .btn, .toast-host { display: none !important; }
   body { background: #fff; }
   .card { box-shadow: none; border-color: #ccc; break-inside: avoid; }
+}
+
+/* --------------------------------------------------------- accessibility -- */
+
+/*
+ * A visible focus ring on everything that takes focus, not just .btn.
+ * Officers and dispatchers work these screens with a keyboard, and the
+ * sidebar, tab bar, table actions and segmented filters previously showed
+ * nothing at all while tabbing through them.
+ */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible,
+.icon-btn:focus-visible,
+.list-item:focus-visible,
+.seg button:focus-visible,
+.tabbar a:focus-visible,
+.sidebar a:focus-visible {
+  outline: 2px solid var(--navy-600);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* On the navy header and sidebar a navy ring is invisible. */
+.topbar a:focus-visible,
+.topbar button:focus-visible,
+.sidebar a:focus-visible {
+  outline-color: #fff;
+}
+
+/* A skip link, so a keyboard user is not made to walk the whole sidebar. */
+.skip-link {
+  position: absolute; left: 8px; top: -60px; z-index: 200;
+  background: var(--brand-600); color: #fff;
+  padding: 10px 16px; border-radius: 8px; font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 8px; }
+
+/*
+ * Respect a reduced-motion preference. The pulsing on-duty dot is decoration;
+ * the spinner still needs to read as "working", so it slows rather than stops.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner {
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+  .btn:active { transform: none; }
 }

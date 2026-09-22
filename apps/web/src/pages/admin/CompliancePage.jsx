@@ -194,6 +194,7 @@ export default function CompliancePage() {
       <div className="row-between wrap">
         <span className="small muted">Look ahead</span>
         <Segmented
+          label="Credential status"
           value={window}
           onChange={setWindow}
           options={[

@@ -185,6 +185,7 @@ export default function ShiftRequestsPage() {
       </div>
 
       <Segmented
+          label="Request status"
         value={filter}
         onChange={setFilter}
         options={[

@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  Children, cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState,
+} from 'react';
 
 /* ------------------------------------------------------------------ mark -- */
 
@@ -107,12 +109,29 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-host" role="status" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.kind}`}>
-            {t.message}
-          </div>
-        ))}
+      {/*
+        Two regions, because they are not equally urgent. A failure interrupts
+        whatever is being read out; a confirmation waits its turn.
+      */}
+      <div className="toast-host">
+        <div role="alert">
+          {toasts
+            .filter((t) => t.kind === 'err')
+            .map((t) => (
+              <div key={t.id} className={`toast ${t.kind}`}>
+                {t.message}
+              </div>
+            ))}
+        </div>
+        <div role="status" aria-live="polite">
+          {toasts
+            .filter((t) => t.kind !== 'err')
+            .map((t) => (
+              <div key={t.id} className={`toast ${t.kind}`}>
+                {t.message}
+              </div>
+            ))}
+        </div>
       </div>
     </ToastContext.Provider>
   );
@@ -128,7 +147,9 @@ export function Spinner({ dark = false }) {
 
 export function LoadingPage({ label = 'Loading' }) {
   return (
-    <div className="loading-page">
+    // role="status" so a screen reader is told the page is still working,
+    // rather than being handed an apparently empty screen.
+    <div className="loading-page" role="status">
       <div className="stack-sm" style={{ alignItems: 'center' }}>
         <Spinner dark />
         <span className="small muted">{label}...</span>
@@ -162,18 +183,89 @@ export function Banner({ kind = 'info', title, children, action }) {
   );
 }
 
-export function Field({ label, error, hint, children, required }) {
+/** Elements a <label for> may legally point at. */
+const LABELABLE = new Set(['input', 'select', 'textarea']);
+
+/**
+ * A labelled form control.
+ *
+ * The label has to be wired to the control, not merely sit above it: a bare
+ * <label> beside an <input> is announced as nothing at all. A single native
+ * control gets an id and `for`; anything else - a group of checkboxes, a row
+ * of chips - becomes a labelled group instead, because `for` pointing at a
+ * <div> is invalid and does nothing.
+ *
+ * The hint and the error are wired through aria-describedby so they are read
+ * out with the field rather than being decoration a screen reader never sees.
+ */
+export function Field({ label, error, hint, children, required, id }) {
+  const generated = useId();
+  const fieldId = id || generated;
+  const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
+
+  const describedBy = [hint && !error ? hintId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(' ');
+
+  const only = Children.count(children) === 1 ? Children.only(children) : null;
+  const native = only && isValidElement(only) && LABELABLE.has(only.type);
+
+  const labelText = label && (
+    <>
+      {label}
+      {required && (
+        <span style={{ color: 'var(--brand-600)' }} aria-hidden="true">
+          {' '}
+          *
+        </span>
+      )}
+    </>
+  );
+
+  const described = (
+    <>
+      {hint && !error && (
+        <span className="hint" id={hintId}>
+          {hint}
+        </span>
+      )}
+      {error && (
+        <span className="error" id={errorId} role="alert">
+          {error}
+        </span>
+      )}
+    </>
+  );
+
+  if (native) {
+    return (
+      <div className="field">
+        {label && <label htmlFor={fieldId}>{labelText}</label>}
+        {cloneElement(only, {
+          id: only.props.id || fieldId,
+          'aria-describedby': [only.props['aria-describedby'], describedBy].filter(Boolean).join(' ') || undefined,
+          'aria-invalid': error ? true : only.props['aria-invalid'],
+          // aria-required rather than the HTML attribute: this announces the
+          // field as required without switching on native browser validation,
+          // which these dialogs do not use and which would start blocking
+          // submissions that previously went through.
+          'aria-required': required ? true : only.props['aria-required'],
+        })}
+        {described}
+      </div>
+    );
+  }
+
   return (
-    <div className="field">
+    <div className="field" role="group" aria-labelledby={label ? `${fieldId}-label` : undefined} aria-describedby={describedBy || undefined}>
       {label && (
-        <label>
-          {label}
-          {required && <span style={{ color: 'var(--brand-600)' }}> *</span>}
-        </label>
+        <span className="field-label" id={`${fieldId}-label`}>
+          {labelText}
+        </span>
       )}
       {children}
-      {hint && !error && <span className="hint">{hint}</span>}
-      {error && <span className="error">{error}</span>}
+      {described}
     </div>
   );
 }
@@ -241,20 +333,70 @@ export function StatusChip({ value }) {
   return <Chip kind={kind}>{label}</Chip>;
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({ title, onClose, children, footer, wide = false }) {
+  const dialog = useRef(null);
+
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    // Where focus was before the dialog opened, so it can go back there. A
+    // supervisor working down a list with the keyboard should not be dumped
+    // at the top of the page every time they close one.
+    const opener = document.activeElement;
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialog.current) return;
+
+      // Trap Tab inside the dialog: without this it walks off into the page
+      // behind the backdrop, which is invisible but still reachable.
+      const items = [...dialog.current.querySelectorAll(FOCUSABLE)].filter(
+        (el) => el.offsetParent !== null || el === document.activeElement
+      );
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+
+    // Focus the first control, or the dialog itself when it is read-only.
+    const target = dialog.current?.querySelector(FOCUSABLE) || dialog.current;
+    target?.focus({ preventScroll: true });
+
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      if (opener instanceof HTMLElement && document.contains(opener)) {
+        opener.focus({ preventScroll: true });
+      }
     };
   }, [onClose]);
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} style={wide ? { maxWidth: 820 } : undefined}>
+      <div
+        className="modal"
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        style={wide ? { maxWidth: 820 } : undefined}
+      >
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="btn btn-sm btn-ghost" onClick={onClose} aria-label="Close">
@@ -268,20 +410,52 @@ export function Modal({ title, onClose, children, footer, wide = false }) {
   );
 }
 
-export function Segmented({ value, onChange, options }) {
+/**
+ * A filter switch.
+ *
+ * Modelled as a radio group rather than a tab list: these buttons choose what
+ * a list shows, they do not swap panels, and `role="tab"` without a matching
+ * tabpanel misleads a screen reader. Arrow keys move between options and only
+ * the selected one is in the tab order, which is what a radio group should do.
+ */
+export function Segmented({ value, onChange, options, label = 'Filter' }) {
+  const group = useRef(null);
+
+  const move = (index, delta) => {
+    const next = (index + delta + options.length) % options.length;
+    onChange(options[next].value);
+    // Selection and focus move together in a radio group, so the next arrow
+    // press continues from where the user actually is.
+    group.current?.querySelectorAll('button')[next]?.focus();
+  };
+
   return (
-    <div className="seg" role="tablist">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          role="tab"
-          aria-selected={value === o.value}
-          className={value === o.value ? 'active' : ''}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div className="seg" role="radiogroup" aria-label={label} ref={group}>
+      {options.map((o, i) => {
+        const selected = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
+            className={selected ? 'active' : ''}
+            onClick={() => onChange(o.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                move(i, 1);
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                move(i, -1);
+              }
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

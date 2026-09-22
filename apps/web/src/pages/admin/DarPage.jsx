@@ -53,8 +53,19 @@ export default function DarPage() {
           <p className="lead">Built from the day's clock, tour and incident data. No re-typing.</p>
         </div>
         <div className="row wrap">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 'auto' }} />
-          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ width: 'auto' }}>
+          <input
+            type="date"
+            aria-label="Report date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            style={{ width: 'auto' }}
+          />
+          <select
+            aria-label="Filter by site"
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            style={{ width: 'auto' }}
+          >
             <option value="">All sites</option>
             {sites.map((site) => (
               <option key={site.id} value={site.id}>

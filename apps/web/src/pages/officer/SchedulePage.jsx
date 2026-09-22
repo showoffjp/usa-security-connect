@@ -73,6 +73,7 @@ export default function SchedulePage() {
       </div>
 
       <Segmented
+          label="Schedule view"
         value={view}
         onChange={setView}
         options={[

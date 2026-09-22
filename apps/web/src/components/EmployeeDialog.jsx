@@ -206,6 +206,7 @@ export default function EmployeeDialog({ employee, sites, onClose, onSaved }) {
         )}
 
         <Segmented
+          label="Employee details section"
           value={tab}
           onChange={setTab}
           options={[

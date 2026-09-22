@@ -71,6 +71,11 @@ function useMap(containerRef, { center, zoom = 15, onReady }) {
           maxZoom: 19,
         }).addTo(map);
 
+        // Map tiles are decorative: they are hundreds of unlabelled images,
+        // and everything the map shows is also on the page as text. Hiding
+        // the tile pane keeps a screen reader out of that thicket.
+        map.getPane('tilePane')?.setAttribute('aria-hidden', 'true');
+
         mapRef.current = map;
 
         // Leaflet measures the container on creation. Inside a card that is
@@ -220,6 +225,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search for an address"
           placeholder="Search an address, e.g. 1200 Riverside Ave, Jacksonville FL"
           className="grow"
         />

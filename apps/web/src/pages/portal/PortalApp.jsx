@@ -172,6 +172,9 @@ function PortalShell() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="topbar">
         <span className="brand">
           <Shield size={30} />
@@ -191,7 +194,7 @@ function PortalShell() {
         </button>
       </header>
 
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         <Outlet />
       </main>
 

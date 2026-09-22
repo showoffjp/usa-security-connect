@@ -143,6 +143,7 @@ export default function FlagsPage() {
 
       <div className="row-between wrap">
         <Segmented
+          label="Flag status"
           value={resolved}
           onChange={setResolved}
           options={[

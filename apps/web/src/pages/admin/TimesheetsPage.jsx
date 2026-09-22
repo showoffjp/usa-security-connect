@@ -117,6 +117,7 @@ export default function TimesheetsPage() {
         <div className="row">
           <input
             type="date"
+            aria-label="From date"
             value={toDateInput(range.from)}
             onChange={(e) => {
               setPreset('custom');
@@ -127,6 +128,7 @@ export default function TimesheetsPage() {
           <span className="muted small">to</span>
           <input
             type="date"
+            aria-label="To date"
             value={toDateInput(range.to)}
             onChange={(e) => {
               setPreset('custom');

@@ -511,6 +511,7 @@ export default function UpdatesPage() {
       </div>
 
       <Segmented
+          label="Updates view"
         value={tab}
         onChange={(v) => setParams(v === 'broadcasts' ? {} : { tab: v })}
         options={[

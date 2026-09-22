@@ -466,6 +466,7 @@ export default function InvoicesPage() {
 
       <div style={{ marginBottom: 16 }}>
         <Segmented
+          label="Invoice status"
           value={status}
           onChange={setStatus}
           options={[
