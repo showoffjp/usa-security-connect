@@ -4,6 +4,7 @@ import { fmtDateTime, fmtMoney, fmtDate } from '../../lib/format.js';
 import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Segmented, Stat, useToast, Banner,
 } from '../../components/ui.jsx';
+import { AuthedImage } from '../../components/AuthedImage.jsx';
 import { INCIDENT_SEVERITY } from '@shared/domain.js';
 
 function ReviewDialog({ id, onClose, onSaved }) {
@@ -142,9 +143,12 @@ function ReviewDialog({ id, onClose, onSaved }) {
             </h4>
             <div className="photo-grid">
               {data.photos.map((p) => (
-                <a key={p.id} href={`/api/incidents/${id}/photos/${p.id}`} target="_blank" rel="noreferrer">
-                  <img src={`/api/incidents/${id}/photos/${p.id}`} alt={p.original_name} />
-                </a>
+                <AuthedImage
+                  key={p.id}
+                  src={`/incidents/${id}/photos/${p.id}`}
+                  alt={p.caption || p.original_name || 'Incident photograph'}
+                  onClick={(url) => window.open(url, '_blank', 'noopener')}
+                />
               ))}
             </div>
           </div>

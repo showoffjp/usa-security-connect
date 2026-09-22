@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtMoney } from '../../lib/format.js';
 import { LoadingPage, Empty, Icon, StatusChip, Chip, useToast, Modal } from '../../components/ui.jsx';
+import { AuthedImage } from '../../components/AuthedImage.jsx';
 
 function IncidentDetail({ id, onClose }) {
   const toast = useToast();
@@ -105,7 +106,11 @@ function IncidentDetail({ id, onClose }) {
               </h4>
               <div className="photo-grid">
                 {data.photos.map((p) => (
-                  <img key={p.id} src={`/api/incidents/${id}/photos/${p.id}`} alt={p.caption || p.original_name} />
+                  <AuthedImage
+                    key={p.id}
+                    src={`/incidents/${id}/photos/${p.id}`}
+                    alt={p.caption || p.original_name || 'Incident photograph'}
+                  />
                 ))}
               </div>
             </div>

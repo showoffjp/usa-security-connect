@@ -11,6 +11,7 @@ import { fmtDate, fmtDateTime, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInpu
 import {
   Banner, Chip, Empty, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
+import { AuthedImage } from '../../components/AuthedImage.jsx';
 
 /* ------------------------------------------------------------ shared -- */
 
@@ -597,7 +598,11 @@ function IncidentDialog({ id, onClose }) {
                   {data.photos.map((p) => (
                     <figure key={p.id}>
                       {/* Served through the API so the file stays behind auth. */}
-                      <PortalPhoto incidentId={data.incident.id} photo={p} />
+                      <AuthedImage
+                        client
+                        src={`/client/incidents/${data.incident.id}/photos/${p.id}`}
+                        alt={p.caption || p.original_name || 'Incident photograph'}
+                      />
                       {p.caption && <figcaption className="tiny muted">{p.caption}</figcaption>}
                     </figure>
                   ))}
@@ -609,38 +614,6 @@ function IncidentDialog({ id, onClose }) {
       </Loaded>
     </Modal>
   );
-}
-
-/**
- * An <img src> cannot carry a bearer token, so the bytes are fetched and
- * handed to the browser as an object URL.
- */
-function PortalPhoto({ incidentId, photo }) {
-  const [url, setUrl] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let revoked = null;
-    let cancelled = false;
-    (async () => {
-      try {
-        const blob = await clientApi.get(`/client/incidents/${incidentId}/photos/${photo.id}`, { raw: true });
-        if (cancelled) return;
-        revoked = URL.createObjectURL(blob);
-        setUrl(revoked);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
-    };
-  }, [incidentId, photo.id]);
-
-  if (failed) return <div className="tiny muted">Photo unavailable</div>;
-  if (!url) return <div className="tiny muted">Loading...</div>;
-  return <img src={url} alt={photo.caption || photo.original_name || 'Incident photograph'} />;
 }
 
 export function PortalIncidents({ sites }) {
