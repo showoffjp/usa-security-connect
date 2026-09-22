@@ -12,13 +12,13 @@
     "test": "node test/smoke.mjs && node test/features.mjs",
     "test:core": "node test/smoke.mjs",
     "test:features": "node test/features.mjs",
-    "check:schema": "node test/checkdb.mjs",
     "verify": "node tools/verify.mjs",
     "verify:fresh": "node tools/verify.mjs --fresh"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/blob": "^2.8.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",

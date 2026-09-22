@@ -3,7 +3,7 @@
  * reporting. Run against a freshly seeded database with the API up.
  */
 
-import { call, log, section, signIn, finish } from './harness.mjs';
+import { BASE, call, log, section, signIn, finish } from './harness.mjs';
 
 const oTok = await signIn('1003', '4812'); // Marcus Bell, on duty
 const aTok = await signIn('1001', '2468'); // Vince Ortega, administrator
@@ -256,6 +256,64 @@ log(coverage.status === 200 && coverage.data.sites.length > 0, 'client coverage 
 
 const officerReport = await call('/reports/dar', { token: oTok });
 log(officerReport.status === 403, 'officers cannot pull client reporting');
+
+/* ================================================== incident photos === */
+section('incident photos (storage service)');
+
+// A 1x1 PNG - enough to exercise upload, storage and retrieval end to end.
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+const form = new FormData();
+form.set('occurredAt', new Date().toISOString());
+form.set('severity', 'low');
+form.set('whatHappened', 'Photographed a damaged bollard at the vehicle entrance for the maintenance log.');
+form.set('photos', new Blob([PNG_1X1], { type: 'image/png' }), 'bollard.png');
+
+const withPhoto = await fetch(`${BASE}/incidents`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${oTok}` },
+  body: form,
+});
+const photoIncident = await withPhoto.json();
+log(withPhoto.status === 201 && photoIncident.photos === 1, 'incident created with a photo', photoIncident.refNumber);
+
+const detail = await call(`/incidents/${photoIncident.incident.id}`, { token: oTok });
+log(detail.data?.photos?.length === 1, 'photo recorded against the incident');
+
+const photoId = detail.data.photos[0].id;
+const fetched = await fetch(`${BASE}/incidents/${photoIncident.incident.id}/photos/${photoId}`, {
+  headers: { Authorization: `Bearer ${oTok}` },
+});
+const bytes = Buffer.from(await fetched.arrayBuffer());
+log(
+  fetched.status === 200 && bytes.equals(PNG_1X1),
+  'photo served back byte-for-byte',
+  `${bytes.length} bytes, ${fetched.headers.get('content-type')}`
+);
+
+const anonymousPhoto = await fetch(`${BASE}/incidents/${photoIncident.incident.id}/photos/${photoId}`);
+log(anonymousPhoto.status === 401, 'photos are not public - authentication required');
+
+// Reject anything that is not an image, whatever the extension claims.
+const badForm = new FormData();
+badForm.set('occurredAt', new Date().toISOString());
+badForm.set('whatHappened', 'Attempted to attach a file that is not an image at all.');
+badForm.set('photos', new Blob([Buffer.from('MZ not an image')], { type: 'application/x-msdownload' }), 'evil.exe');
+const badUpload = await fetch(`${BASE}/incidents`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${oTok}` },
+  body: badForm,
+});
+log(badUpload.status === 422, 'non-image upload refused');
+
+/* ==================================================== cron endpoint === */
+section('scheduled sweep');
+
+const unsignedCron = await call('/cron/sweep', { method: 'POST' });
+log([401, 503].includes(unsignedCron.status), 'cron sweep refuses an unsigned call', unsignedCron.data?.error);
 
 /* ========================================================== devices === */
 section('push registration');

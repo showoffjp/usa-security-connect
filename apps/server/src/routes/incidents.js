@@ -1,14 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import path from 'node:path';
-import fs from 'node:fs';
-import crypto from 'node:crypto';
-import { db, audit, UPLOAD_DIR } from '../lib/db.js';
+import { db, audit } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { INCIDENT_CATEGORIES, INCIDENT_SEVERITY, ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
+import * as storage from '../services/storage.js';
+import { generateFilename } from '../services/storage.js';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(requireAuth);
@@ -17,14 +16,10 @@ const TIMES = ['occurred_at', 'created_at', 'reviewed_at'];
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic']);
 
+// Buffered in memory, then handed to the storage service. A serverless
+// function has no durable disk, so writing straight to one is not an option.
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).slice(0, 10).replace(/[^.\w]/g, '');
-      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024, files: 8 },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
@@ -116,10 +111,19 @@ incidentsRouter.post(
     const incidentId = Number(info.lastInsertRowid);
 
     for (const file of req.files || []) {
-      (await db.prepare(
-        `INSERT INTO incident_photos (incident_id, filename, original_name, mime_type, size_bytes)
-         VALUES (?,?,?,?,?)`
-      ).run(incidentId, file.filename, file.originalname, file.mimetype, file.size));
+      const filename = generateFilename(file.originalname);
+      const stored = await storage.put({
+        buffer: file.buffer,
+        filename,
+        mimeType: file.mimetype,
+      });
+
+      await db
+        .prepare(
+          `INSERT INTO incident_photos (incident_id, filename, storage_url, original_name, mime_type, size_bytes)
+           VALUES (?,?,?,?,?,?)`
+        )
+        .run(incidentId, stored.filename, stored.storageUrl, file.originalname, file.mimetype, file.size);
     }
 
     await audit(req.user.id, 'incident.created', 'incident', incidentId, { ref, severity: body.severity }, req.ip);
@@ -223,12 +227,18 @@ incidentsRouter.get(
       .get(req.params.photoId, req.params.id));
     if (!photo) throw new HttpError(404, 'Photo not found.');
 
-    const filePath = path.join(UPLOAD_DIR, photo.filename);
-    // Guard against a crafted filename escaping the upload directory.
-    if (!filePath.startsWith(UPLOAD_DIR) || !fs.existsSync(filePath)) {
-      throw new HttpError(404, 'Photo file is missing.');
+    // The bytes are proxied rather than redirecting to the storage URL, so the
+    // photo stays behind this endpoint's authentication and ownership checks.
+    let buffer;
+    try {
+      buffer = await storage.read(photo);
+    } catch (err) {
+      throw new HttpError(404, err.message || 'Photo file is missing.');
     }
-    res.type(photo.mime_type || 'image/jpeg').sendFile(filePath);
+
+    res.type(photo.mime_type || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(buffer);
   })
 );
 

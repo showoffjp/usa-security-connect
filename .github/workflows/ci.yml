@@ -11,7 +11,7 @@ env:
 
 jobs:
   api:
-    name: API (schema + both suites)
+    name: API (both suites)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,34 +23,15 @@ jobs:
 
       - run: npm ci
 
-      - name: Verify the schema migrates cleanly
-        run: npm run check:schema --workspace @usc/server
-
-      - name: Seed a clean database
-        run: node apps/server/src/seed.js --reset
-
-      - name: Start the API
-        run: node apps/server/src/index.js &
+      # verify.mjs reseeds, starts the API, runs both suites and stops it, in
+      # that order: PGlite is single-writer, so seeding a running server would
+      # corrupt the data directory. No database service is needed - PGlite is
+      # Postgres compiled to WebAssembly.
+      - name: Seed, start and run both suites
+        run: npm run verify --workspace @usc/server
         env:
           USC_JWT_SECRET: ci-only-secret-not-used-anywhere-real
-          # Never reach out to the push service from CI.
           USC_PUSH_DISABLED: '1'
-
-      - name: Wait for health
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:4000/api/health > /dev/null; then
-              echo "API is up"; exit 0
-            fi
-            sleep 1
-          done
-          echo "API did not start in time"; exit 1
-
-      - name: Core suite
-        run: node apps/server/test/smoke.mjs
-
-      - name: Feature suite
-        run: node apps/server/test/features.mjs
 
   web:
     name: Web build

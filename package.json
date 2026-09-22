@@ -19,7 +19,6 @@
     "mobile:check": "npm run bundle:check --workspace @usc/mobile",
     "test": "npm run test --workspace @usc/server",
     "reset": "npm run reset --workspace @usc/server",
-    "check:schema": "npm run check:schema --workspace @usc/server",
     "start": "npm start --workspace @usc/server",
     "verify": "npm run verify --workspace @usc/server"
   },
