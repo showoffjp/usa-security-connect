@@ -11,6 +11,9 @@
 import { db, migrate } from './lib/db.js';
 import { hashPin } from './lib/auth.js';
 import { hashPassword } from './lib/clientAuth.js';
+import { buildLines, nextNumber } from './routes/invoices.js';
+import { toDateString } from './lib/http.js';
+import { invoiceTotals } from './shared.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
 
 const RESET = process.argv.includes('--reset');
@@ -122,6 +125,18 @@ const postIds = {
     26.1224, -80.1373, 180, 60, 1, 0
   )).lastInsertRowid),
 };
+
+// Standing contract rates, per post per hour. A shift can carry its own rate
+// when a one-off is agreed; otherwise the post's rate is what gets billed.
+for (const [post, cents] of Object.entries({
+  riverfrontLobby: 2850,
+  riverfrontPatrol: 2950,
+  palmettoGate: 2650,
+  gulfportYard: 3850, // armed, so it carries a premium
+  coralRetail: 2750,
+})) {
+  await db.prepare(`UPDATE posts SET bill_rate_cents = ? WHERE id = ?`).run(cents, postIds[post]);
+}
 
 /* ------------------------------------------------------------------ users -- */
 
@@ -677,6 +692,68 @@ for (const c of clientLogins) {
 
   for (const siteId of c.sites) {
     await db.prepare(`INSERT INTO client_sites (client_user_id, site_id) VALUES (?,?)`).run(id, siteId);
+  }
+}
+
+/* -------------------------------------------------------------- invoices -- */
+
+/**
+ * Built with the same code the API uses, so the demo data cannot drift away
+ * from what the generator actually produces.
+ */
+const day = (offset) => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+for (const spec of [
+  { site: siteIds.riverfront, from: -14, to: -8, status: 'paid', due: -1 },
+  { site: siteIds.riverfront, from: -7, to: -1, status: 'sent', due: 10 },
+  // Overdue, so the receivables view has something to chase.
+  { site: siteIds.palmetto, from: -7, to: -1, status: 'sent', due: -4 },
+]) {
+  const start = day(spec.from);
+  const end = day(spec.to);
+  const { lines } = await buildLines({
+    siteId: spec.site,
+    start,
+    end: day(spec.to + 1),
+  });
+  if (lines.length === 0) continue;
+
+  const totals = invoiceTotals(lines, 0);
+  const id = Number((await db.prepare(
+    `INSERT INTO invoices
+     (number, site_id, period_start, period_end, status, subtotal_cents, tax_cents,
+      total_cents, cost_cents, due_on, issued_at, paid_at, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(
+    await nextNumber(new Date().getFullYear()),
+    spec.site,
+    toDateString(start),
+    toDateString(end),
+    spec.status,
+    totals.subtotalCents,
+    totals.taxCents,
+    totals.totalCents,
+    totals.costCents,
+    toDateString(day(spec.due)),
+    toSql(day(spec.to + 1)),
+    spec.status === 'paid' ? toSql(day(spec.due)) : null,
+    users.admin
+  )).lastInsertRowid);
+
+  for (const line of lines) {
+    await db.prepare(
+      `INSERT INTO invoice_lines
+       (invoice_id, post_id, description, minutes, rate_cents, amount_cents, cost_cents, sequence)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).run(
+      id, line.post_id, line.description, line.minutes,
+      line.rate_cents, line.amount_cents, line.cost_cents, line.sequence
+    );
   }
 }
 

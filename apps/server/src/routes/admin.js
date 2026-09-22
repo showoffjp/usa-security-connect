@@ -104,6 +104,12 @@ adminRouter.get(
       .prepare(`SELECT COUNT(*) AS n FROM time_off_requests WHERE status = 'pending'`)
       .get()).n;
 
+    // Issued, past its due date and still unpaid: the only invoices anyone
+    // needs to be nudged about.
+    const overdueInvoices = (await db
+      .prepare(`SELECT COUNT(*) AS n FROM invoices WHERE status = 'sent' AND due_on < current_date`)
+      .get()).n;
+
     // A swap still waiting on the other officer is not the supervisor's to act
     // on yet, so it is not counted here.
     const openShiftRequests = (await db
@@ -158,6 +164,7 @@ adminRouter.get(
         activeAlerts,
         pendingTimeOff,
         openShiftRequests,
+        overdueInvoices,
         expiringCredentials,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),

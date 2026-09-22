@@ -12,7 +12,7 @@ import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
 import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../components/ui.jsx';
 import PortalLogin from './PortalLogin.jsx';
 import {
-  PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport,
+  PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
 } from './PortalPages.jsx';
 
 /* ------------------------------------------------------- account menu -- */
@@ -167,6 +167,7 @@ function PortalShell() {
     { to: '/portal/patrols', icon: 'route', label: 'Patrols' },
     { to: '/portal/incidents', icon: 'alert', label: 'Incidents' },
     { to: '/portal/report', icon: 'clipboard', label: 'Daily report' },
+    { to: '/portal/invoices', icon: 'chart', label: 'Invoices' },
   ];
 
   return (
@@ -244,6 +245,7 @@ function PortalRoutes() {
         <Route path="patrols" element={<PortalPatrols sites={sites} />} />
         <Route path="incidents" element={<PortalIncidents sites={sites} />} />
         <Route path="report" element={<PortalReport sites={sites} />} />
+        <Route path="invoices" element={<PortalInvoices />} />
       </Route>
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

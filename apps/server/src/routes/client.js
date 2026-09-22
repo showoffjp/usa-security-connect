@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, rateLimit, parseDay, toDateString } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, rateLimit, parseDay, toDateString, sqlToIso } from '../lib/http.js';
 import {
   authenticateClient,
   requireClient,
@@ -25,7 +25,7 @@ import {
   passwordIsStrongEnough,
   issueClientToken,
 } from '../lib/clientAuth.js';
-import { toHours } from '../shared.js';
+import { toHours, daysOverdue } from '../shared.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
 
@@ -504,6 +504,89 @@ clientRouter.get(
       .all(...ids, from, to);
 
     res.json({ days, visits: rows.map((r) => isoFields(r, ['visited_at'])) });
+  })
+);
+
+/* ------------------------------------------------------------ invoices --- */
+
+/**
+ * The one place a client sees a rate.
+ *
+ * What we charge is theirs to see; what the work cost us is not, so
+ * cost_cents never leaves this handler.
+ */
+const publicInvoice = (row) => ({
+  id: row.id,
+  number: row.number,
+  site_id: row.site_id,
+  site_name: row.site_name,
+  period_start: row.period_start,
+  period_end: row.period_end,
+  status: row.status,
+  subtotal_cents: row.subtotal_cents,
+  tax_cents: row.tax_cents,
+  total_cents: row.total_cents,
+  due_on: row.due_on,
+  issued_at: sqlToIso(row.issued_at),
+  paid_at: sqlToIso(row.paid_at),
+  notes: row.notes,
+  overdue_days: daysOverdue(row.due_on, row.status),
+});
+
+clientRouter.get(
+  '/invoices',
+  wrap(async (req, res) => {
+    const { sql, ids } = sitesFilter(req);
+
+    // A draft has not been issued and may still change, so it is not theirs
+    // to see yet.
+    const rows = await db
+      .prepare(
+        `SELECT i.*, s.name AS site_name
+         FROM invoices i JOIN sites s ON s.id = i.site_id
+         WHERE s.id IN (${sql}) AND i.status IN ('sent','paid')
+         ORDER BY i.period_end DESC, i.id DESC LIMIT 100`
+      )
+      .all(...ids);
+
+    const outstanding = rows
+      .filter((r) => r.status === 'sent')
+      .reduce((sum, r) => sum + r.total_cents, 0);
+
+    res.json({ invoices: rows.map(publicInvoice), outstandingCents: outstanding });
+  })
+);
+
+clientRouter.get(
+  '/invoices/:id',
+  wrap(async (req, res) => {
+    const { sql, ids } = scope(req);
+    const row = await db
+      .prepare(
+        `SELECT i.*, s.name AS site_name, s.address, s.city, s.state, s.postal_code
+         FROM invoices i JOIN sites s ON s.id = i.site_id
+         WHERE i.id = ? AND s.id IN (${sql}) AND i.status IN ('sent','paid')`
+      )
+      .get(req.params.id, ...ids);
+    if (!row) throw new HttpError(404, 'Invoice not found.');
+
+    const lines = await db
+      .prepare(
+        `SELECT description, minutes, rate_cents, amount_cents
+         FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence, id`
+      )
+      .all(row.id);
+
+    res.json({
+      invoice: {
+        ...publicInvoice(row),
+        address: row.address,
+        city: row.city,
+        state: row.state,
+        postal_code: row.postal_code,
+      },
+      lines: lines.map((l) => ({ ...l, hours: toHours(l.minutes) })),
+    });
   })
 );
 

@@ -27,6 +27,7 @@ import { reportsRouter } from './routes/reports.js';
 import { shiftRequestsRouter } from './routes/shiftRequests.js';
 import { clientRouter } from './routes/client.js';
 import { clientAdminRouter } from './routes/clientAdmin.js';
+import { invoicesRouter } from './routes/invoices.js';
 
 export const app = express();
 
@@ -114,6 +115,7 @@ app.use('/api/breaks', breaksRouter);
 app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/client', clientRouter);
+app.use('/api/invoices', invoicesRouter);
 // Mounted ahead of adminRouter so /api/admin/clients reaches this router.
 app.use('/api/admin/clients', clientAdminRouter);
 app.use('/api/admin', adminRouter);

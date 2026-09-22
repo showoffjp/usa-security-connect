@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { clientApi } from '../../lib/api.js';
-import { fmtDate, fmtDateTime, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
+import { fmtDate, fmtDateTime, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
@@ -745,6 +745,160 @@ export function PortalIncidents({ sites }) {
       </Loaded>
 
       {open && <IncidentDialog id={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------- invoices -- */
+
+function InvoiceDialog({ id, onClose }) {
+  const { data, error, loading, reload } = usePortal(`/client/invoices/${id}`, [id]);
+
+  return (
+    <Modal title={data ? `Invoice ${data.invoice.number}` : 'Invoice'} onClose={onClose} wide>
+      <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading the invoice">
+        {data && (
+          <div className="stack">
+            <div className="row wrap" style={{ gap: 8 }}>
+              <StatusChip value={data.invoice.status} />
+              {data.invoice.overdue_days > 0 && <Chip kind="danger">{data.invoice.overdue_days} days overdue</Chip>}
+            </div>
+
+            <dl className="kv">
+              <dt>Property</dt>
+              <dd>{data.invoice.site_name}</dd>
+              <dt>Period</dt>
+              <dd>
+                {fmtDate(data.invoice.period_start)} to {fmtDate(data.invoice.period_end)}
+              </dd>
+              <dt>Due</dt>
+              <dd>{data.invoice.due_on ? fmtDate(data.invoice.due_on) : '--'}</dd>
+              {data.invoice.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd>{data.invoice.notes}</dd>
+                </>
+              )}
+            </dl>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Post</th>
+                    <th scope="col">Hours</th>
+                    <th scope="col">Rate</th>
+                    <th scope="col">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td>{l.description}</td>
+                      <td className="nowrap">{fmtHours(l.hours)}</td>
+                      <td className="nowrap">{fmtMoney(l.rate_cents)}/hr</td>
+                      <td className="nowrap strong">{fmtMoney(l.amount_cents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={3} className="muted">
+                      Subtotal
+                    </td>
+                    <td className="nowrap">{fmtMoney(data.invoice.subtotal_cents)}</td>
+                  </tr>
+                  {data.invoice.tax_cents > 0 && (
+                    <tr>
+                      <td colSpan={3} className="muted">
+                        Tax
+                      </td>
+                      <td className="nowrap">{fmtMoney(data.invoice.tax_cents)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td colSpan={3} className="strong">
+                      Total
+                    </td>
+                    <td className="nowrap strong">{fmtMoney(data.invoice.total_cents)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <p className="tiny muted" style={{ marginBottom: 0 }}>
+              Every hour above comes from an officer's own clock-in and clock-out at your property. The coverage
+              record shows the same hours shift by shift.
+            </p>
+          </div>
+        )}
+      </Loaded>
+    </Modal>
+  );
+}
+
+export function PortalInvoices() {
+  const [open, setOpen] = useState(null);
+  const { data, error, loading, reload } = usePortal('/client/invoices', []);
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Invoices</h1>
+          <p className="muted">Billed from the hours on the coverage record.</p>
+        </div>
+      </div>
+
+      <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading invoices">
+        {data && (
+          <div className="stack">
+            {data.outstandingCents > 0 && (
+              <Banner kind="info" title="Outstanding">
+                {fmtMoney(data.outstandingCents)} is currently outstanding across{' '}
+                {data.invoices.filter((i) => i.status === 'sent').length} invoice
+                {data.invoices.filter((i) => i.status === 'sent').length === 1 ? '' : 's'}.
+              </Banner>
+            )}
+
+            {data.invoices.length === 0 ? (
+              <div className="card card-pad">
+                <Empty icon="clipboard" title="No invoices yet">
+                  Invoices appear here once your account manager issues them.
+                </Empty>
+              </div>
+            ) : (
+              <div className="card">
+                <ul className="list">
+                  {data.invoices.map((i) => (
+                    <li key={i.id} className="list-item" style={{ alignItems: 'flex-start' }}>
+                      <div className="grow">
+                        <div className="row wrap" style={{ gap: 6 }}>
+                          <span className="mono small strong">{i.number}</span>
+                          <StatusChip value={i.status} />
+                          {i.overdue_days > 0 && <Chip kind="danger">{i.overdue_days}d overdue</Chip>}
+                        </div>
+                        <div className="tiny muted" style={{ marginTop: 3 }}>
+                          {i.site_name} &middot; {fmtDate(i.period_start)} to {fmtDate(i.period_end)}
+                          {i.due_on ? ` · due ${fmtDate(i.due_on)}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="strong">{fmtMoney(i.total_cents)}</div>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setOpen(i.id)}>
+                          View
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Loaded>
+
+      {open && <InvoiceDialog id={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }

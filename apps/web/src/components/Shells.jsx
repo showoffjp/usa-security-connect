@@ -192,6 +192,13 @@ export function AdminShell() {
       ],
     },
     {
+      title: 'Billing',
+      items: [
+        { to: '/admin/invoices', icon: 'chart', label: 'Invoices', count: counts.overdueInvoices, urgent: true },
+        { to: '/admin/clients', icon: 'users', label: 'Client portal' },
+      ],
+    },
+    {
       title: 'Reporting',
       items: [
         { to: '/admin/dar', icon: 'clipboard', label: 'Daily report' },
@@ -203,7 +210,6 @@ export function AdminShell() {
       title: 'Configuration',
       items: [
         { to: '/admin/sites', icon: 'building', label: 'Sites & posts' },
-        { to: '/admin/clients', icon: 'users', label: 'Client portal' },
         { to: '/admin/audit', icon: 'clipboard', label: 'Audit log' },
       ],
     },

@@ -230,6 +230,10 @@ export function StatusChip({ value }) {
     normal: ['', 'Normal'],
     done: ['ok', 'Done'],
     skipped: ['warn', 'Skipped'],
+    draft: ['', 'Draft'],
+    sent: ['info', 'Sent'],
+    paid: ['ok', 'Paid'],
+    void: ['', 'Void'],
     warning: ['warn', 'Warning'],
     info: ['info', 'Info'],
   };

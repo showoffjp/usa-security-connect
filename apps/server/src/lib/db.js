@@ -44,6 +44,7 @@ async function connect() {
     // near 2^53, and every call site expects a number.
     types.setTypeParser(INT8_OID, (v) => (v === null ? null : Number(v)));
     types.setTypeParser(NUMERIC_OID, (v) => (v === null ? null : Number(v)));
+    types.setTypeParser(DATE_OID, keepDateAsText);
 
     const pool = new Pool({ connectionString: DATABASE_URL });
     driver = {
@@ -67,6 +68,7 @@ async function connect() {
     parsers: {
       [INT8_OID]: (v) => (v === null ? null : Number(v)),
       [NUMERIC_OID]: (v) => (v === null ? null : Number(v)),
+      [DATE_OID]: keepDateAsText,
     },
   });
   await pg.waitReady;
@@ -79,9 +81,26 @@ async function connect() {
   return driver;
 }
 
-/** Postgres type OIDs for the two types that arrive as strings by default. */
 const INT8_OID = 20;
 const NUMERIC_OID = 1700;
+const DATE_OID = 1082;
+
+/**
+ * A `date` column is a calendar day, not an instant, but both drivers hand it
+ * over as a Date object pinned to midnight in some timezone - which then
+ * JSON-serialises to a full timestamp and renders as the day before for
+ * anyone west of it. Licence expiry, time off, invoice periods and the daily
+ * report all ride on those columns, so they are kept as 'YYYY-MM-DD' text
+ * the whole way through.
+ */
+const keepDateAsText = (v) => {
+  if (v === null || v === undefined) return v;
+  if (v instanceof Date) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+  }
+  return String(v).slice(0, 10);
+};
 
 /* ------------------------------------------------------------ rewriting -- */
 

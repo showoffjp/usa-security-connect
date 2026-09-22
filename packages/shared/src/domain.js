@@ -406,3 +406,78 @@ export function isWeakPin(pin) {
 }
 
 export const INCIDENT_REF_PREFIX = 'USC';
+
+/* ============================================================== invoicing === */
+
+export const INVOICE_STATUS = ['draft', 'sent', 'paid', 'void'];
+
+export const INVOICE_STATUS_LABEL = {
+  draft: 'Draft',
+  sent: 'Sent',
+  paid: 'Paid',
+  void: 'Void',
+};
+
+/**
+ * What can follow what.
+ *
+ * A sent invoice cannot quietly go back to draft - it has left the building
+ * and the client has the number. Correct it by voiding and re-issuing.
+ */
+export const INVOICE_TRANSITIONS = {
+  draft: ['sent', 'void'],
+  sent: ['paid', 'void'],
+  paid: [],
+  void: [],
+};
+
+export const canTransitionInvoice = (from, to) =>
+  (INVOICE_TRANSITIONS[from] || []).includes(to);
+
+/** Money is held in integer cents everywhere; round once, at the line. */
+export const amountForMinutes = (minutes, rateCents) =>
+  Math.round(((minutes || 0) / 60) * (rateCents || 0));
+
+/**
+ * The bill rate that applies to an hour worked.
+ *
+ * A one-off rate agreed for a particular shift beats the post's standing
+ * rate, which in turn beats a rate carried on the officer - the last being
+ * the case for a specialist billed out at their own number.
+ */
+export const effectiveBillRate = ({ shiftRateCents, postRateCents, officerRateCents }) =>
+  shiftRateCents ?? postRateCents ?? officerRateCents ?? null;
+
+/**
+ * An officer's unpaid meal break is not billable: they were not on post for
+ * it and they were not paid for it.
+ */
+export const billableMinutes = (minutesWorked, unpaidBreakMinutes = 0) =>
+  Math.max(0, (minutesWorked || 0) - (unpaidBreakMinutes || 0));
+
+/** Subtotal, tax and total for a set of lines, in cents. */
+export function invoiceTotals(lines = [], taxPercent = 0) {
+  const subtotalCents = lines.reduce((sum, l) => sum + (l.amount_cents ?? l.amountCents ?? 0), 0);
+  const costCents = lines.reduce((sum, l) => sum + (l.cost_cents ?? l.costCents ?? 0), 0);
+  const taxCents = Math.round(subtotalCents * ((taxPercent || 0) / 100));
+  const totalCents = subtotalCents + taxCents;
+  return {
+    subtotalCents,
+    taxCents,
+    totalCents,
+    costCents,
+    marginCents: subtotalCents - costCents,
+    marginPercent: subtotalCents > 0
+      ? Math.round(((subtotalCents - costCents) / subtotalCents) * 1000) / 10
+      : null,
+  };
+}
+
+/** Days past due, or null while an invoice is not yet overdue. */
+export function daysOverdue(dueOn, status, now = new Date()) {
+  if (!dueOn || status !== 'sent') return null;
+  const [y, m, d] = String(dueOn).slice(0, 10).split('-').map(Number);
+  const due = new Date(y, m - 1, d, 23, 59, 59, 999);
+  const days = Math.floor((now - due) / 86400000);
+  return days > 0 ? days : null;
+}
