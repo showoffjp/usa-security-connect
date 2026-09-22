@@ -4,6 +4,7 @@ import { Slot, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../src/auth.jsx';
+import { Notifications, pathForNotification } from '../src/push.js';
 import { Loading } from '../src/ui.jsx';
 import { C } from '../src/theme.js';
 
@@ -15,6 +16,25 @@ function Gate() {
   const { user, loading, mustChangePin } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Tapping a notification opens the screen it refers to, but only once the
+  // officer is actually signed in - otherwise the auth gate would bounce them.
+  useEffect(() => {
+    if (!user) return;
+
+    const open = (response) => {
+      const path = pathForNotification(response?.notification?.request?.content?.data);
+      if (path) router.push(path);
+    };
+
+    // Covers the app being launched cold by a notification tap.
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) open(response);
+    });
+
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub.remove();
+  }, [user, router]);
 
   useEffect(() => {
     if (loading) return;

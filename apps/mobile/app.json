@@ -20,11 +20,19 @@
         "NSCameraUsageDescription": "Attach photos to incident reports from your post.",
         "NSPhotoLibraryUsageDescription": "Attach existing photos to an incident report.",
         "NFCReaderUsageDescription": "Scan the NFC tag at each patrol checkpoint."
+      },
+      "entitlements": {
+        "com.apple.developer.nfc.readersession.formats": [
+          "NDEF",
+          "TAG"
+        ]
       }
     },
     "android": {
       "package": "com.usasecuritygroup.connect",
-      "adaptiveIcon": { "backgroundColor": "#001F3F" },
+      "adaptiveIcon": {
+        "backgroundColor": "#001F3F"
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -35,16 +43,38 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-location", {
-        "locationWhenInUsePermission": "USA Security Connect verifies you are at your assigned post when you clock in or check in."
-      }],
-      ["expo-image-picker", {
-        "photosPermission": "Attach photos to an incident report.",
-        "cameraPermission": "Take photos for an incident report."
-      }]
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "USA Security Connect verifies you are at your assigned post when you clock in or check in."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos to an incident report.",
+          "cameraPermission": "Take photos for an incident report."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#AA2F19",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "Scan the NFC tag at each patrol checkpoint."
+        }
+      ]
     ],
     "extra": {
       "apiUrl": "http://10.0.2.2:4000/api"
+    },
+    "notification": {
+      "iosDisplayInForeground": true
     }
   }
 }

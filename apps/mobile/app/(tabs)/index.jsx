@@ -9,6 +9,7 @@ import {
   Card, Chip, StatusChip, Button, Banner, KeyValue, SlideToAction, Loading,
   Sheet, Field, Input, Toast, useToastState,
 } from '../../src/ui.jsx';
+import { PanicButton, BreakControl } from '../../src/SafetyBar.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -170,6 +171,9 @@ export default function HomeScreen() {
 
         {checkIn?.is_open && <CheckInCard checkIn={checkIn} onAnswered={load} notify={notify} />}
 
+        {/* Breaks only make sense while the clock is running. */}
+        {onDuty && <BreakControl notify={notify} onChanged={load} />}
+
         <Card
           title={onDuty ? 'Current post' : shift ? 'Your next post' : 'No post assigned'}
           right={onDuty ? <Chip tone="ok">On post</Chip> : null}
@@ -284,6 +288,9 @@ export default function HomeScreen() {
             </View>
           </Card>
         </View>
+
+        {/* Kept at the bottom so it is never hit by accident, but always one scroll away. */}
+        <PanicButton notify={notify} />
 
         {!!nextShift && (
           <Card title="Next shift">

@@ -12,6 +12,10 @@ import { toursRouter } from './routes/tours.js';
 import { broadcastsRouter, trainingRouter, messagesRouter } from './routes/comms.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { adminRouter } from './routes/admin.js';
+import { devicesRouter } from './routes/devices.js';
+import { certificationsRouter, availabilityRouter, timeOffRouter } from './routes/workforce.js';
+import { panicRouter, breaksRouter } from './routes/safety.js';
+import { reportsRouter } from './routes/reports.js';
 
 migrate();
 
@@ -58,6 +62,13 @@ app.use('/api/broadcasts', broadcastsRouter);
 app.use('/api/training', trainingRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/schedule', scheduleRouter);
+app.use('/api/devices', devicesRouter);
+app.use('/api/certifications', certificationsRouter);
+app.use('/api/availability', availabilityRouter);
+app.use('/api/time-off', timeOffRouter);
+app.use('/api/panic', panicRouter);
+app.use('/api/breaks', breaksRouter);
+app.use('/api/reports', reportsRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

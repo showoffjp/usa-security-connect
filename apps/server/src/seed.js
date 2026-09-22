@@ -10,19 +10,23 @@
 
 import { db, migrate } from './lib/db.js';
 import { hashPin } from './lib/auth.js';
-import { toSql, sweep } from './services/compliance.js';
+import { toSql, sweep, raiseFlag } from './services/compliance.js';
 
 const RESET = process.argv.includes('--reset');
 
 migrate();
 
 if (RESET) {
+  // Every table, child rows first. Anything added to the schema belongs here
+  // too, or a reset leaves orphans behind that collide on the next seed.
   const tables = [
     'audit_log', 'flags', 'messages', 'thread_participants', 'threads',
     'training_progress', 'trainings', 'broadcast_receipts', 'broadcasts',
     'tour_run_tasks', 'tour_run_checkpoints', 'tour_runs', 'checkpoint_tasks',
     'checkpoints', 'tours', 'supervisor_visits', 'incident_photos', 'incidents',
-    'status_checks', 'time_entries', 'shifts', 'users', 'posts', 'sites',
+    'panic_alerts', 'breaks', 'status_checks', 'time_entries', 'shifts',
+    'time_off_requests', 'availability', 'certifications', 'device_tokens',
+    'users', 'posts', 'sites',
   ];
   db.pragma('foreign_keys = OFF');
   for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
@@ -125,17 +129,29 @@ const insertUser = db.prepare(
   `INSERT INTO users
    (employee_code, first_name, last_name, email, phone, role, status, hire_date,
     license_number, license_type, license_expires_on, emergency_contact_name,
-    emergency_contact_phone, default_site_id, pay_rate_cents,
+    emergency_contact_phone, emergency_contact_relation, default_site_id,
+    pay_rate_cents, bill_rate_cents, employment_type, pay_type, exempt,
+    overtime_multiplier, business_name, tax_id_last4, w9_on_file,
+    contractor_agreement_on_file, insurance_expires_on,
+    address_line1, city, state, postal_code, uniform_size,
     pin_hash, pin_salt, pin_set_at, must_change_pin)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`
 );
 
 function addUser(u) {
   const { hash, salt } = hashPin(u.pin);
+  const contractor = u.employmentType === '1099';
   return Number(insertUser.run(
     u.code, u.first, u.last, u.email, u.phone, u.role, u.status || 'active', u.hireDate,
     u.license || null, u.licenseType || null, u.licenseExpires || null,
-    u.ecName || null, u.ecPhone || null, u.siteId || null, u.rate ? Math.round(u.rate * 100) : null,
+    u.ecName || null, u.ecPhone || null, u.ecRelation || null, u.siteId || null,
+    u.rate ? Math.round(u.rate * 100) : null,
+    u.billRate ? Math.round(u.billRate * 100) : null,
+    u.employmentType || 'w2', u.payType || 'hourly', u.exempt ? 1 : 0,
+    u.overtimeMultiplier ?? 1.5,
+    u.businessName || null, u.taxIdLast4 || null,
+    contractor ? 1 : 0, contractor ? 1 : 0, u.insuranceExpires || null,
+    u.address || null, u.city || null, u.state || 'FL', u.zip || null, u.uniform || null,
     hash, salt, u.mustChange ? 1 : 0
   ).lastInsertRowid);
 }
@@ -143,47 +159,75 @@ function addUser(u) {
 const users = {
   admin: addUser({
     code: '1001', first: 'Vince', last: 'Ortega', email: 'vince@usasecuritygroup.com',
-    phone: '(904) 555-0100', role: 'admin', hireDate: '2019-02-04', rate: 42,
+    phone: '(904) 555-0100', role: 'admin', hireDate: '2019-02-04',
+    rate: 42, payType: 'salary', exempt: true, employmentType: 'w2',
+    address: '383 Main Ave', city: 'Jacksonville', zip: '32204', uniform: 'L',
     pin: '2468', mustChange: false,
   }),
   supervisor: addUser({
     code: '1002', first: 'Renata', last: 'Diaz', email: 'r.diaz@usasecuritygroup.com',
-    phone: '(904) 555-0121', role: 'supervisor', hireDate: '2021-06-14', rate: 28,
+    phone: '(904) 555-0121', role: 'supervisor', hireDate: '2021-06-14',
+    rate: 28, billRate: 46, employmentType: 'w2',
     license: 'D-2214778', licenseType: 'Class D', licenseExpires: '2027-06-30',
-    siteId: siteIds.riverfront, ecName: 'Luis Diaz', ecPhone: '(904) 555-0131',
+    siteId: siteIds.riverfront, ecName: 'Luis Diaz', ecPhone: '(904) 555-0131', ecRelation: 'Spouse',
+    address: '1140 Oak St', city: 'Jacksonville', zip: '32204', uniform: 'M',
     pin: '3571', mustChange: false,
   }),
   marcus: addUser({
     code: '1003', first: 'Marcus', last: 'Bell', email: 'm.bell@usasecuritygroup.com',
-    phone: '(904) 555-0155', role: 'officer', hireDate: '2023-03-20', rate: 21,
+    phone: '(904) 555-0155', role: 'officer', hireDate: '2023-03-20',
+    rate: 21, billRate: 34, employmentType: 'w2',
     license: 'D-3391204', licenseType: 'Class D', licenseExpires: '2027-03-31',
-    siteId: siteIds.riverfront, ecName: 'Tanya Bell', ecPhone: '(904) 555-0156',
+    siteId: siteIds.riverfront, ecName: 'Tanya Bell', ecPhone: '(904) 555-0156', ecRelation: 'Spouse',
+    address: '2218 Hendricks Ave', city: 'Jacksonville', zip: '32207', uniform: 'XL',
     pin: '4812', mustChange: false,
   }),
   janelle: addUser({
     code: '1004', first: 'Janelle', last: 'Carter', email: 'j.carter@usasecuritygroup.com',
-    phone: '(407) 555-0164', role: 'officer', hireDate: '2024-01-08', rate: 20.5,
+    phone: '(407) 555-0164', role: 'officer', hireDate: '2024-01-08',
+    rate: 20.5, billRate: 33, employmentType: 'w2',
+    // Licence lapses inside the warning window, so the compliance board has something real.
     license: 'D-3410992', licenseType: 'Class D', licenseExpires: '2026-11-30',
-    siteId: siteIds.palmetto, ecName: 'Rose Carter', ecPhone: '(407) 555-0165',
+    siteId: siteIds.palmetto, ecName: 'Rose Carter', ecPhone: '(407) 555-0165', ecRelation: 'Mother',
+    address: '755 Sand Lake Rd', city: 'Orlando', zip: '32819', uniform: 'S',
     pin: '5930', mustChange: false,
   }),
   dwayne: addUser({
     code: '1005', first: 'Dwayne', last: 'Foster', email: 'd.foster@usasecuritygroup.com',
-    phone: '(813) 555-0177', role: 'officer', hireDate: '2022-09-12', rate: 26,
+    phone: '(813) 555-0177', role: 'officer', hireDate: '2022-09-12',
+    // An armed contractor: invoices for hours, carries his own insurance.
+    rate: 34, billRate: 52, employmentType: '1099',
+    businessName: 'Foster Protective Services LLC', taxIdLast4: '4821',
+    insuranceExpires: '2026-10-31',
     license: 'G-1120384', licenseType: 'Class G (Armed)', licenseExpires: '2026-09-30',
-    siteId: siteIds.gulfport, ecName: 'Priya Foster', ecPhone: '(813) 555-0178',
+    siteId: siteIds.gulfport, ecName: 'Priya Foster', ecPhone: '(813) 555-0178', ecRelation: 'Spouse',
+    address: '4410 Adamo Dr', city: 'Tampa', zip: '33605', uniform: '2XL',
     pin: '6174', mustChange: false,
   }),
   alicia: addUser({
     code: '1006', first: 'Alicia', last: 'Nunez', email: 'a.nunez@usasecuritygroup.com',
-    phone: '(954) 555-0192', role: 'officer', hireDate: '2025-04-02', rate: 20,
+    phone: '(954) 555-0192', role: 'officer', hireDate: '2025-04-02',
+    rate: 20, billRate: 32, employmentType: 'w2',
     license: 'D-3501887', licenseType: 'Class D', licenseExpires: '2028-04-30',
-    siteId: siteIds.coral, pin: '7285', mustChange: false,
+    siteId: siteIds.coral, address: '612 SE 3rd Ave', city: 'Fort Lauderdale', zip: '33301',
+    uniform: 'M', pin: '7285', mustChange: false,
   }),
   trainee: addUser({
     code: '1007', first: 'Kevin', last: 'Osei', email: 'k.osei@usasecuritygroup.com',
-    phone: '(904) 555-0198', role: 'officer', hireDate: '2026-09-01', rate: 19,
-    siteId: siteIds.riverfront, pin: '8140', mustChange: true,
+    phone: '(904) 555-0198', role: 'officer', hireDate: '2026-09-01',
+    rate: 19, billRate: 30, employmentType: 'w2',
+    siteId: siteIds.riverfront, uniform: 'L',
+    pin: '8140', mustChange: true,
+  }),
+  contractor: addUser({
+    code: '1008', first: 'Renee', last: 'Okafor', email: 'r.okafor@contractor.example',
+    phone: '(407) 555-0210', role: 'officer', hireDate: '2026-02-17',
+    rate: 30, billRate: 47, employmentType: '1099', payType: 'per_shift',
+    businessName: 'Okafor Event Security', taxIdLast4: '9073',
+    insuranceExpires: '2027-02-28',
+    license: 'D-3520114', licenseType: 'Class D', licenseExpires: '2027-12-31',
+    siteId: siteIds.palmetto, address: '90 Church St', city: 'Orlando', zip: '32801',
+    uniform: 'S', pin: '9351', mustChange: false,
   }),
 };
 
@@ -221,6 +265,12 @@ for (let day = -14; day <= 14; day++) {
 // An unfilled shift for the admin to assign, plus a supervisor rotation.
 shifts.push({ user: null, post: postIds.riverfrontPatrol, start: at(2, 22), end: at(3, 6), status: 'scheduled' });
 shifts.push({ user: users.supervisor, post: postIds.riverfrontPatrol, start: at(1, 8), end: at(1, 16), status: 'scheduled' });
+
+// Two shifts nobody ever clocked into. Left as 'scheduled' in the past so the
+// compliance sweep raises real no-show flags regardless of the hour the seed
+// runs - otherwise the demo board is empty first thing in the morning.
+shifts.push({ user: users.alicia, post: postIds.coralRetail, start: at(-2, 10), end: at(-2, 18), status: 'scheduled' });
+shifts.push({ user: users.contractor, post: postIds.palmettoGate, start: at(-1, 14), end: at(-1, 22), status: 'scheduled' });
 
 const shiftRows = shifts.map((s) => ({
   ...s,
@@ -270,6 +320,31 @@ for (const shift of shiftRows) {
     Math.round((clockOut - clockIn) / 60000),
     lateMinutes
   );
+  const entryId = Number(
+    db.prepare(`SELECT id FROM time_entries WHERE shift_id = ?`).get(shift.id).id
+  );
+
+  if (lateMinutes > 0) {
+    raiseFlag({
+      userId: shift.user,
+      type: 'late_clock_in',
+      occurredAt: clockIn,
+      refType: 'time_entry',
+      refId: entryId,
+      detail: { late_minutes: lateMinutes, scheduled_start: shift.start.toISOString() },
+    });
+  }
+  if (outside) {
+    raiseFlag({
+      userId: shift.user,
+      type: 'geofence_violation',
+      occurredAt: clockIn,
+      refType: 'time_entry',
+      refId: entryId,
+      detail: { distance_m: 580, radius_m: 150, status: 'outside', reason: null },
+    });
+  }
+
   entryCount++;
 }
 
@@ -277,7 +352,13 @@ for (const shift of shiftRows) {
 
 // Marcus is mid-shift right now, so the dashboard and officer home have live data.
 const liveShift = shiftRows.find((s) => s.user === users.marcus && s.status === 'scheduled' && s.start <= new Date() && s.end >= new Date());
-const liveStart = new Date(Date.now() - 3 * 3600000);
+
+// Three hours ago, but never earlier than today's midnight - otherwise seeding
+// in the small hours puts the "currently on duty" officer on yesterday's date
+// and the daily activity report opens empty.
+const midnight = new Date();
+midnight.setHours(0, 0, 0, 0);
+const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, midnight.getTime() + 15 * 60000));
 const liveShiftId = liveShift?.id ?? Number(
   insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(new Date(Date.now() + 5 * 3600000)), 'in_progress', users.admin).lastInsertRowid
 );
@@ -469,6 +550,91 @@ db.prepare(
   30.3196, -81.6795
 );
 
+/* ------------------------------------------------------ certifications -- */
+
+const insertCert = db.prepare(
+  `INSERT INTO certifications
+   (user_id, type, number, issuing_authority, issued_on, expires_on, verified_by, verified_at, notes)
+   VALUES (?,?,?,?,?,?,?,datetime('now'),?)`
+);
+
+const FDACS = 'Florida Department of Agriculture and Consumer Services';
+const inDays = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// A deliberate spread: valid, expiring inside the warning window, and expired.
+insertCert.run(users.marcus, 'CPR / First Aid', 'AHA-22841', 'American Heart Association',
+  '2025-04-12', inDays(210), users.admin, null);
+insertCert.run(users.marcus, 'Verbal De-escalation', null, 'USA Security in-house',
+  '2026-01-15', inDays(120), users.supervisor, null);
+insertCert.run(users.janelle, 'CPR / First Aid', 'AHA-23117', 'American Heart Association',
+  '2024-11-02', inDays(34), users.admin, 'Renewal class booked.');
+insertCert.run(users.dwayne, 'Class G Statewide Firearm Licence', 'G-1120384', FDACS,
+  '2022-09-12', inDays(9), users.admin, 'Range requalification required before renewal.');
+insertCert.run(users.dwayne, 'Defensive Tactics', null, 'USA Security in-house',
+  '2025-06-01', inDays(-12), users.supervisor, 'Lapsed - schedule refresher.');
+insertCert.run(users.alicia, 'CPR / First Aid', 'AHA-24990', 'American Heart Association',
+  '2026-03-20', inDays(520), users.admin, null);
+insertCert.run(users.contractor, 'OSHA 10', 'OSHA-771204', 'OSHA',
+  '2025-08-19', inDays(390), users.admin, null);
+
+/* --------------------------------------------------------- availability -- */
+
+const insertAvailability = db.prepare(
+  `INSERT INTO availability (user_id, weekday, start_time, end_time, available, note)
+   VALUES (?,?,?,?,?,?)`
+);
+
+// Everyone is available by default; a couple of realistic restrictions.
+for (const uid of [users.marcus, users.janelle, users.dwayne, users.alicia, users.contractor]) {
+  for (let weekday = 0; weekday <= 6; weekday++) {
+    const isSunday = weekday === 0;
+    const restricted = uid === users.janelle && isSunday;
+    const studyNight = uid === users.alicia && weekday === 3;
+    insertAvailability.run(
+      uid,
+      weekday,
+      studyNight ? '00:00' : '00:00',
+      studyNight ? '17:00' : '23:59',
+      restricted ? 0 : 1,
+      restricted ? 'Family commitment' : studyNight ? 'Classes from 18:00' : null
+    );
+  }
+}
+
+/* ------------------------------------------------------------- time off -- */
+
+const insertTimeOff = db.prepare(
+  `INSERT INTO time_off_requests (user_id, type, starts_on, ends_on, reason, status, decided_by, decided_at, decision_note)
+   VALUES (?,?,?,?,?,?,?,?,?)`
+);
+
+insertTimeOff.run(users.marcus, 'vacation', inDays(24), inDays(31),
+  'Family trip booked before I started here.', 'pending', null, null, null);
+insertTimeOff.run(users.alicia, 'sick', inDays(-4), inDays(-3),
+  'Flu - doctor note available.', 'approved', users.supervisor,
+  toSql(at(-5, 9)), 'Get well. Cover arranged with Kevin.');
+insertTimeOff.run(users.dwayne, 'unpaid', inDays(12), inDays(13),
+  'Range requalification for my Class G renewal.', 'pending', null, null, null);
+
+/* ---------------------------------------------------- past duress alert -- */
+
+// One resolved alert so the safety board is not empty on a first look.
+db.prepare(
+  `INSERT INTO panic_alerts
+   (user_id, post_id, triggered_at, latitude, longitude, accuracy, status,
+    acknowledged_by, acknowledged_at, resolved_at, resolution_note)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+).run(
+  users.dwayne, postIds.gulfportYard, toSql(at(-9, 2, 42)),
+  27.9589, -82.4298, 12, 'resolved',
+  users.supervisor, toSql(at(-9, 2, 43)), toSql(at(-9, 3, 20)),
+  'Reached the officer by radio in under a minute. Aggressive driver at gate 1 had left the property. Tampa PD advised, no injuries, no damage.'
+);
+
 // Derive flags from everything above.
 sweep();
 
@@ -483,14 +649,17 @@ USA Security Connect - demo data loaded
   ${db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get().n} incidents, ${db.prepare(`SELECT COUNT(*) AS n FROM tours`).get().n} tours
   ${flagCount} compliance flags
 
+  ${db.prepare(`SELECT COUNT(*) AS n FROM certifications`).get().n} certifications, ${db.prepare(`SELECT COUNT(*) AS n FROM time_off_requests`).get().n} time-off requests
+
 Sign-in codes (demo PINs):
-  1001 / 2468   Vince Ortega      Administrator
-  1002 / 3571   Renata Diaz       Field Supervisor
-  1003 / 4812   Marcus Bell       Officer (currently on duty)
-  1004 / 5930   Janelle Carter    Officer
-  1005 / 6174   Dwayne Foster     Officer (armed post)
-  1006 / 7285   Alicia Nunez      Officer
-  1007 / 8140   Kevin Osei        Officer (must change PIN at first sign-in)
+  1001 / 2468   Vince Ortega      Administrator      W-2 salary, exempt
+  1002 / 3571   Renata Diaz       Field Supervisor   W-2 hourly
+  1003 / 4812   Marcus Bell       Officer            W-2, currently on duty
+  1004 / 5930   Janelle Carter    Officer            W-2, licence expiring
+  1005 / 6174   Dwayne Foster     Officer            1099 contractor, armed post
+  1006 / 7285   Alicia Nunez      Officer            W-2 hourly
+  1007 / 8140   Kevin Osei        Officer            W-2, must change PIN
+  1008 / 9351   Renee Okafor      Officer            1099 contractor, per shift
 `);
 
 db.close();

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { LoadingPage, Empty, Icon, Chip, Modal, Field, Banner, useToast } from '../../components/ui.jsx';
+import { LocationPicker, googleMapsLink } from '../../components/Map.jsx';
 import { RULES } from '@shared/domain.js';
 
 function SiteDialog({ onClose, onSaved }) {
@@ -95,6 +96,7 @@ function PostDialog({ post, sites, onClose, onSaved }) {
     name: post?.name || '',
     postCode: post?.post_code || '',
     instructions: post?.instructions || '',
+    address: post?.address || '',
     latitude: post?.latitude ?? '',
     longitude: post?.longitude ?? '',
     geofenceRadiusM: post?.geofence_radius_m ?? RULES.defaultGeofenceRadiusM,
@@ -115,6 +117,7 @@ function PostDialog({ post, sites, onClose, onSaved }) {
         name: form.name,
         postCode: form.postCode || undefined,
         instructions: form.instructions || undefined,
+        address: form.address || undefined,
         latitude: form.latitude === '' ? null : Number(form.latitude),
         longitude: form.longitude === '' ? null : Number(form.longitude),
         geofenceRadiusM: Number(form.geofenceRadiusM),
@@ -168,19 +171,37 @@ function PostDialog({ post, sites, onClose, onSaved }) {
         </Field>
 
         <fieldset>
-          <legend>Location verification</legend>
+          <legend>Location &amp; geofence</legend>
           <div className="stack">
-            <div className="grid grid-3">
-              <Field label="Latitude">
-                <input type="number" step="0.000001" value={form.latitude} onChange={set('latitude')} />
-              </Field>
-              <Field label="Longitude">
-                <input type="number" step="0.000001" value={form.longitude} onChange={set('longitude')} />
-              </Field>
-              <Field label="Geofence radius (m)" hint="How far from the post a clock-in is accepted.">
-                <input type="number" min="25" max="5000" value={form.geofenceRadiusM} onChange={set('geofenceRadiusM')} />
-              </Field>
-            </div>
+            <Field label="Geofence radius (metres)" hint="How far from the post a clock-in is accepted.">
+              <input
+                type="number"
+                min="25"
+                max="5000"
+                value={form.geofenceRadiusM}
+                onChange={set('geofenceRadiusM')}
+              />
+            </Field>
+
+            <LocationPicker
+              latitude={form.latitude === '' ? null : Number(form.latitude)}
+              longitude={form.longitude === '' ? null : Number(form.longitude)}
+              radius={Number(form.geofenceRadiusM) || 150}
+              onChange={({ latitude, longitude, label }) =>
+                setForm((f) => ({
+                  ...f,
+                  latitude: latitude ?? '',
+                  longitude: longitude ?? '',
+                  // A geocoded result fills the address in as well.
+                  address: label || f.address,
+                }))
+              }
+            />
+
+            <Field label="Street address" hint="Shown to the officer, and used for directions.">
+              <input value={form.address} onChange={set('address')} />
+            </Field>
+
             <label className="check">
               <input type="checkbox" checked={form.requiresGps} onChange={set('requiresGps')} />
               <span>

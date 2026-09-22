@@ -5,6 +5,7 @@ import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, BROADCAST_PRIORITY } from '../shared.js';
 import { toSql } from '../services/compliance.js';
+import { notifyBroadcast, notifyMessage } from '../services/push.js';
 
 /* ============================================================ broadcasts === */
 
@@ -89,7 +90,11 @@ broadcastsRouter.post(
         req.user.id
       );
     audit(req.user.id, 'broadcast.published', 'broadcast', Number(info.lastInsertRowid), { title: body.title }, req.ip);
-    res.status(201).json({ broadcast: db.prepare(`SELECT * FROM broadcasts WHERE id = ?`).get(info.lastInsertRowid) });
+
+    const broadcast = db.prepare(`SELECT * FROM broadcasts WHERE id = ?`).get(info.lastInsertRowid);
+    notifyBroadcast(broadcast);
+
+    res.status(201).json({ broadcast });
   })
 );
 
@@ -365,6 +370,13 @@ messagesRouter.post(
          FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?`
       )
       .get(info.lastInsertRowid);
+
+    notifyMessage({
+      threadId: Number(req.params.id),
+      senderId: req.user.id,
+      senderName: message.sender_name,
+      body: body.body,
+    });
 
     res.status(201).json({ message: { ...isoFields(message, ['sent_at']), mine: true } });
   })

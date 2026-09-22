@@ -9,7 +9,10 @@
     "start": "node src/index.js",
     "seed": "node src/seed.js",
     "reset": "node src/seed.js --reset",
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs && node test/features.mjs",
+    "test:core": "node test/smoke.mjs",
+    "test:features": "node test/features.mjs",
+    "check:schema": "node test/checkdb.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

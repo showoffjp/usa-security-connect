@@ -12,6 +12,7 @@
 import { db } from '../lib/db.js';
 import { sqlToIso } from '../lib/http.js';
 import { RULES, FLAG_TYPES, FLAG_SEVERITY, minutesBetween } from '../shared.js';
+import { notifyDueCheckIns, notifyNewFlags } from './push.js';
 
 /** Store timestamps the way SQLite's datetime() does, so comparisons line up. */
 export const toSql = (d = new Date()) => new Date(d).toISOString().replace('T', ' ').slice(0, 19);
@@ -246,12 +247,22 @@ function sweepAbandonedShifts(now) {
  * the admin dashboard so a supervisor never looks at stale numbers.
  */
 export function sweep(now = new Date()) {
-  const result = { missedCheckIns: 0, noShows: 0, autoClosed: 0 };
+  const result = { missedCheckIns: 0, noShows: 0, autoClosed: 0, notified: 0, alerted: 0 };
   db.transaction(() => {
     result.missedCheckIns = sweepMissedCheckIns(now);
     result.noShows = sweepNoShows(now);
     result.autoClosed = sweepAbandonedShifts(now);
   })();
+
+  // Notifications run outside the transaction: they call out to a third-party
+  // service, and a slow or failing push must never hold a database write open.
+  try {
+    result.notified = notifyDueCheckIns(now);
+    result.alerted = notifyNewFlags();
+  } catch (err) {
+    console.error('[usc] notification pass failed', err.message);
+  }
+
   return result;
 }
 

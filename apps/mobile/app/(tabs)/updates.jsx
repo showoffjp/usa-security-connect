@@ -8,6 +8,7 @@ import {
   Card, Chip, StatusChip, Button, Empty, Loading, Segmented, Sheet, Progress,
   Banner, Toast, useToastState,
 } from '../../src/ui.jsx';
+import { TimeOffSheet } from '../../src/SafetyBar.jsx';
 import { C, S } from '../../src/theme.js';
 
 /* ------------------------------------------------------- training video -- */
@@ -124,17 +125,21 @@ export default function UpdatesScreen() {
   const [openBroadcast, setOpenBroadcast] = useState(null);
   const [player, setPlayer] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [timeOff, setTimeOff] = useState(false);
+  const [myTimeOff, setMyTimeOff] = useState([]);
 
   const load = useCallback(async () => {
     try {
-      const [b, t, m] = await Promise.all([
+      const [b, t, m, o] = await Promise.all([
         api.get('/broadcasts'),
         api.get('/training'),
         api.get('/messages/threads'),
+        api.get('/time-off'),
       ]);
       setBroadcasts(b.broadcasts);
       setTrainings(t.trainings);
       setThreads(m.threads);
+      setMyTimeOff(o.requests);
     } catch (err) {
       notify(err.message, 'err');
       setBroadcasts([]);
@@ -291,6 +296,35 @@ export default function UpdatesScreen() {
           </Card>
         )}
 
+        <Card
+          title="Time off"
+          right={
+            <Pressable onPress={() => setTimeOff(true)}>
+              <Text style={{ color: C.brand600, fontWeight: '700', fontSize: 13 }}>Request</Text>
+            </Pressable>
+          }
+        >
+          {myTimeOff.length === 0 ? (
+            <Empty title="No requests">Ask for leave and your supervisor decides in the app.</Empty>
+          ) : (
+            myTimeOff.slice(0, 5).map((r, i) => (
+              <View
+                key={r.id}
+                style={[S.listItem, i === Math.min(myTimeOff.length, 5) - 1 && { borderBottomWidth: 0 }]}
+              >
+                <View style={S.grow}>
+                  <Text style={[S.small, S.strong]}>
+                    {fmtDate(r.starts_on)} - {fmtDate(r.ends_on)}
+                  </Text>
+                  <Text style={S.tiny}>{r.type}</Text>
+                  {!!r.decision_note && <Text style={S.tiny}>{r.decision_note}</Text>}
+                </View>
+                <StatusChip value={r.status} />
+              </View>
+            ))
+          )}
+        </Card>
+
         <Card title="Account">
           <View style={S.cardPad}>
             <Text style={[S.small, S.strong]}>{user.full_name}</Text>
@@ -335,6 +369,16 @@ export default function UpdatesScreen() {
           notify={notify}
         />
       )}
+
+      <TimeOffSheet
+        visible={timeOff}
+        onClose={() => {
+          setTimeOff(false);
+          load();
+        }}
+        notify={notify}
+      />
+
 
       <Toast toast={toast} />
     </View>

@@ -51,6 +51,60 @@ which is kept on the officer's record.
 - **Corrections are additive.** Editing a punch preserves the original clock-in and
   clock-out alongside the reason and who made the change.
 
+## Employment classification and pay
+
+Classification is a field on the employee record, not a note, because it changes the
+arithmetic. `computePay()` in `packages/shared/src/domain.js` is the single place it
+happens, and the API, admin console and timesheet export all call it.
+
+| | W-2 employee | 1099 contractor |
+|---|---|---|
+| Overtime past 40h/week | Yes, at their multiplier (1.5 default) | **No** — contractors are not owed FLSA overtime |
+| Exempt status | Available for salaried managers | Refused by the API |
+| Required paperwork | — | W-9 on file before the record can be made active |
+| Also tracked | — | Business name, tax ID last four, signed agreement, insurance expiry |
+| Pay basis | Hourly, salary or per shift | Hourly, salary or per shift |
+
+Two deliberate guardrails:
+
+- **A 1099 cannot be set active without a W-9.** Missing contractor paperwork is the
+  classic audit finding, so the API refuses rather than warns.
+- **Overtime is never paid to a contractor**, even if a rate is set. Paying FLSA
+  overtime is one of the behaviours that blurs the contractor line, so the calculation
+  will not do it silently.
+
+Classification is a legal determination about how the work is actually controlled, not
+a preference. The app records and enforces the decision; it does not make it. Check
+with counsel or a payroll provider before reclassifying anybody.
+
+### Money
+
+Every amount is stored in whole cents to avoid float drift. Only the **last four
+digits** of a tax ID are kept — the full EIN or SSN belongs in the payroll system.
+
+- **Pay rate** is what the worker earns.
+- **Bill rate** is what the client is charged, with no overtime uplift unless the
+  contract says so.
+- **Margin** is the difference, shown per person and in the timesheet totals.
+- **Unpaid meal breaks** are deducted before anybody is paid for the time.
+
+These are planning figures. The payroll provider remains the source of truth.
+
+## Credential expiry
+
+Certifications, state licences and contractor certificates of insurance all feed one
+board. Anything inside 60 days is *expiring*; anything past its date is *expired*, and
+an officer on that list should be pulled from post until it is renewed — particularly a
+Class G on an armed post.
+
+## Duress alerts
+
+The button fires on confirmation without waiting for a GPS fix, because a fix can take
+ten seconds the officer may not have; the position is attached if it arrives and sent as
+an update if it arrives late. Repeat presses update the open alert rather than creating
+new ones, so responders see a single incident. Acknowledging notifies the officer that
+help is coming, and closing one requires a written account of what happened.
+
 ## Roles
 
 | Role | Can |

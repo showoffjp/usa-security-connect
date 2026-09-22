@@ -19,7 +19,78 @@ export const ROLE_LABEL = {
 export const ROLE_RANK = { officer: 1, supervisor: 2, admin: 3 };
 export const atLeast = (role, required) => (ROLE_RANK[role] ?? 0) >= (ROLE_RANK[required] ?? 99);
 
-export const EMPLOYEE_STATUS = ['active', 'suspended', 'terminated'];
+export const EMPLOYEE_STATUS = ['active', 'suspended', 'terminated', 'on_leave', 'applicant'];
+
+export const EMPLOYEE_STATUS_LABEL = {
+  active: 'Active',
+  suspended: 'Suspended',
+  terminated: 'Former',
+  on_leave: 'On leave',
+  applicant: 'Applicant',
+};
+
+/* ------------------------------------------------------- employment --- */
+
+/**
+ * W2 employees are owed FLSA overtime; 1099 contractors are not, and are paid
+ * against an invoice instead. The distinction changes payroll maths, which
+ * fields are required, and what the export looks like - so it is modelled
+ * explicitly rather than left as a note.
+ */
+export const EMPLOYMENT_TYPES = ['w2', '1099'];
+
+export const EMPLOYMENT_LABEL = {
+  w2: 'W-2 employee',
+  '1099': '1099 contractor',
+};
+
+export const PAY_TYPES = ['hourly', 'salary', 'per_shift'];
+
+export const PAY_TYPE_LABEL = {
+  hourly: 'Hourly',
+  salary: 'Salary',
+  per_shift: 'Per shift',
+};
+
+export const CERTIFICATION_TYPES = [
+  'Class D Security Licence',
+  'Class G Statewide Firearm Licence',
+  'CPR / First Aid',
+  'AED',
+  'Driver Licence',
+  'Defensive Tactics',
+  'Verbal De-escalation',
+  'Fire Watch',
+  'OSHA 10',
+  'Other',
+];
+
+export const TIME_OFF_TYPES = ['vacation', 'sick', 'unpaid', 'bereavement', 'other'];
+
+export const TIME_OFF_LABEL = {
+  vacation: 'Vacation',
+  sick: 'Sick',
+  unpaid: 'Unpaid',
+  bereavement: 'Bereavement',
+  other: 'Other',
+};
+
+export const UNIFORM_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'];
+
+export const WEEKDAYS = [
+  { value: 1, label: 'Mon', long: 'Monday' },
+  { value: 2, label: 'Tue', long: 'Tuesday' },
+  { value: 3, label: 'Wed', long: 'Wednesday' },
+  { value: 4, label: 'Thu', long: 'Thursday' },
+  { value: 5, label: 'Fri', long: 'Friday' },
+  { value: 6, label: 'Sat', long: 'Saturday' },
+  { value: 0, label: 'Sun', long: 'Sunday' },
+];
+
+/** Break types. Florida follows the federal rule: meal breaks over 30 min are unpaid. */
+export const BREAK_TYPES = ['meal', 'rest'];
+
+export const PANIC_STATUS = ['active', 'acknowledged', 'resolved', 'false_alarm'];
 
 export const INCIDENT_CATEGORIES = [
   'Access Control',
@@ -156,6 +227,86 @@ export function splitOvertime(totalMinutes, weeklyThresholdHours = RULES.overtim
     regularMinutes: Math.min(totalMinutes, threshold),
     overtimeMinutes: Math.max(0, totalMinutes - threshold),
   };
+}
+
+/**
+ * What a person is owed for a period, and what the client is billed for it.
+ *
+ * The employment type drives the maths:
+ *  - **W-2** staff are non-exempt by default and earn overtime past 40 hours
+ *    in a week, at their multiplier (1.5x unless overridden).
+ *  - **1099** contractors are paid their agreed rate for every hour. They are
+ *    not owed FLSA overtime, and paying it anyway is one of the signals that
+ *    blurs the contractor line, so the calculation deliberately does not.
+ *  - **Exempt** W-2 staff (a salaried manager) earn no overtime either.
+ *
+ * All money is handled in whole cents to avoid float drift, and this is a
+ * planning figure - the payroll provider remains the source of truth.
+ */
+export function computePay({
+  minutes,
+  employmentType = 'w2',
+  payType = 'hourly',
+  exempt = false,
+  payRateCents,
+  billRateCents,
+  overtimeMultiplier = 1.5,
+  weeklyThresholdHours = RULES.overtimeWeeklyHours,
+  salaryCents = null,
+  shifts = 0,
+}) {
+  const earnsOvertime = employmentType === 'w2' && !exempt && payType === 'hourly';
+
+  const { regularMinutes, overtimeMinutes } = earnsOvertime
+    ? splitOvertime(minutes, weeklyThresholdHours)
+    : { regularMinutes: minutes, overtimeMinutes: 0 };
+
+  let payCents = null;
+  if (payType === 'salary' && salaryCents != null) {
+    payCents = Math.round(salaryCents);
+  } else if (payType === 'per_shift' && payRateCents != null) {
+    payCents = Math.round(payRateCents * shifts);
+  } else if (payRateCents != null) {
+    payCents = Math.round(
+      (regularMinutes / 60) * payRateCents +
+        (overtimeMinutes / 60) * payRateCents * overtimeMultiplier
+    );
+  }
+
+  // The client is billed for hours worked at the contract rate, with no
+  // overtime uplift unless the contract says otherwise.
+  const billCents = billRateCents != null ? Math.round((minutes / 60) * billRateCents) : null;
+
+  return {
+    regularMinutes,
+    overtimeMinutes,
+    earnsOvertime,
+    payCents,
+    billCents,
+    marginCents: billCents != null && payCents != null ? billCents - payCents : null,
+    marginPercent:
+      billCents && payCents != null && billCents > 0
+        ? Math.round(((billCents - payCents) / billCents) * 1000) / 10
+        : null,
+  };
+}
+
+/** Certifications inside this window are "expiring soon" on the dashboard. */
+export const EXPIRY_WARNING_DAYS = 60;
+
+export function expiryState(dateString, warningDays = EXPIRY_WARNING_DAYS) {
+  if (!dateString) return { state: 'none', days: null };
+  const days = Math.ceil((new Date(dateString).getTime() - Date.now()) / 86400000);
+  if (days < 0) return { state: 'expired', days };
+  if (days <= warningDays) return { state: 'expiring', days };
+  return { state: 'valid', days };
+}
+
+/** Minutes of unpaid break to deduct from a shift. Meal breaks are unpaid. */
+export function unpaidBreakMinutes(breaks = []) {
+  return breaks
+    .filter((b) => b.type === 'meal' && !b.paid && b.minutes)
+    .reduce((total, b) => total + b.minutes, 0);
 }
 
 /** Employee codes are 4-6 digits; PINs are 4-6 digits. */

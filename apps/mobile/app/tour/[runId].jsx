@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { api } from '../../src/api.js';
 import { getPosition } from '../../src/geo.js';
+import { isNfcAvailable, scanTag, stopNfc } from '../../src/nfc.js';
 import { fmtTime } from '../../src/format.js';
 import {
   Card, Chip, StatusChip, Button, Loading, Progress, Sheet, Field, Input,
@@ -23,6 +24,14 @@ export default function TourRunScreen() {
   const [skipReason, setSkipReason] = useState('');
   const [manualTag, setManualTag] = useState('');
   const [busy, setBusy] = useState(false);
+  const [nfcReady, setNfcReady] = useState(false);
+  const [scanning, setScanning] = useState(false);
+
+  // NFC only exists in a dev/production build, so the UI adapts to what is there.
+  useEffect(() => {
+    isNfcAvailable().then(setNfcReady);
+    return () => stopNfc();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -62,6 +71,28 @@ export default function TourRunScreen() {
       notify(err.message, 'err');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Hold the phone against the checkpoint tag and let the tag identify itself. */
+  const scanWithNfc = async (checkpoint) => {
+    setScanning(true);
+    try {
+      const result = await scanTag();
+      if (result.ok) {
+        await scan(checkpoint, result.tagId);
+        return;
+      }
+      const messages = {
+        cancelled: null, // the officer backed out on purpose; stay quiet
+        timeout: 'No tag detected. Hold the phone flat against the tag and try again.',
+        unreadable: 'That tag could not be read. Type the ID printed on it instead.',
+        unavailable: 'NFC is not available in this build. Type the tag ID instead.',
+      };
+      const message = messages[result.reason] ?? result.message ?? 'The scan failed.';
+      if (message) notify(message, 'err');
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -274,24 +305,48 @@ export default function TourRunScreen() {
             )}
 
             {sheet.status === 'pending' && !!sheet.nfc_tag_id && (
-              <Field label="Scan or type the tag ID" hint={`This checkpoint's tag: ${sheet.nfc_tag_id}`}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Input
-                    value={manualTag}
-                    onChangeText={setManualTag}
-                    placeholder="USC-NFC-..."
-                    style={S.grow}
-                    autoCapitalize="characters"
-                  />
-                  <Button
-                    title="Verify"
-                    variant="navy"
-                    disabled={!manualTag.trim()}
-                    busy={busy}
-                    onPress={() => scan(sheet, manualTag.trim())}
-                  />
-                </View>
-              </Field>
+              <View style={{ gap: 12 }}>
+                {nfcReady ? (
+                  <View style={{ gap: 8 }}>
+                    <Button
+                      title={scanning ? 'Hold phone to the tag...' : 'Scan checkpoint tag'}
+                      variant="navy"
+                      busy={scanning}
+                      onPress={() => scanWithNfc(sheet)}
+                    />
+                    <Text style={[S.tiny, { textAlign: 'center' }]}>
+                      Hold the back of the phone flat against the tag.
+                    </Text>
+                  </View>
+                ) : (
+                  <Banner tone="info" title="NFC not available on this build">
+                    Type the ID printed on the tag, or mark the checkpoint visited. The server checks
+                    the ID either way.
+                  </Banner>
+                )}
+
+                <Field
+                  label={nfcReady ? 'Or type the tag ID' : 'Tag ID'}
+                  hint={`This checkpoint's tag: ${sheet.nfc_tag_id}`}
+                >
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Input
+                      value={manualTag}
+                      onChangeText={setManualTag}
+                      placeholder="USC-NFC-..."
+                      style={S.grow}
+                      autoCapitalize="characters"
+                    />
+                    <Button
+                      title="Verify"
+                      variant="ghost"
+                      disabled={!manualTag.trim()}
+                      busy={busy}
+                      onPress={() => scan(sheet, manualTag.trim())}
+                    />
+                  </View>
+                </Field>
+              </View>
             )}
           </>
         )}

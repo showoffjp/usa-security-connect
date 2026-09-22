@@ -174,6 +174,7 @@ export function AdminShell() {
       title: 'Operations',
       items: [
         { to: '/admin', icon: 'chart', label: 'Dashboard', end: true },
+        { to: '/admin/safety', icon: 'shield', label: 'Safety & map', count: counts.activeAlerts, urgent: true },
         { to: '/admin/flags', icon: 'flag', label: 'Flags', count: counts.openFlags },
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
         { to: '/admin/tours', icon: 'route', label: 'Tours' },
@@ -184,12 +185,15 @@ export function AdminShell() {
       items: [
         { to: '/admin/employees', icon: 'users', label: 'Employees' },
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
-        { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets' },
+        { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay' },
+        { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
+        { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },
       ],
     },
     {
-      title: 'Communication',
+      title: 'Reporting',
       items: [
+        { to: '/admin/dar', icon: 'clipboard', label: 'Daily report' },
         { to: '/admin/broadcasts', icon: 'megaphone', label: 'Broadcasts' },
         { to: '/admin/training', icon: 'book', label: 'Training' },
       ],

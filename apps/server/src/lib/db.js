@@ -385,7 +385,146 @@ export function migrate() {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(created_at);
+
+  CREATE TABLE IF NOT EXISTS device_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    platform TEXT,
+    device_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_device_user ON device_tokens(user_id);
+
+  /* Licences and certifications, tracked so nobody works an armed post on a
+     lapsed Class G. */
+  CREATE TABLE IF NOT EXISTS certifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    number TEXT,
+    issuing_authority TEXT,
+    issued_on TEXT,
+    expires_on TEXT,
+    document_filename TEXT,
+    verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    verified_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_certs_user ON certifications(user_id);
+  CREATE INDEX IF NOT EXISTS idx_certs_expiry ON certifications(expires_on);
+
+  /* When an officer is willing to work. Used to warn before assigning a shift. */
+  CREATE TABLE IF NOT EXISTS availability (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    weekday INTEGER NOT NULL,
+    start_time TEXT NOT NULL DEFAULT '00:00',
+    end_time TEXT NOT NULL DEFAULT '23:59',
+    available INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    UNIQUE(user_id, weekday)
+  );
+
+  CREATE TABLE IF NOT EXISTS time_off_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'vacation',
+    starts_on TEXT NOT NULL,
+    ends_on TEXT NOT NULL,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    decided_at TEXT,
+    decision_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_timeoff_user ON time_off_requests(user_id, starts_on);
+  CREATE INDEX IF NOT EXISTS idx_timeoff_status ON time_off_requests(status);
+
+  /* Meal and rest breaks. Unpaid meal time is deducted from the shift. */
+  CREATE TABLE IF NOT EXISTS breaks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    time_entry_id INTEGER NOT NULL REFERENCES time_entries(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'meal',
+    paid INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    minutes INTEGER,
+    start_lat REAL, start_lng REAL
+  );
+  CREATE INDEX IF NOT EXISTS idx_breaks_entry ON breaks(time_entry_id);
+
+  /* Duress button. A lone officer's most important feature. */
+  CREATE TABLE IF NOT EXISTS panic_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    time_entry_id INTEGER REFERENCES time_entries(id) ON DELETE SET NULL,
+    post_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
+    triggered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    latitude REAL, longitude REAL, accuracy REAL,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    acknowledged_at TEXT,
+    resolved_at TEXT,
+    resolution_note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_panic_status ON panic_alerts(status, triggered_at);
   `);
+
+  // Columns added after the first release. CREATE TABLE IF NOT EXISTS will not
+  // add them to a database that already exists, so they are applied here.
+  addColumn('status_checks', 'notified_at', 'TEXT');
+  addColumn('flags', 'notified_at', 'TEXT');
+
+  /* --- employment classification, pay and billing --- */
+  addColumn('users', 'employment_type', `TEXT NOT NULL DEFAULT 'w2'`);
+  addColumn('users', 'pay_type', `TEXT NOT NULL DEFAULT 'hourly'`);
+  addColumn('users', 'exempt', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('users', 'overtime_multiplier', 'REAL NOT NULL DEFAULT 1.5');
+  addColumn('users', 'salary_cents', 'INTEGER');
+  // What the client is charged for this officer's hours - drives margin.
+  addColumn('users', 'bill_rate_cents', 'INTEGER');
+
+  /* --- 1099 contractor paperwork --- */
+  addColumn('users', 'business_name', 'TEXT');
+  // Only the last four digits of an EIN/SSN are kept; the full number belongs
+  // in the payroll system, not here.
+  addColumn('users', 'tax_id_last4', 'TEXT');
+  addColumn('users', 'w9_on_file', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('users', 'contractor_agreement_on_file', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('users', 'insurance_expires_on', 'TEXT');
+
+  /* --- profile --- */
+  addColumn('users', 'address_line1', 'TEXT');
+  addColumn('users', 'address_line2', 'TEXT');
+  addColumn('users', 'city', 'TEXT');
+  addColumn('users', 'state', 'TEXT');
+  addColumn('users', 'postal_code', 'TEXT');
+  addColumn('users', 'uniform_size', 'TEXT');
+  addColumn('users', 'avatar_filename', 'TEXT');
+  addColumn('users', 'emergency_contact_relation', 'TEXT');
+
+  /* --- shift extras --- */
+  addColumn('shifts', 'bill_rate_cents', 'INTEGER');
+  addColumn('shifts', 'is_open', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('time_entries', 'unpaid_break_minutes', 'INTEGER NOT NULL DEFAULT 0');
+
+  /* --- site/post addressing for map display --- */
+  addColumn('posts', 'address', 'TEXT');
+  addColumn('posts', 'what3words', 'TEXT');
+}
+
+/** Add a column only if it is missing, so migrate() stays safe to re-run. */
+function addColumn(table, column, definition) {
+  const existing = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!existing.length) return;
+  if (existing.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export function audit(actorId, action, entity, entityId, detail, ip) {

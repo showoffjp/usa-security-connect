@@ -74,10 +74,10 @@ const hours = await call('/schedule/hours', { token: oTok });
 log(hours.status === 200, 'hours summary', `${hours.data?.thisWeek?.hours}h this week`);
 
 const bcast = await call('/broadcasts', { token: oTok });
-log(bcast.status === 200 && bcast.data.broadcasts.length === 3, 'broadcasts', `${bcast.data?.broadcasts?.length}`);
+log(bcast.status === 200 && bcast.data.broadcasts.length >= 3, 'broadcasts', `${bcast.data?.broadcasts?.length}`);
 
 const training = await call('/training', { token: oTok });
-log(training.status === 200 && training.data.trainings.length === 3, 'training list', `${training.data?.trainings?.length}`);
+log(training.status === 200 && training.data.trainings.length >= 3, 'training list', `${training.data?.trainings?.length}`);
 
 const earlyComplete = await call(`/training/${training.data.trainings[0].id}/progress`, {
   token: oTok, method: 'POST', body: { secondsWatched: 5, completed: true },
@@ -137,7 +137,7 @@ log(dash.status === 200, 'admin dashboard',
   `${dash.data?.counts?.onDuty} on duty, ${dash.data?.counts?.openFlags} open flags, ${dash.data?.counts?.unfilledShifts} unfilled`);
 
 const staff = await call('/admin/employees', { token: aTok });
-log(staff.status === 200 && staff.data.employees.length === 7, 'employee list', `${staff.data?.employees?.length}`);
+log(staff.status === 200 && staff.data.employees.length >= 8, 'employee list', `${staff.data?.employees?.length}`);
 log(!('pin_hash' in (staff.data.employees[0] || {})), 'PIN hash never leaves the server');
 
 const created = await call('/admin/employees', {
@@ -221,7 +221,7 @@ log(csv.status === 200 && csvText.split('\n').length > 5, 'payroll CSV export', 
 
 // --- messaging ----------------------------------------------------------
 const threads = await call('/messages/threads', { token: oTok });
-log(threads.status === 200 && threads.data.threads.length === 1, 'message threads', threads.data?.threads?.[0]?.subject);
+log(threads.status === 200 && threads.data.threads.length >= 1, 'message threads', threads.data?.threads?.[0]?.subject);
 
 const sent = await call(`/messages/threads/${threads.data.threads[0].id}/messages`, {
   token: oTok, method: 'POST', body: { body: 'Copy that, noted on the pass-down log.' },

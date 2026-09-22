@@ -6,8 +6,12 @@ import { requireAuth, requireRole, hashPin, generatePin, generateEmployeeCode, p
 import {
   ROLES,
   EMPLOYEE_STATUS,
+  EMPLOYMENT_TYPES,
+  PAY_TYPES,
   FLAG_LABEL,
   splitOvertime,
+  computePay,
+  expiryState,
   toHours,
   minutesBetween,
 } from '../shared.js';
@@ -92,8 +96,61 @@ adminRouter.get(
       )
       .get().n;
 
+    const activeAlerts = db
+      .prepare(`SELECT COUNT(*) AS n FROM panic_alerts WHERE status IN ('active','acknowledged')`)
+      .get().n;
+
+    const pendingTimeOff = db
+      .prepare(`SELECT COUNT(*) AS n FROM time_off_requests WHERE status = 'pending'`)
+      .get().n;
+
+    // Anything that lapses within 60 days, across certifications, state
+    // licences and contractor insurance.
+    const expiringCredentials =
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM certifications c JOIN users u ON u.id = c.user_id
+           WHERE c.expires_on IS NOT NULL AND u.status IN ('active','on_leave')
+             AND date(c.expires_on) <= date('now','+60 days')`
+        )
+        .get().n +
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM users
+           WHERE license_expires_on IS NOT NULL AND status IN ('active','on_leave')
+             AND date(license_expires_on) <= date('now','+60 days')`
+        )
+        .get().n +
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM users
+           WHERE insurance_expires_on IS NOT NULL AND employment_type = '1099'
+             AND status IN ('active','on_leave')
+             AND date(insurance_expires_on) <= date('now','+60 days')`
+        )
+        .get().n;
+
+    const openAlerts = db
+      .prepare(
+        `SELECT p.*, u.first_name || ' ' || u.last_name AS officer, u.phone,
+                po.name AS post_name
+         FROM panic_alerts p
+         JOIN users u ON u.id = p.user_id
+         LEFT JOIN posts po ON po.id = p.post_id
+         WHERE p.status IN ('active','acknowledged')
+         ORDER BY p.triggered_at DESC`
+      )
+      .all();
+
     res.json({
-      counts: { ...counts, unfilledShifts: unfilled },
+      counts: {
+        ...counts,
+        unfilledShifts: unfilled,
+        activeAlerts,
+        pendingTimeOff,
+        expiringCredentials,
+      },
+      alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
         ...isoFields(r, ['clock_in_at', 'next_check_due']),
         minutes_on_post: minutesBetween(sqlToIso(r.clock_in_at), new Date().toISOString()),
@@ -153,24 +210,59 @@ adminRouter.get(
   })
 );
 
-const employeeSchema = z.object({
-  firstName: z.string().trim().min(1, 'First name is required.').max(80),
-  lastName: z.string().trim().min(1, 'Last name is required.').max(80),
-  employeeCode: z.string().trim().regex(/^[0-9]{4,6}$/, 'Employee code must be 4-6 digits.').optional(),
-  email: z.string().trim().email('Enter a valid email.').max(160).optional().or(z.literal('')),
-  phone: z.string().trim().max(40).optional(),
-  role: z.enum([ROLES.OFFICER, ROLES.SUPERVISOR, ROLES.ADMIN]).default(ROLES.OFFICER),
-  status: z.enum(EMPLOYEE_STATUS).default('active'),
-  hireDate: z.string().nullable().optional(),
-  licenseNumber: z.string().trim().max(60).optional(),
-  licenseType: z.string().trim().max(40).optional(),
-  licenseExpiresOn: z.string().nullable().optional(),
-  emergencyContactName: z.string().trim().max(120).optional(),
-  emergencyContactPhone: z.string().trim().max(40).optional(),
-  defaultSiteId: z.number().int().positive().nullable().optional(),
-  payRate: z.number().nonnegative().max(500).nullable().optional(),
-  notes: z.string().max(2000).optional(),
-});
+const employeeSchema = z
+  .object({
+    firstName: z.string().trim().min(1, 'First name is required.').max(80),
+    lastName: z.string().trim().min(1, 'Last name is required.').max(80),
+    employeeCode: z.string().trim().regex(/^[0-9]{4,6}$/, 'Employee code must be 4-6 digits.').optional(),
+    email: z.string().trim().email('Enter a valid email.').max(160).optional().or(z.literal('')),
+    phone: z.string().trim().max(40).optional(),
+    role: z.enum([ROLES.OFFICER, ROLES.SUPERVISOR, ROLES.ADMIN]).default(ROLES.OFFICER),
+    status: z.enum(EMPLOYEE_STATUS).default('active'),
+    hireDate: z.string().nullable().optional(),
+    licenseNumber: z.string().trim().max(60).optional(),
+    licenseType: z.string().trim().max(40).optional(),
+    licenseExpiresOn: z.string().nullable().optional(),
+    emergencyContactName: z.string().trim().max(120).optional(),
+    emergencyContactPhone: z.string().trim().max(40).optional(),
+    emergencyContactRelation: z.string().trim().max(60).optional(),
+    defaultSiteId: z.number().int().positive().nullable().optional(),
+    notes: z.string().max(2000).optional(),
+
+    /* Employment classification and pay */
+    employmentType: z.enum(EMPLOYMENT_TYPES).default('w2'),
+    payType: z.enum(PAY_TYPES).default('hourly'),
+    exempt: z.boolean().default(false),
+    payRate: z.number().nonnegative().max(1000).nullable().optional(),
+    salary: z.number().nonnegative().max(1_000_000).nullable().optional(),
+    billRate: z.number().nonnegative().max(2000).nullable().optional(),
+    overtimeMultiplier: z.number().min(1).max(3).default(1.5),
+
+    /* 1099 contractor paperwork */
+    businessName: z.string().trim().max(160).optional(),
+    taxIdLast4: z.string().trim().regex(/^\d{4}$/, 'Enter the last four digits only.').optional().or(z.literal('')),
+    w9OnFile: z.boolean().default(false),
+    contractorAgreementOnFile: z.boolean().default(false),
+    insuranceExpiresOn: z.string().nullable().optional(),
+
+    /* Mailing address */
+    addressLine1: z.string().trim().max(160).optional(),
+    addressLine2: z.string().trim().max(160).optional(),
+    city: z.string().trim().max(80).optional(),
+    state: z.string().trim().max(2).optional(),
+    postalCode: z.string().trim().max(12).optional(),
+    uniformSize: z.string().trim().max(6).optional(),
+  })
+  // A contractor with no paperwork on file is the classic audit finding, so the
+  // API refuses to record one as active without at least a W-9.
+  .refine((d) => d.employmentType !== '1099' || d.status !== 'active' || d.w9OnFile, {
+    message: 'A 1099 contractor cannot be made active until their W-9 is on file.',
+    path: ['w9OnFile'],
+  })
+  .refine((d) => d.employmentType !== '1099' || !d.exempt, {
+    message: 'Exempt status applies to W-2 employees only.',
+    path: ['exempt'],
+  });
 
 adminRouter.post(
   '/employees',
@@ -189,35 +281,57 @@ adminRouter.post(
     const pin = generatePin(4);
     const { hash, salt } = hashPin(pin);
 
+    // Built as a column map so adding a profile field later is a one-line change.
+    const values = {
+      employee_code: code,
+      first_name: body.firstName,
+      last_name: body.lastName,
+      email: body.email || null,
+      phone: body.phone || null,
+      role: body.role,
+      status: body.status,
+      hire_date: body.hireDate || null,
+      license_number: body.licenseNumber || null,
+      license_type: body.licenseType || null,
+      license_expires_on: body.licenseExpiresOn || null,
+      emergency_contact_name: body.emergencyContactName || null,
+      emergency_contact_phone: body.emergencyContactPhone || null,
+      emergency_contact_relation: body.emergencyContactRelation || null,
+      default_site_id: body.defaultSiteId ?? null,
+      notes: body.notes || null,
+
+      employment_type: body.employmentType,
+      pay_type: body.payType,
+      exempt: body.exempt ? 1 : 0,
+      overtime_multiplier: body.overtimeMultiplier,
+      pay_rate_cents: body.payRate != null ? Math.round(body.payRate * 100) : null,
+      salary_cents: body.salary != null ? Math.round(body.salary * 100) : null,
+      bill_rate_cents: body.billRate != null ? Math.round(body.billRate * 100) : null,
+
+      business_name: body.businessName || null,
+      tax_id_last4: body.taxIdLast4 || null,
+      w9_on_file: body.w9OnFile ? 1 : 0,
+      contractor_agreement_on_file: body.contractorAgreementOnFile ? 1 : 0,
+      insurance_expires_on: body.insuranceExpiresOn || null,
+
+      address_line1: body.addressLine1 || null,
+      address_line2: body.addressLine2 || null,
+      city: body.city || null,
+      state: body.state || null,
+      postal_code: body.postalCode || null,
+      uniform_size: body.uniformSize || null,
+
+      pin_hash: hash,
+      pin_salt: salt,
+    };
+
+    const columns = Object.keys(values);
     const info = db
       .prepare(
-        `INSERT INTO users
-         (employee_code, first_name, last_name, email, phone, role, status, hire_date,
-          license_number, license_type, license_expires_on, emergency_contact_name,
-          emergency_contact_phone, default_site_id, pay_rate_cents, notes,
-          pin_hash, pin_salt, pin_set_at, must_change_pin)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),1)`
+        `INSERT INTO users (${columns.join(', ')}, pin_set_at, must_change_pin)
+         VALUES (${columns.map(() => '?').join(', ')}, datetime('now'), 1)`
       )
-      .run(
-        code,
-        body.firstName,
-        body.lastName,
-        body.email || null,
-        body.phone || null,
-        body.role,
-        body.status,
-        body.hireDate || null,
-        body.licenseNumber || null,
-        body.licenseType || null,
-        body.licenseExpiresOn || null,
-        body.emergencyContactName || null,
-        body.emergencyContactPhone || null,
-        body.defaultSiteId ?? null,
-        body.payRate != null ? Math.round(body.payRate * 100) : null,
-        body.notes || null,
-        hash,
-        salt
-      );
+      .run(...Object.values(values));
 
     audit(req.user.id, 'employee.created', 'user', Number(info.lastInsertRowid), { code, role: body.role }, req.ip);
 
@@ -269,15 +383,53 @@ adminRouter.get(
       )
       .get(user.id);
 
+    const certifications = db
+      .prepare(`SELECT * FROM certifications WHERE user_id = ? ORDER BY expires_on IS NULL, expires_on`)
+      .all(user.id);
+
+    const availability = db
+      .prepare(`SELECT * FROM availability WHERE user_id = ? ORDER BY weekday`)
+      .all(user.id);
+
+    const timeOff = db
+      .prepare(
+        `SELECT * FROM time_off_requests WHERE user_id = ?
+         ORDER BY starts_on DESC LIMIT 20`
+      )
+      .all(user.id);
+
+    // Show the money the same way the timesheet does, so the two agree.
+    const pay = computePay({
+      minutes: totals.minutes,
+      employmentType: user.employment_type,
+      payType: user.pay_type,
+      exempt: Boolean(user.exempt),
+      payRateCents: user.pay_rate_cents,
+      billRateCents: user.bill_rate_cents,
+      overtimeMultiplier: user.overtime_multiplier || 1.5,
+      weeklyThresholdHours: 40 * 4,
+      salaryCents: user.salary_cents,
+      shifts: totals.shifts,
+    });
+
     res.json({
       employee: publicUser(isoFields(user, ['created_at', 'updated_at', 'last_login_at', 'pin_set_at'])),
       entries: entries.map((e) => isoFields(e, ['clock_in_at', 'clock_out_at', 'created_at'])),
       flags: flags.map((f) => ({ ...isoFields(f, ['occurred_at', 'resolved_at']), label: FLAG_LABEL[f.type] || f.type })),
       shifts: shifts.map((s) => isoFields(s, ['starts_at', 'ends_at'])),
+      certifications: certifications.map((c) => ({
+        ...isoFields(c, ['created_at', 'verified_at']),
+        expiry: expiryState(c.expires_on),
+      })),
+      availability,
+      timeOff: timeOff.map((t) => isoFields(t, ['created_at', 'decided_at'])),
       last30Days: {
         hours: toHours(totals.minutes),
         shifts: totals.shifts,
         lateCount: totals.late_count,
+        estimatedPay: pay.payCents != null ? pay.payCents / 100 : null,
+        estimatedBill: pay.billCents != null ? pay.billCents / 100 : null,
+        marginPercent: pay.marginPercent,
       },
     });
   })
@@ -315,9 +467,22 @@ adminRouter.patch(
       licenseExpiresOn: 'license_expires_on',
       emergencyContactName: 'emergency_contact_name',
       emergencyContactPhone: 'emergency_contact_phone',
+      emergencyContactRelation: 'emergency_contact_relation',
       defaultSiteId: 'default_site_id',
       notes: 'notes',
       employeeCode: 'employee_code',
+      employmentType: 'employment_type',
+      payType: 'pay_type',
+      overtimeMultiplier: 'overtime_multiplier',
+      businessName: 'business_name',
+      taxIdLast4: 'tax_id_last4',
+      insuranceExpiresOn: 'insurance_expires_on',
+      addressLine1: 'address_line1',
+      addressLine2: 'address_line2',
+      city: 'city',
+      state: 'state',
+      postalCode: 'postal_code',
+      uniformSize: 'uniform_size',
     };
 
     const sets = [];
@@ -328,9 +493,28 @@ adminRouter.patch(
         params.push(body[key] === '' ? null : body[key]);
       }
     }
-    if (body.payRate !== undefined) {
-      sets.push('pay_rate_cents = ?');
-      params.push(body.payRate == null ? null : Math.round(body.payRate * 100));
+
+    // Money arrives in dollars and is stored in whole cents.
+    for (const [key, column] of Object.entries({
+      payRate: 'pay_rate_cents',
+      salary: 'salary_cents',
+      billRate: 'bill_rate_cents',
+    })) {
+      if (body[key] !== undefined) {
+        sets.push(`${column} = ?`);
+        params.push(body[key] == null ? null : Math.round(body[key] * 100));
+      }
+    }
+
+    for (const [key, column] of Object.entries({
+      exempt: 'exempt',
+      w9OnFile: 'w9_on_file',
+      contractorAgreementOnFile: 'contractor_agreement_on_file',
+    })) {
+      if (body[key] !== undefined) {
+        sets.push(`${column} = ?`);
+        params.push(body[key] ? 1 : 0);
+      }
     }
     if (!sets.length) return res.json({ employee: publicUser(user) });
 
@@ -594,40 +778,79 @@ adminRouter.get(
     const rows = db
       .prepare(
         `SELECT u.id AS user_id, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
-                u.role, u.pay_rate_cents,
+                u.role, u.pay_rate_cents, u.bill_rate_cents, u.salary_cents,
+                u.employment_type, u.pay_type, u.exempt, u.overtime_multiplier,
+                u.business_name, u.w9_on_file,
                 COUNT(te.id) AS shifts,
-                COALESCE(SUM(te.minutes_worked),0) AS minutes,
+                COALESCE(SUM(te.minutes_worked),0) AS gross_minutes,
+                COALESCE(SUM(te.unpaid_break_minutes),0) AS break_minutes,
                 COALESCE(SUM(CASE WHEN te.late_minutes > 0 THEN 1 ELSE 0 END),0) AS late_shifts,
                 COALESCE(SUM(te.auto_closed),0) AS auto_closed,
                 COALESCE(SUM(CASE WHEN te.clock_in_geofence = 'outside' THEN 1 ELSE 0 END),0) AS geofence_issues
          FROM users u
          LEFT JOIN time_entries te
            ON te.user_id = u.id AND te.clock_in_at BETWEEN ? AND ?
-         WHERE u.status = 'active'
+         WHERE u.status IN ('active','on_leave')
          GROUP BY u.id
-         ORDER BY minutes DESC`
+         ORDER BY gross_minutes DESC`
       )
       .all(toSql(from), toSql(to));
 
     const weeks = Math.max(1, Math.ceil((to - from) / (7 * 86400000)));
 
+    const priced = rows.map((r) => {
+      // Unpaid meal breaks come off before anybody is paid for the time.
+      const minutes = Math.max(0, r.gross_minutes - r.break_minutes);
+
+      // Overtime is a weekly determination. Across a multi-week range this is
+      // a planning estimate, not a payroll-grade figure.
+      const pay = computePay({
+        minutes,
+        employmentType: r.employment_type,
+        payType: r.pay_type,
+        exempt: Boolean(r.exempt),
+        payRateCents: r.pay_rate_cents,
+        billRateCents: r.bill_rate_cents,
+        overtimeMultiplier: r.overtime_multiplier || 1.5,
+        weeklyThresholdHours: 40 * weeks,
+        salaryCents: r.salary_cents,
+        shifts: r.shifts,
+      });
+
+      return {
+        ...r,
+        minutes,
+        hours: toHours(minutes),
+        break_hours: toHours(r.break_minutes),
+        regular_hours: toHours(pay.regularMinutes),
+        overtime_hours: toHours(pay.overtimeMinutes),
+        earns_overtime: pay.earnsOvertime,
+        estimated_pay: pay.payCents != null ? pay.payCents / 100 : null,
+        estimated_bill: pay.billCents != null ? pay.billCents / 100 : null,
+        margin: pay.marginCents != null ? pay.marginCents / 100 : null,
+        margin_percent: pay.marginPercent,
+      };
+    });
+
+    // Totals split by classification, which is what the bookkeeper needs.
+    const totalsFor = (type) => {
+      const set = priced.filter((r) => r.employment_type === type);
+      return {
+        people: set.filter((r) => r.shifts > 0).length,
+        hours: Math.round(set.reduce((n, r) => n + r.hours, 0) * 100) / 100,
+        pay: Math.round(set.reduce((n, r) => n + (r.estimated_pay || 0), 0) * 100) / 100,
+      };
+    };
+
     res.json({
       range: { from: from.toISOString(), to: to.toISOString() },
-      rows: rows.map((r) => {
-        // Overtime is a weekly determination; for a multi-week range this is
-        // the estimate shown in the summary, not a payroll-grade calculation.
-        const { regularMinutes, overtimeMinutes } = splitOvertime(r.minutes, 40 * weeks);
-        const hours = toHours(r.minutes);
-        return {
-          ...r,
-          hours,
-          regular_hours: toHours(regularMinutes),
-          overtime_hours: toHours(overtimeMinutes),
-          estimated_pay: r.pay_rate_cents
-            ? Math.round(((regularMinutes / 60) * r.pay_rate_cents + (overtimeMinutes / 60) * r.pay_rate_cents * 1.5)) / 100
-            : null,
-        };
-      }),
+      rows: priced,
+      totals: {
+        w2: totalsFor('w2'),
+        contractor: totalsFor('1099'),
+        bill: Math.round(priced.reduce((n, r) => n + (r.estimated_bill || 0), 0) * 100) / 100,
+        margin: Math.round(priced.reduce((n, r) => n + (r.margin || 0), 0) * 100) / 100,
+      },
     });
   })
 );
@@ -810,6 +1033,7 @@ const postSchema = z.object({
   name: z.string().trim().min(2).max(160),
   postCode: z.string().trim().max(40).optional(),
   instructions: z.string().max(5000).optional(),
+  address: z.string().trim().max(300).optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   geofenceRadiusM: z.number().int().min(25).max(5000).default(150),
@@ -826,11 +1050,12 @@ adminRouter.post(
     const b = parse(postSchema, req.body);
     const info = db
       .prepare(
-        `INSERT INTO posts (site_id, name, post_code, instructions, latitude, longitude,
+        `INSERT INTO posts (site_id, name, post_code, instructions, address, latitude, longitude,
                             geofence_radius_m, check_in_interval_min, requires_gps, armed, active)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
       )
-      .run(b.siteId, b.name, b.postCode ?? null, b.instructions ?? null, b.latitude ?? null, b.longitude ?? null,
+      .run(b.siteId, b.name, b.postCode ?? null, b.instructions ?? null, b.address ?? null,
+           b.latitude ?? null, b.longitude ?? null,
            b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.active ? 1 : 0);
     res.status(201).json({ post: db.prepare(`SELECT * FROM posts WHERE id = ?`).get(info.lastInsertRowid) });
   })
@@ -845,7 +1070,7 @@ adminRouter.patch(
     if (!post) throw new HttpError(404, 'Post not found.');
 
     const map = {
-      name: 'name', postCode: 'post_code', instructions: 'instructions',
+      name: 'name', postCode: 'post_code', instructions: 'instructions', address: 'address',
       latitude: 'latitude', longitude: 'longitude', geofenceRadiusM: 'geofence_radius_m',
       checkInIntervalMin: 'check_in_interval_min', siteId: 'site_id',
     };

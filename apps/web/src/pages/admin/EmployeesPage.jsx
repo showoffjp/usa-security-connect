@@ -6,7 +6,8 @@ import { fmtDate } from '../../lib/format.js';
 import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Banner, useToast, Segmented,
 } from '../../components/ui.jsx';
-import { ROLES, ROLE_LABEL, EMPLOYEE_STATUS } from '@shared/domain.js';
+import EmployeeDialog from '../../components/EmployeeDialog.jsx';
+import { ROLE_LABEL, EMPLOYMENT_LABEL, EMPLOYEE_STATUS_LABEL } from '@shared/domain.js';
 
 /* ------------------------------------------------- credentials handout -- */
 
@@ -71,186 +72,6 @@ export function CredentialsDialog({ credentials, onClose }) {
         <p className="small muted" style={{ margin: 0 }}>
           The officer will be required to choose their own PIN the first time they sign in.
         </p>
-      </div>
-    </Modal>
-  );
-}
-
-/* ------------------------------------------------------ create / edit -- */
-
-function EmployeeDialog({ employee, sites, onClose, onSaved }) {
-  const toast = useToast();
-  const editing = Boolean(employee);
-  const [errors, setErrors] = useState({});
-  const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
-    firstName: employee?.first_name || '',
-    lastName: employee?.last_name || '',
-    employeeCode: employee?.employee_code || '',
-    email: employee?.email || '',
-    phone: employee?.phone || '',
-    role: employee?.role || ROLES.OFFICER,
-    status: employee?.status || 'active',
-    hireDate: employee?.hire_date || '',
-    licenseNumber: employee?.license_number || '',
-    licenseType: employee?.license_type || '',
-    licenseExpiresOn: employee?.license_expires_on || '',
-    emergencyContactName: employee?.emergency_contact_name || '',
-    emergencyContactPhone: employee?.emergency_contact_phone || '',
-    defaultSiteId: employee?.default_site_id ? String(employee.default_site_id) : '',
-    payRate: employee?.pay_rate_cents != null ? String(employee.pay_rate_cents / 100) : '',
-    notes: employee?.notes || '',
-  });
-
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const save = async () => {
-    setBusy(true);
-    setErrors({});
-    try {
-      const payload = {
-        ...form,
-        defaultSiteId: form.defaultSiteId ? Number(form.defaultSiteId) : null,
-        payRate: form.payRate === '' ? null : Number(form.payRate),
-        employeeCode: form.employeeCode || undefined,
-        hireDate: form.hireDate || null,
-        licenseExpiresOn: form.licenseExpiresOn || null,
-      };
-      const res = editing
-        ? await api.patch(`/admin/employees/${employee.id}`, payload)
-        : await api.post('/admin/employees', payload);
-      toast.success(editing ? 'Employee updated.' : 'Employee added.');
-      onSaved(res.credentials || null);
-    } catch (err) {
-      setErrors(err.fieldErrors || {});
-      toast.error(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      title={editing ? `Edit ${employee.full_name}` : 'Add employee'}
-      onClose={onClose}
-      wide
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={save} disabled={busy}>
-            {editing ? 'Save changes' : 'Create and generate PIN'}
-          </button>
-        </>
-      }
-    >
-      <div className="stack">
-        {!editing && (
-          <Banner kind="info">
-            A 4-digit PIN is generated automatically. Leave the employee code blank and the next free code is assigned.
-          </Banner>
-        )}
-
-        <div className="grid grid-2">
-          <Field label="First name" error={errors.firstName} required>
-            <input value={form.firstName} onChange={set('firstName')} aria-invalid={!!errors.firstName} />
-          </Field>
-          <Field label="Last name" error={errors.lastName} required>
-            <input value={form.lastName} onChange={set('lastName')} aria-invalid={!!errors.lastName} />
-          </Field>
-        </div>
-
-        <div className="grid grid-3">
-          <Field label="Employee code" error={errors.employeeCode} hint={editing ? undefined : 'Auto if blank'}>
-            <input
-              value={form.employeeCode}
-              onChange={(e) => setForm((f) => ({ ...f, employeeCode: e.target.value.replace(/\D/g, '') }))}
-              maxLength={6}
-              placeholder="1008"
-            />
-          </Field>
-          <Field label="Role">
-            <select value={form.role} onChange={set('role')}>
-              {Object.values(ROLES).map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={set('status')}>
-              {EMPLOYEE_STATUS.map((s) => (
-                <option key={s} value={s}>
-                  {s[0].toUpperCase() + s.slice(1)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <div className="grid grid-2">
-          <Field label="Phone">
-            <input type="tel" value={form.phone} onChange={set('phone')} placeholder="(904) 555-0100" />
-          </Field>
-          <Field label="Email" error={errors.email}>
-            <input type="email" value={form.email} onChange={set('email')} aria-invalid={!!errors.email} />
-          </Field>
-        </div>
-
-        <fieldset>
-          <legend>Licensing</legend>
-          <div className="grid grid-3">
-            <Field label="Licence type">
-              <input value={form.licenseType} onChange={set('licenseType')} placeholder="Class D" />
-            </Field>
-            <Field label="Licence number">
-              <input value={form.licenseNumber} onChange={set('licenseNumber')} placeholder="D-0000000" />
-            </Field>
-            <Field label="Expires">
-              <input type="date" value={form.licenseExpiresOn || ''} onChange={set('licenseExpiresOn')} />
-            </Field>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Assignment &amp; pay</legend>
-          <div className="grid grid-3">
-            <Field label="Home site">
-              <select value={form.defaultSiteId} onChange={set('defaultSiteId')}>
-                <option value="">None</option>
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Pay rate ($/hr)">
-              <input type="number" step="0.25" min="0" value={form.payRate} onChange={set('payRate')} />
-            </Field>
-            <Field label="Hire date">
-              <input type="date" value={form.hireDate || ''} onChange={set('hireDate')} />
-            </Field>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Emergency contact</legend>
-          <div className="grid grid-2">
-            <Field label="Name">
-              <input value={form.emergencyContactName} onChange={set('emergencyContactName')} />
-            </Field>
-            <Field label="Phone">
-              <input type="tel" value={form.emergencyContactPhone} onChange={set('emergencyContactPhone')} />
-            </Field>
-          </div>
-        </fieldset>
-
-        <Field label="Internal notes" hint="Not visible to the officer.">
-          <textarea value={form.notes} onChange={set('notes')} rows={2} />
-        </Field>
       </div>
     </Modal>
   );
@@ -345,8 +166,8 @@ export default function EmployeesPage() {
           onChange={setStatus}
           options={[
             { value: 'active', label: 'Active' },
-            { value: 'suspended', label: 'Suspended' },
-            { value: 'terminated', label: 'Former' },
+            { value: 'applicant', label: 'Applicants' },
+            { value: 'on_leave', label: 'On leave' },
             { value: 'all', label: 'All' },
           ]}
         />
@@ -363,6 +184,8 @@ export default function EmployeesPage() {
                   <th>Code</th>
                   <th>Name</th>
                   <th>Role</th>
+                  <th>Type</th>
+                  <th className="num">Rate</th>
                   <th>Home site</th>
                   <th className="num">Week</th>
                   <th>Licence</th>
@@ -384,6 +207,20 @@ export default function EmployeesPage() {
                         <div className="tiny muted">{e.phone || e.email || '--'}</div>
                       </td>
                       <td className="small">{ROLE_LABEL[e.role]}</td>
+                      <td>
+                        <Chip kind={e.employment_type === '1099' ? 'warn' : 'navy'}>
+                          {e.employment_type === '1099' ? '1099' : 'W-2'}
+                        </Chip>
+                        {e.employment_type === '1099' && !e.w9_on_file && (
+                          <div className="tiny" style={{ color: 'var(--danger)' }}>No W-9</div>
+                        )}
+                      </td>
+                      <td className="num small">
+                        {e.pay_rate_cents != null ? `$${(e.pay_rate_cents / 100).toFixed(2)}` : '--'}
+                        {e.bill_rate_cents != null && (
+                          <div className="tiny muted">bill ${(e.bill_rate_cents / 100).toFixed(2)}</div>
+                        )}
+                      </td>
                       <td className="small muted">{e.default_site_name || '--'}</td>
                       <td className="num">{e.week_hours}</td>
                       <td className="small">
