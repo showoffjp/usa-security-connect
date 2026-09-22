@@ -12,18 +12,18 @@ toursRouter.use(requireAuth);
 toursRouter.get(
   '/',
   wrap(async (req, res) => {
-    const open = db
+    const open = (await db
       .prepare(
         `SELECT te.*, p.site_id FROM time_entries te
          JOIN posts p ON p.id = te.post_id
          WHERE te.user_id = ? AND te.clock_out_at IS NULL LIMIT 1`
       )
-      .get(req.user.id);
+      .get(req.user.id));
 
     const siteId = Number(req.query.siteId) || open?.site_id || req.user.default_site_id;
     if (!siteId) return res.json({ tours: [], activeRun: null });
 
-    const tours = db
+    const tours = (await db
       .prepare(
         `SELECT t.*, s.name AS site_name,
                 (SELECT COUNT(*) FROM checkpoints c WHERE c.tour_id = t.id) AS checkpoint_count
@@ -31,16 +31,16 @@ toursRouter.get(
          WHERE t.site_id = ? AND t.active = 1
          ORDER BY t.name`
       )
-      .all(siteId);
+      .all(siteId));
 
-    const activeRun = db
+    const activeRun = (await db
       .prepare(
         `SELECT tr.*, t.name AS tour_name FROM tour_runs tr
          JOIN tours t ON t.id = tr.tour_id
          WHERE tr.user_id = ? AND tr.status = 'in_progress'
          ORDER BY tr.started_at DESC LIMIT 1`
       )
-      .get(req.user.id);
+      .get(req.user.id));
 
     res.json({
       tours,
@@ -50,8 +50,8 @@ toursRouter.get(
 );
 
 /** Full detail for a run: checkpoints in order, each with its task list. */
-function runDetail(runId, userId) {
-  const run = db
+async function runDetail(runId, userId) {
+  const run = (await db
     .prepare(
       `SELECT tr.*, t.name AS tour_name, t.description, t.expected_minutes, s.name AS site_name
        FROM tour_runs tr
@@ -59,11 +59,11 @@ function runDetail(runId, userId) {
        JOIN sites s ON s.id = t.site_id
        WHERE tr.id = ?`
     )
-    .get(runId);
+    .get(runId));
   if (!run) throw new HttpError(404, 'Tour not found.');
   if (userId && run.user_id !== userId) throw new HttpError(403, 'That tour belongs to another officer.');
 
-  const checkpoints = db
+  const checkpoints = (await db
     .prepare(
       `SELECT trc.*, c.name, c.sequence, c.instructions, c.nfc_tag_id, c.qr_code,
               c.required, c.latitude, c.longitude
@@ -72,9 +72,9 @@ function runDetail(runId, userId) {
        WHERE trc.tour_run_id = ?
        ORDER BY c.sequence, c.id`
     )
-    .all(runId);
+    .all(runId));
 
-  const tasks = db
+  const tasks = (await db
     .prepare(
       `SELECT trt.*, ct.label, ct.required, ct.sequence, trt.tour_run_checkpoint_id
        FROM tour_run_tasks trt
@@ -83,7 +83,7 @@ function runDetail(runId, userId) {
        WHERE trc.tour_run_id = ?
        ORDER BY ct.sequence, ct.id`
     )
-    .all(runId);
+    .all(runId));
 
   const done = checkpoints.filter((c) => c.status !== 'pending').length;
 
@@ -102,62 +102,62 @@ function runDetail(runId, userId) {
 toursRouter.post(
   '/:tourId/start',
   wrap(async (req, res) => {
-    const tour = db.prepare(`SELECT * FROM tours WHERE id = ? AND active = 1`).get(req.params.tourId);
+    const tour = (await db.prepare(`SELECT * FROM tours WHERE id = ? AND active = 1`).get(req.params.tourId));
     if (!tour) throw new HttpError(404, 'Tour not found.');
 
-    const existing = db
+    const existing = (await db
       .prepare(`SELECT * FROM tour_runs WHERE user_id = ? AND status = 'in_progress' LIMIT 1`)
-      .get(req.user.id);
+      .get(req.user.id));
     if (existing) {
       throw new HttpError(409, 'Finish or abandon your current tour before starting another.', {
         activeRunId: existing.id,
       });
     }
 
-    const entry = db
+    const entry = (await db
       .prepare(`SELECT id FROM time_entries WHERE user_id = ? AND clock_out_at IS NULL LIMIT 1`)
-      .get(req.user.id);
+      .get(req.user.id));
 
-    const runId = db.transaction(() => {
-      const info = db
+    const runId = await db.transaction(async () => {
+      const info = (await db
         .prepare(
           `INSERT INTO tour_runs (tour_id, user_id, time_entry_id, started_at)
            VALUES (?,?,?,?)`
         )
-        .run(tour.id, req.user.id, entry?.id ?? null, toSql(new Date()));
+        .run(tour.id, req.user.id, entry?.id ?? null, toSql(new Date())));
       const id = Number(info.lastInsertRowid);
 
       // Snapshot the checkpoints + tasks so later edits to the tour template
       // never rewrite the history of a walk that already happened.
-      const checkpoints = db
+      const checkpoints = (await db
         .prepare(`SELECT * FROM checkpoints WHERE tour_id = ? ORDER BY sequence, id`)
-        .all(tour.id);
+        .all(tour.id));
 
       for (const cp of checkpoints) {
-        const cpInfo = db
+        const cpInfo = (await db
           .prepare(`INSERT INTO tour_run_checkpoints (tour_run_id, checkpoint_id) VALUES (?,?)`)
-          .run(id, cp.id);
-        const tasks = db
+          .run(id, cp.id));
+        const tasks = (await db
           .prepare(`SELECT * FROM checkpoint_tasks WHERE checkpoint_id = ? ORDER BY sequence, id`)
-          .all(cp.id);
+          .all(cp.id));
         for (const task of tasks) {
-          db.prepare(
+          (await db.prepare(
             `INSERT INTO tour_run_tasks (tour_run_checkpoint_id, checkpoint_task_id) VALUES (?,?)`
-          ).run(Number(cpInfo.lastInsertRowid), task.id);
+          ).run(Number(cpInfo.lastInsertRowid), task.id));
         }
       }
       return id;
     })();
 
-    audit(req.user.id, 'tour.started', 'tour_run', runId, { tour: tour.name }, req.ip);
-    res.status(201).json(runDetail(runId, req.user.id));
+    await audit(req.user.id, 'tour.started', 'tour_run', runId, { tour: tour.name }, req.ip);
+    res.status(201).json(await runDetail(runId, req.user.id));
   })
 );
 
 toursRouter.get(
   '/runs/:runId',
   wrap(async (req, res) => {
-    res.json(runDetail(Number(req.params.runId), req.user.id));
+    res.json(await runDetail(Number(req.params.runId), req.user.id));
   })
 );
 
@@ -172,31 +172,31 @@ toursRouter.post(
   '/runs/:runId/checkpoints/:checkpointId/scan',
   wrap(async (req, res) => {
     const body = parse(scanSchema, req.body);
-    const run = db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId);
+    const run = (await db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId));
     if (!run || run.user_id !== req.user.id) throw new HttpError(404, 'Tour not found.');
     if (run.status !== 'in_progress') throw new HttpError(409, 'This tour is already finished.');
 
-    const trc = db
+    const trc = (await db
       .prepare(`SELECT * FROM tour_run_checkpoints WHERE tour_run_id = ? AND checkpoint_id = ?`)
-      .get(run.id, req.params.checkpointId);
+      .get(run.id, req.params.checkpointId));
     if (!trc) throw new HttpError(404, 'Checkpoint is not part of this tour.');
 
     // When the officer taps a physical tag, confirm it is the right one.
     if (body.tagId) {
-      const cp = db.prepare(`SELECT * FROM checkpoints WHERE id = ?`).get(req.params.checkpointId);
+      const cp = (await db.prepare(`SELECT * FROM checkpoints WHERE id = ?`).get(req.params.checkpointId));
       const expected = (cp.nfc_tag_id || cp.qr_code || '').trim();
       if (expected && expected.toLowerCase() !== body.tagId.trim().toLowerCase()) {
         throw new HttpError(409, `That tag belongs to a different checkpoint.`);
       }
     }
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE tour_run_checkpoints
        SET status = 'done', scanned_at = ?, method = ?, latitude = ?, longitude = ?
        WHERE id = ?`
-    ).run(toSql(new Date()), body.method, body.latitude ?? null, body.longitude ?? null, trc.id);
+    ).run(toSql(new Date()), body.method, body.latitude ?? null, body.longitude ?? null, trc.id));
 
-    res.json(runDetail(run.id, req.user.id));
+    res.json(await runDetail(run.id, req.user.id));
   })
 );
 
@@ -206,19 +206,19 @@ toursRouter.post(
   '/runs/:runId/checkpoints/:checkpointId/skip',
   wrap(async (req, res) => {
     const body = parse(skipSchema, req.body);
-    const run = db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId);
+    const run = (await db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId));
     if (!run || run.user_id !== req.user.id) throw new HttpError(404, 'Tour not found.');
 
-    const trc = db
+    const trc = (await db
       .prepare(`SELECT * FROM tour_run_checkpoints WHERE tour_run_id = ? AND checkpoint_id = ?`)
-      .get(run.id, req.params.checkpointId);
+      .get(run.id, req.params.checkpointId));
     if (!trc) throw new HttpError(404, 'Checkpoint is not part of this tour.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE tour_run_checkpoints SET status = 'skipped', skip_reason = ?, scanned_at = ? WHERE id = ?`
-    ).run(body.reason, toSql(new Date()), trc.id);
+    ).run(body.reason, toSql(new Date()), trc.id));
 
-    res.json(runDetail(run.id, req.user.id));
+    res.json(await runDetail(run.id, req.user.id));
   })
 );
 
@@ -231,7 +231,7 @@ toursRouter.patch(
   '/runs/:runId/tasks/:taskId',
   wrap(async (req, res) => {
     const body = parse(taskSchema, req.body);
-    const row = db
+    const row = (await db
       .prepare(
         `SELECT trt.*, tr.user_id, tr.id AS run_id
          FROM tour_run_tasks trt
@@ -239,48 +239,48 @@ toursRouter.patch(
          JOIN tour_runs tr ON tr.id = trc.tour_run_id
          WHERE trt.id = ? AND tr.id = ?`
       )
-      .get(req.params.taskId, req.params.runId);
+      .get(req.params.taskId, req.params.runId));
     if (!row || row.user_id !== req.user.id) throw new HttpError(404, 'Task not found.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE tour_run_tasks SET status = ?, note = ?, completed_at = ? WHERE id = ?`
-    ).run(body.status, body.note ?? null, body.status === 'pending' ? null : toSql(new Date()), row.id);
+    ).run(body.status, body.note ?? null, body.status === 'pending' ? null : toSql(new Date()), row.id));
 
-    res.json(runDetail(row.run_id, req.user.id));
+    res.json(await runDetail(row.run_id, req.user.id));
   })
 );
 
 toursRouter.post(
   '/runs/:runId/complete',
   wrap(async (req, res) => {
-    const run = db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId);
+    const run = (await db.prepare(`SELECT * FROM tour_runs WHERE id = ?`).get(req.params.runId));
     if (!run || run.user_id !== req.user.id) throw new HttpError(404, 'Tour not found.');
     if (run.status !== 'in_progress') throw new HttpError(409, 'This tour is already finished.');
 
-    const outstanding = db
+    const outstanding = (await db
       .prepare(
         `SELECT COUNT(*) AS n FROM tour_run_checkpoints trc
          JOIN checkpoints c ON c.id = trc.checkpoint_id
          WHERE trc.tour_run_id = ? AND trc.status = 'pending' AND c.required = 1`
       )
-      .get(run.id).n;
+      .get(run.id)).n;
 
     if (outstanding > 0) {
       throw new HttpError(409, `${outstanding} required checkpoint${outstanding === 1 ? '' : 's'} still outstanding. Scan or skip them first.`);
     }
 
-    const skipped = db
+    const skipped = (await db
       .prepare(`SELECT COUNT(*) AS n FROM tour_run_checkpoints WHERE tour_run_id = ? AND status = 'skipped'`)
-      .get(run.id).n;
+      .get(run.id)).n;
 
-    db.prepare(`UPDATE tour_runs SET status = ?, completed_at = ? WHERE id = ?`).run(
+    (await db.prepare(`UPDATE tour_runs SET status = ?, completed_at = ? WHERE id = ?`).run(
       skipped > 0 ? 'completed_with_skips' : 'completed',
       toSql(new Date()),
       run.id
-    );
+    ));
 
-    audit(req.user.id, 'tour.completed', 'tour_run', run.id, { skipped }, req.ip);
-    res.json(runDetail(run.id, req.user.id));
+    await audit(req.user.id, 'tour.completed', 'tour_run', run.id, { skipped }, req.ip);
+    res.json(await runDetail(run.id, req.user.id));
   })
 );
 
@@ -288,7 +288,7 @@ toursRouter.get(
   '/runs',
   wrap(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 25, 100);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT tr.*, t.name AS tour_name, s.name AS site_name,
                 (SELECT COUNT(*) FROM tour_run_checkpoints x WHERE x.tour_run_id = tr.id) AS total,
@@ -299,7 +299,7 @@ toursRouter.get(
          WHERE tr.user_id = ?
          ORDER BY tr.started_at DESC LIMIT ?`
       )
-      .all(req.user.id, limit);
+      .all(req.user.id, limit));
     res.json({ runs: rows.map((r) => isoFields(r, ['started_at', 'completed_at'])) });
   })
 );

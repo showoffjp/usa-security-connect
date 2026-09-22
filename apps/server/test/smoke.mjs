@@ -165,7 +165,7 @@ const goodPin = await call('/auth/change-pin', {
   token: newLogin.data.token, method: 'POST',
   body: { currentPin: created.data.credentials.pin, newPin: '7391', confirmPin: '7391' },
 });
-log(goodPin.status === 200 && goodPin.data.user.must_change_pin === 0, 'PIN changed');
+log(goodPin.status === 200 && goodPin.data.user.must_change_pin === false, 'PIN changed');
 
 const reset = await call(`/admin/employees/${created.data.employee.id}/reset-pin`, { token: aTok, method: 'POST' });
 log(reset.status === 200 && /^\d{4}$/.test(reset.data?.pin || ''), 'admin PIN reset', reset.data?.pin);
@@ -175,7 +175,7 @@ log(timesheets.status === 200 && timesheets.data.rows.length > 0, 'timesheets',
   `top: ${timesheets.data?.rows?.[0]?.officer} ${timesheets.data?.rows?.[0]?.hours}h`);
 
 const flags = await call('/admin/flags', { token: aTok });
-log(flags.status === 200, 'flag queue', `${flags.data?.flags?.length} open: ${[...new Set(flags.data.flags.map(f => f.label))].join(', ')}`);
+log(flags.status === 200, 'flag queue', `${flags.data?.flags?.length} open: ${[...new Set((flags.data?.flags || []).map(f => f.label))].join(', ')}`);
 
 if (flags.data.flags.length) {
   const noNote = await call(`/admin/flags/${flags.data.flags[0].id}/resolve`, { token: aTok, method: 'POST', body: {} });

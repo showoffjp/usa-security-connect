@@ -14,11 +14,12 @@ import { toSql, sweep, raiseFlag } from './services/compliance.js';
 
 const RESET = process.argv.includes('--reset');
 
-migrate();
+await migrate();
 
 if (RESET) {
-  // Every table, child rows first. Anything added to the schema belongs here
-  // too, or a reset leaves orphans behind that collide on the next seed.
+  // TRUNCATE ... RESTART IDENTITY CASCADE empties every table and resets the id
+  // sequences in one statement. CASCADE means the order does not matter, which
+  // is one less thing to keep in step with the schema.
   const tables = [
     'audit_log', 'flags', 'messages', 'thread_participants', 'threads',
     'training_progress', 'trainings', 'broadcast_receipts', 'broadcasts',
@@ -26,16 +27,14 @@ if (RESET) {
     'checkpoints', 'tours', 'supervisor_visits', 'incident_photos', 'incidents',
     'panic_alerts', 'breaks', 'status_checks', 'time_entries', 'shifts',
     'time_off_requests', 'availability', 'certifications', 'device_tokens',
+    'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
     'users', 'posts', 'sites',
   ];
-  db.pragma('foreign_keys = OFF');
-  for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
-  db.prepare(`DELETE FROM sqlite_sequence`).run();
-  db.pragma('foreign_keys = ON');
+  await db.exec(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
   console.log('Cleared existing data.');
 }
 
-if (db.prepare(`SELECT COUNT(*) AS n FROM users`).get().n > 0) {
+if ((await db.prepare(`SELECT COUNT(*) AS n FROM users`).get()).n > 0) {
   console.log('Database already has users. Use `npm run reset` to start over.');
   process.exit(0);
 }
@@ -55,25 +54,25 @@ const insertSite = db.prepare(
 );
 
 const siteIds = {
-  riverfront: Number(insertSite.run(
+  riverfront: Number((await insertSite.run(
     'Riverfront Commerce Center', 'Riverfront Holdings LLC', '1200 Riverside Ave',
     'Jacksonville', 'FL', '32204', 30.3196, -81.6795, 'Dana Whitfield', '(904) 555-0142'
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  palmetto: Number(insertSite.run(
+  palmetto: Number((await insertSite.run(
     'Palmetto Ridge Residences', 'Palmetto Ridge HOA', '8455 Palmetto Ridge Dr',
     'Orlando', 'FL', '32819', 28.4515, -81.4720, 'Marcus Reyes', '(407) 555-0188'
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  gulfport: Number(insertSite.run(
+  gulfport: Number((await insertSite.run(
     'Gulfport Logistics Yard', 'Gulfport Freight Co', '3301 Industrial Pkwy',
     'Tampa', 'FL', '33605', 27.9589, -82.4298, 'Alicia Grant', '(813) 555-0173'
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  coral: Number(insertSite.run(
+  coral: Number((await insertSite.run(
     'Coral Bay Retail Plaza', 'Coral Bay Property Group', '790 Ocean Blvd',
     'Fort Lauderdale', 'FL', '33301', 26.1224, -80.1373, 'Nina Alvarez', '(954) 555-0119'
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 };
 
 /* ------------------------------------------------------------------ posts -- */
@@ -85,42 +84,42 @@ const insertPost = db.prepare(
 );
 
 const postIds = {
-  riverfrontLobby: Number(insertPost.run(
+  riverfrontLobby: Number((await insertPost.run(
     siteIds.riverfront, 'Main Lobby Console', 'RF-01',
     ['Verify photo ID for every visitor and issue a badge.',
      'Monitor lobby cameras 1-8; report any camera offline more than 10 minutes.',
      'Lock the north doors at 19:00 and confirm the loading dock is secured.',
      'Escalate any alarm to dispatch at (904) 555-0100 before responding.'].join('\n'),
     30.3196, -81.6795, 120, 60, 1, 0
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  riverfrontPatrol: Number(insertPost.run(
+  riverfrontPatrol: Number((await insertPost.run(
     siteIds.riverfront, 'Exterior Patrol', 'RF-02',
     'Walk the perimeter and both parking decks. Complete the exterior tour once per hour.',
     30.3199, -81.6801, 250, 45, 1, 0
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  palmettoGate: Number(insertPost.run(
+  palmettoGate: Number((await insertPost.run(
     siteIds.palmetto, 'North Gatehouse', 'PR-01',
     ['Residents enter by transponder; guests must be on the approved list.',
      'Log every contractor vehicle with plate and company name.',
      'Gate arm stays down between 22:00 and 06:00.'].join('\n'),
     28.4515, -81.4720, 100, 90, 1, 0
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  gulfportYard: Number(insertPost.run(
+  gulfportYard: Number((await insertPost.run(
     siteIds.gulfport, 'Yard Security - Armed', 'GP-01',
     ['Armed post. Weapon check at start and end of every shift.',
      'Inspect all trailer seals on arrival and departure.',
      'No driver enters the yard without a bill of lading.'].join('\n'),
     27.9589, -82.4298, 300, 30, 1, 1
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 
-  coralRetail: Number(insertPost.run(
+  coralRetail: Number((await insertPost.run(
     siteIds.coral, 'Retail Floor Patrol', 'CB-01',
     'High-visibility patrol during mall hours. Coordinate with store managers on shoplifting stops.',
     26.1224, -80.1373, 180, 60, 1, 0
-  ).lastInsertRowid),
+  )).lastInsertRowid),
 };
 
 /* ------------------------------------------------------------------ users -- */
@@ -138,10 +137,10 @@ const insertUser = db.prepare(
    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`
 );
 
-function addUser(u) {
+async function addUser(u) {
   const { hash, salt } = hashPin(u.pin);
   const contractor = u.employmentType === '1099';
-  return Number(insertUser.run(
+  return Number((await insertUser.run(
     u.code, u.first, u.last, u.email, u.phone, u.role, u.status || 'active', u.hireDate,
     u.license || null, u.licenseType || null, u.licenseExpires || null,
     u.ecName || null, u.ecPhone || null, u.ecRelation || null, u.siteId || null,
@@ -153,18 +152,18 @@ function addUser(u) {
     contractor ? 1 : 0, contractor ? 1 : 0, u.insuranceExpires || null,
     u.address || null, u.city || null, u.state || 'FL', u.zip || null, u.uniform || null,
     hash, salt, u.mustChange ? 1 : 0
-  ).lastInsertRowid);
+  )).lastInsertRowid);
 }
 
 const users = {
-  admin: addUser({
+  admin: await addUser({
     code: '1001', first: 'Vince', last: 'Ortega', email: 'vince@usasecuritygroup.com',
     phone: '(904) 555-0100', role: 'admin', hireDate: '2019-02-04',
     rate: 42, payType: 'salary', exempt: true, employmentType: 'w2',
     address: '383 Main Ave', city: 'Jacksonville', zip: '32204', uniform: 'L',
     pin: '2468', mustChange: false,
   }),
-  supervisor: addUser({
+  supervisor: await addUser({
     code: '1002', first: 'Renata', last: 'Diaz', email: 'r.diaz@usasecuritygroup.com',
     phone: '(904) 555-0121', role: 'supervisor', hireDate: '2021-06-14',
     rate: 28, billRate: 46, employmentType: 'w2',
@@ -173,7 +172,7 @@ const users = {
     address: '1140 Oak St', city: 'Jacksonville', zip: '32204', uniform: 'M',
     pin: '3571', mustChange: false,
   }),
-  marcus: addUser({
+  marcus: await addUser({
     code: '1003', first: 'Marcus', last: 'Bell', email: 'm.bell@usasecuritygroup.com',
     phone: '(904) 555-0155', role: 'officer', hireDate: '2023-03-20',
     rate: 21, billRate: 34, employmentType: 'w2',
@@ -182,7 +181,7 @@ const users = {
     address: '2218 Hendricks Ave', city: 'Jacksonville', zip: '32207', uniform: 'XL',
     pin: '4812', mustChange: false,
   }),
-  janelle: addUser({
+  janelle: await addUser({
     code: '1004', first: 'Janelle', last: 'Carter', email: 'j.carter@usasecuritygroup.com',
     phone: '(407) 555-0164', role: 'officer', hireDate: '2024-01-08',
     rate: 20.5, billRate: 33, employmentType: 'w2',
@@ -192,7 +191,7 @@ const users = {
     address: '755 Sand Lake Rd', city: 'Orlando', zip: '32819', uniform: 'S',
     pin: '5930', mustChange: false,
   }),
-  dwayne: addUser({
+  dwayne: await addUser({
     code: '1005', first: 'Dwayne', last: 'Foster', email: 'd.foster@usasecuritygroup.com',
     phone: '(813) 555-0177', role: 'officer', hireDate: '2022-09-12',
     // An armed contractor: invoices for hours, carries his own insurance.
@@ -204,7 +203,7 @@ const users = {
     address: '4410 Adamo Dr', city: 'Tampa', zip: '33605', uniform: '2XL',
     pin: '6174', mustChange: false,
   }),
-  alicia: addUser({
+  alicia: await addUser({
     code: '1006', first: 'Alicia', last: 'Nunez', email: 'a.nunez@usasecuritygroup.com',
     phone: '(954) 555-0192', role: 'officer', hireDate: '2025-04-02',
     rate: 20, billRate: 32, employmentType: 'w2',
@@ -212,14 +211,14 @@ const users = {
     siteId: siteIds.coral, address: '612 SE 3rd Ave', city: 'Fort Lauderdale', zip: '33301',
     uniform: 'M', pin: '7285', mustChange: false,
   }),
-  trainee: addUser({
+  trainee: await addUser({
     code: '1007', first: 'Kevin', last: 'Osei', email: 'k.osei@usasecuritygroup.com',
     phone: '(904) 555-0198', role: 'officer', hireDate: '2026-09-01',
     rate: 19, billRate: 30, employmentType: 'w2',
     siteId: siteIds.riverfront, uniform: 'L',
     pin: '8140', mustChange: true,
   }),
-  contractor: addUser({
+  contractor: await addUser({
     code: '1008', first: 'Renee', last: 'Okafor', email: 'r.okafor@contractor.example',
     phone: '(407) 555-0210', role: 'officer', hireDate: '2026-02-17',
     rate: 30, billRate: 47, employmentType: '1099', payType: 'per_shift',
@@ -272,10 +271,13 @@ shifts.push({ user: users.supervisor, post: postIds.riverfrontPatrol, start: at(
 shifts.push({ user: users.alicia, post: postIds.coralRetail, start: at(-2, 10), end: at(-2, 18), status: 'scheduled' });
 shifts.push({ user: users.contractor, post: postIds.palmettoGate, start: at(-1, 14), end: at(-1, 22), status: 'scheduled' });
 
-const shiftRows = shifts.map((s) => ({
-  ...s,
-  id: Number(insertShift.run(s.user, s.post, toSql(s.start), toSql(s.end), s.status, users.admin).lastInsertRowid),
-}));
+// Inserted one at a time rather than with map(): an async callback passed to
+// map returns an array of promises, not an array of rows.
+const shiftRows = [];
+for (const s of shifts) {
+  const info = await insertShift.run(s.user, s.post, toSql(s.start), toSql(s.end), s.status, users.admin);
+  shiftRows.push({ ...s, id: Number(info.lastInsertRowid) });
+}
 
 /* ------------------------------------------------------------ time entries -- */
 
@@ -308,7 +310,7 @@ for (const shift of shiftRows) {
   const clockOut = new Date(shift.end.getTime() + ((entryCount % 6) - 2) * 60000);
   const [lat, lng] = postCoords[shift.post];
 
-  insertEntry.run(
+  (await insertEntry.run(
     shift.user, shift.id, shift.post, toSql(clockIn),
     outside ? lat + 0.004 : lat + 0.0002,
     outside ? lng + 0.004 : lng - 0.0002,
@@ -319,13 +321,13 @@ for (const shift of shiftRows) {
     'gps', `demo-device-${shift.user}`,
     Math.round((clockOut - clockIn) / 60000),
     lateMinutes
-  );
+  ));
   const entryId = Number(
-    db.prepare(`SELECT id FROM time_entries WHERE shift_id = ?`).get(shift.id).id
+    (await db.prepare(`SELECT id FROM time_entries WHERE shift_id = ?`).get(shift.id)).id
   );
 
   if (lateMinutes > 0) {
-    raiseFlag({
+    await raiseFlag({
       userId: shift.user,
       type: 'late_clock_in',
       occurredAt: clockIn,
@@ -335,7 +337,7 @@ for (const shift of shiftRows) {
     });
   }
   if (outside) {
-    raiseFlag({
+    await raiseFlag({
       userId: shift.user,
       type: 'geofence_violation',
       occurredAt: clockIn,
@@ -360,16 +362,16 @@ const midnight = new Date();
 midnight.setHours(0, 0, 0, 0);
 const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, midnight.getTime() + 15 * 60000));
 const liveShiftId = liveShift?.id ?? Number(
-  insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(new Date(Date.now() + 5 * 3600000)), 'in_progress', users.admin).lastInsertRowid
+  (await insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(new Date(Date.now() + 5 * 3600000)), 'in_progress', users.admin)).lastInsertRowid
 );
-if (liveShift) db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(liveShift.id);
+if (liveShift) (await db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(liveShift.id));
 
 const liveEntryId = Number(
-  insertEntry.run(
+  (await insertEntry.run(
     users.marcus, liveShiftId, postIds.riverfrontLobby, toSql(liveStart),
     30.3196, -81.6795, 8, 'inside', 15,
     null, null, null, null, 'gps', 'demo-device-marcus', null, 0
-  ).lastInsertRowid
+  )).lastInsertRowid
 );
 
 // Two answered check-ins and one that was missed an hour ago.
@@ -377,10 +379,10 @@ const insertCheck = db.prepare(
   `INSERT INTO status_checks (time_entry_id, user_id, due_at, window_minutes, responded_at, status, latitude, longitude)
    VALUES (?,?,?,?,?,?,?,?)`
 );
-insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 3600000)), 10,
-  toSql(new Date(liveStart.getTime() + 3660000)), 'ok', 30.3196, -81.6795);
-insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 7200000)), 10,
-  null, 'missed', null, null);
+(await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 3600000)), 10,
+  toSql(new Date(liveStart.getTime() + 3660000)), 'ok', 30.3196, -81.6795));
+(await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 7200000)), 10,
+  null, 'missed', null, null));
 
 /* ------------------------------------------------------------- incidents -- */
 
@@ -393,7 +395,7 @@ const insertIncident = db.prepare(
 );
 
 const year = new Date().getFullYear();
-insertIncident.run(
+(await insertIncident.run(
   `USC-${year}-0001`, users.marcus, siteIds.riverfront, postIds.riverfrontLobby,
   'Marcus Bell', '(904) 555-0155', 'Alarm / System', 'medium',
   toSql(at(-3, 22, 15)), 'North stairwell, level 2',
@@ -401,8 +403,8 @@ insertIncident.run(
   'Secured the door manually and confirmed it was latched. Notified building maintenance for repair the following morning and logged a work order.',
   'No sign of forced entry. Cameras 4 and 5 reviewed; no persons in the stairwell during the alarm window.',
   'None', 'Dana Whitfield (property manager), dispatch', 0, 18500, 'closed'
-);
-insertIncident.run(
+));
+(await insertIncident.run(
   `USC-${year}-0002`, users.alicia, siteIds.coral, postIds.coralRetail,
   'Alicia Nunez', '(954) 555-0192', 'Theft', 'high',
   toSql(at(-1, 15, 40)), 'Plaza east wing, outside unit 14',
@@ -410,8 +412,8 @@ insertIncident.run(
   'Provided camera timestamps to the store manager and Fort Lauderdale PD. Incident documented with photos of the display area.',
   'Store estimates loss at $312. Police report filed by the store manager.',
   'Unknown male subject, approx 6ft, dark jacket', 'Store manager, FLPD non-emergency', 1, 31200, 'under_review'
-);
-insertIncident.run(
+));
+(await insertIncident.run(
   `USC-${year}-0003`, users.dwayne, siteIds.gulfport, postIds.gulfportYard,
   'Dwayne Foster', '(813) 555-0177', 'Trespass', 'medium',
   toSql(at(-6, 2, 5)), 'South fence line near gate 3',
@@ -419,7 +421,7 @@ insertIncident.run(
   'Perimeter re-walked and all gates confirmed secured. Tampa PD advised. Extra patrol added to the fence line for the remainder of the shift.',
   'Fence fabric slightly bent at one section; photographed for maintenance.',
   'Two unidentified subjects', 'Alicia Grant (client), Tampa PD', 1, null, 'submitted'
-);
+));
 
 /* ----------------------------------------------------------------- tours -- */
 
@@ -432,18 +434,23 @@ const insertTask = db.prepare(
   `INSERT INTO checkpoint_tasks (checkpoint_id, label, sequence, required) VALUES (?,?,?,?)`
 );
 
-function buildTour(siteId, name, description, minutes, checkpoints) {
-  const tourId = Number(insertTour.run(siteId, name, description, minutes).lastInsertRowid);
-  checkpoints.forEach((cp, i) => {
-    const cpId = Number(
-      insertCheckpoint.run(tourId, cp.name, i, cp.tag, cp.instructions || null, cp.lat || null, cp.lng || null, cp.required === false ? 0 : 1).lastInsertRowid
+async function buildTour(siteId, name, description, minutes, checkpoints) {
+  const tourId = Number((await insertTour.run(siteId, name, description, minutes)).lastInsertRowid);
+
+  for (const [i, cp] of checkpoints.entries()) {
+    const info = await insertCheckpoint.run(
+      tourId, cp.name, i, cp.tag, cp.instructions || null,
+      cp.lat || null, cp.lng || null, cp.required === false ? 0 : 1
     );
-    (cp.tasks || []).forEach((label, ti) => insertTask.run(cpId, label, ti, 1));
-  });
+    const cpId = Number(info.lastInsertRowid);
+    for (const [ti, label] of (cp.tasks || []).entries()) {
+      await insertTask.run(cpId, label, ti, 1);
+    }
+  }
   return tourId;
 }
 
-buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior sweep of all occupied floors.', 35, [
+await buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior sweep of all occupied floors.', 35, [
   { name: 'Main Lobby', tag: 'USC-NFC-RF-101', lat: 30.3196, lng: -81.6795,
     tasks: ['Confirm visitor log is current', 'Check lobby doors are secure'] },
   { name: 'Level 2 Corridor', tag: 'USC-NFC-RF-102',
@@ -458,7 +465,7 @@ buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior swee
     tasks: ['Roof door secured'] },
 ]);
 
-buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and trailer row inspection.', 45, [
+await buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and trailer row inspection.', 45, [
   { name: 'Gate 1 - Main Entry', tag: 'USC-NFC-GP-201', lat: 27.9589, lng: -82.4298,
     tasks: ['Gate arm operational', 'Visitor log current'] },
   { name: 'Trailer Row A', tag: 'USC-NFC-GP-202',
@@ -470,7 +477,7 @@ buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and tra
     tasks: ['Pumps locked', 'No spills or leaks', 'Extinguisher present and charged'] },
 ]);
 
-buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of common areas and amenities.', 25, [
+await buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of common areas and amenities.', 25, [
   { name: 'North Gatehouse', tag: 'USC-NFC-PR-301', lat: 28.4515, lng: -81.4720,
     tasks: ['Gate arm down', 'Guest list current'] },
   { name: 'Clubhouse & Pool', tag: 'USC-NFC-PR-302',
@@ -486,59 +493,59 @@ const insertBroadcast = db.prepare(
   `INSERT INTO broadcasts (title, body, priority, requires_ack, audience_role, published_at, created_by)
    VALUES (?,?,?,?,?,?,?)`
 );
-insertBroadcast.run(
+(await insertBroadcast.run(
   'Hurricane season standby procedures',
   'All posts: review the storm annex in your post orders. If a watch is issued for your county, contact dispatch at the start of every shift to confirm coverage. Do not leave a post unattended during a warning without relief on site.',
   'urgent', 1, null, toSql(at(-1, 8)), users.admin
-);
-insertBroadcast.run(
+));
+(await insertBroadcast.run(
   'New incident report fields',
   'The incident form now includes a cost recovery field. Enter the client-estimated dollar value whenever property is damaged or stolen so we can bill correctly.',
   'important', 0, null, toSql(at(-4, 9)), users.supervisor
-);
-insertBroadcast.run(
+));
+(await insertBroadcast.run(
   'Uniform reminder',
   'Class A shirts are required for all daytime lobby posts. Patrol posts may wear the tactical polo. Boots must be black and polished.',
   'normal', 0, 'officer', toSql(at(-8, 10)), users.supervisor
-);
+));
 
 const insertTraining = db.prepare(
   `INSERT INTO trainings (title, description, video_url, duration_seconds, required, due_at, created_by)
    VALUES (?,?,?,?,?,?,?)`
 );
-insertTraining.run(
+(await insertTraining.run(
   'Post Orders: Lobby Access Control',
   'How to verify identification, issue badges and handle refused entry at a lobby console.',
   null, 420, 1, toSql(at(7, 23, 59)), users.admin
-);
-insertTraining.run(
+));
+(await insertTraining.run(
   'Use of Force Refresher (Class D)',
   'Annual refresher on Florida statute requirements for non-armed security officers.',
   null, 900, 1, toSql(at(21, 23, 59)), users.admin
-);
-insertTraining.run(
+));
+(await insertTraining.run(
   'Radio Discipline and Dispatch Codes',
   'Standard call signs, priority traffic and how to escalate to dispatch.',
   null, 360, 0, null, users.supervisor
-);
+));
 
 /* ------------------------------------------------------------- messaging -- */
 
 const threadId = Number(
-  db.prepare(`INSERT INTO threads (subject, created_by, last_message_at) VALUES (?,?,?)`)
-    .run('Riverfront relief coverage', users.supervisor, toSql(at(0, 9, 12))).lastInsertRowid
+  (await db.prepare(`INSERT INTO threads (subject, created_by, last_message_at) VALUES (?,?,?)`)
+    .run('Riverfront relief coverage', users.supervisor, toSql(at(0, 9, 12)))).lastInsertRowid
 );
 for (const uid of [users.supervisor, users.marcus]) {
-  db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`).run(threadId, uid);
+  (await db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`).run(threadId, uid));
 }
-db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
-  .run(threadId, users.supervisor, 'Marcus - can you stay on until 15:00 tomorrow? Kevin is still finishing his Class D paperwork.', toSql(at(0, 9, 10)));
-db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
-  .run(threadId, users.marcus, 'Yes, I can cover until 15:00. I will note it on the pass-down log.', toSql(at(0, 9, 12)));
+(await db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
+  .run(threadId, users.supervisor, 'Marcus - can you stay on until 15:00 tomorrow? Kevin is still finishing his Class D paperwork.', toSql(at(0, 9, 10))));
+(await db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
+  .run(threadId, users.marcus, 'Yes, I can cover until 15:00. I will note it on the pass-down log.', toSql(at(0, 9, 12))));
 
 /* ------------------------------------------------- supervisor visit log -- */
 
-db.prepare(
+(await db.prepare(
   `INSERT INTO supervisor_visits
    (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok, post_orders_reviewed,
     equipment_ok, site_secure, rating, notes, latitude, longitude)
@@ -548,7 +555,7 @@ db.prepare(
   toSql(at(-2, 11, 30)), 1, 1, 1, 1, 5,
   'Post in good order. Visitor log current and legible. Reviewed the storm annex with the officer.',
   30.3196, -81.6795
-);
+));
 
 /* ------------------------------------------------------ certifications -- */
 
@@ -566,20 +573,20 @@ const inDays = (n) => {
 };
 
 // A deliberate spread: valid, expiring inside the warning window, and expired.
-insertCert.run(users.marcus, 'CPR / First Aid', 'AHA-22841', 'American Heart Association',
-  '2025-04-12', inDays(210), users.admin, null);
-insertCert.run(users.marcus, 'Verbal De-escalation', null, 'USA Security in-house',
-  '2026-01-15', inDays(120), users.supervisor, null);
-insertCert.run(users.janelle, 'CPR / First Aid', 'AHA-23117', 'American Heart Association',
-  '2024-11-02', inDays(34), users.admin, 'Renewal class booked.');
-insertCert.run(users.dwayne, 'Class G Statewide Firearm Licence', 'G-1120384', FDACS,
-  '2022-09-12', inDays(9), users.admin, 'Range requalification required before renewal.');
-insertCert.run(users.dwayne, 'Defensive Tactics', null, 'USA Security in-house',
-  '2025-06-01', inDays(-12), users.supervisor, 'Lapsed - schedule refresher.');
-insertCert.run(users.alicia, 'CPR / First Aid', 'AHA-24990', 'American Heart Association',
-  '2026-03-20', inDays(520), users.admin, null);
-insertCert.run(users.contractor, 'OSHA 10', 'OSHA-771204', 'OSHA',
-  '2025-08-19', inDays(390), users.admin, null);
+(await insertCert.run(users.marcus, 'CPR / First Aid', 'AHA-22841', 'American Heart Association',
+  '2025-04-12', inDays(210), users.admin, null));
+(await insertCert.run(users.marcus, 'Verbal De-escalation', null, 'USA Security in-house',
+  '2026-01-15', inDays(120), users.supervisor, null));
+(await insertCert.run(users.janelle, 'CPR / First Aid', 'AHA-23117', 'American Heart Association',
+  '2024-11-02', inDays(34), users.admin, 'Renewal class booked.'));
+(await insertCert.run(users.dwayne, 'Class G Statewide Firearm Licence', 'G-1120384', FDACS,
+  '2022-09-12', inDays(9), users.admin, 'Range requalification required before renewal.'));
+(await insertCert.run(users.dwayne, 'Defensive Tactics', null, 'USA Security in-house',
+  '2025-06-01', inDays(-12), users.supervisor, 'Lapsed - schedule refresher.'));
+(await insertCert.run(users.alicia, 'CPR / First Aid', 'AHA-24990', 'American Heart Association',
+  '2026-03-20', inDays(520), users.admin, null));
+(await insertCert.run(users.contractor, 'OSHA 10', 'OSHA-771204', 'OSHA',
+  '2025-08-19', inDays(390), users.admin, null));
 
 /* --------------------------------------------------------- availability -- */
 
@@ -594,14 +601,14 @@ for (const uid of [users.marcus, users.janelle, users.dwayne, users.alicia, user
     const isSunday = weekday === 0;
     const restricted = uid === users.janelle && isSunday;
     const studyNight = uid === users.alicia && weekday === 3;
-    insertAvailability.run(
+    (await insertAvailability.run(
       uid,
       weekday,
       studyNight ? '00:00' : '00:00',
       studyNight ? '17:00' : '23:59',
       restricted ? 0 : 1,
       restricted ? 'Family commitment' : studyNight ? 'Classes from 18:00' : null
-    );
+    ));
   }
 }
 
@@ -612,18 +619,18 @@ const insertTimeOff = db.prepare(
    VALUES (?,?,?,?,?,?,?,?,?)`
 );
 
-insertTimeOff.run(users.marcus, 'vacation', inDays(24), inDays(31),
-  'Family trip booked before I started here.', 'pending', null, null, null);
-insertTimeOff.run(users.alicia, 'sick', inDays(-4), inDays(-3),
+(await insertTimeOff.run(users.marcus, 'vacation', inDays(24), inDays(31),
+  'Family trip booked before I started here.', 'pending', null, null, null));
+(await insertTimeOff.run(users.alicia, 'sick', inDays(-4), inDays(-3),
   'Flu - doctor note available.', 'approved', users.supervisor,
-  toSql(at(-5, 9)), 'Get well. Cover arranged with Kevin.');
-insertTimeOff.run(users.dwayne, 'unpaid', inDays(12), inDays(13),
-  'Range requalification for my Class G renewal.', 'pending', null, null, null);
+  toSql(at(-5, 9)), 'Get well. Cover arranged with Kevin.'));
+(await insertTimeOff.run(users.dwayne, 'unpaid', inDays(12), inDays(13),
+  'Range requalification for my Class G renewal.', 'pending', null, null, null));
 
 /* ---------------------------------------------------- past duress alert -- */
 
 // One resolved alert so the safety board is not empty on a first look.
-db.prepare(
+(await db.prepare(
   `INSERT INTO panic_alerts
    (user_id, post_id, triggered_at, latitude, longitude, accuracy, status,
     acknowledged_by, acknowledged_at, resolved_at, resolution_note)
@@ -633,23 +640,23 @@ db.prepare(
   27.9589, -82.4298, 12, 'resolved',
   users.supervisor, toSql(at(-9, 2, 43)), toSql(at(-9, 3, 20)),
   'Reached the officer by radio in under a minute. Aggressive driver at gate 1 had left the property. Tampa PD advised, no injuries, no damage.'
-);
+));
 
 // Derive flags from everything above.
-sweep();
+await sweep();
 
-const flagCount = db.prepare(`SELECT COUNT(*) AS n FROM flags`).get().n;
+const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
 console.log(`
 USA Security Connect - demo data loaded
 ---------------------------------------
-  ${db.prepare(`SELECT COUNT(*) AS n FROM sites`).get().n} sites, ${db.prepare(`SELECT COUNT(*) AS n FROM posts`).get().n} posts
-  ${db.prepare(`SELECT COUNT(*) AS n FROM users`).get().n} employees
-  ${db.prepare(`SELECT COUNT(*) AS n FROM shifts`).get().n} shifts, ${db.prepare(`SELECT COUNT(*) AS n FROM time_entries`).get().n} time entries
-  ${db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get().n} incidents, ${db.prepare(`SELECT COUNT(*) AS n FROM tours`).get().n} tours
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM sites`).get()).n} sites, ${(await db.prepare(`SELECT COUNT(*) AS n FROM posts`).get()).n} posts
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM users`).get()).n} employees
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM shifts`).get()).n} shifts, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_entries`).get()).n} time entries
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get()).n} incidents, ${(await db.prepare(`SELECT COUNT(*) AS n FROM tours`).get()).n} tours
   ${flagCount} compliance flags
 
-  ${db.prepare(`SELECT COUNT(*) AS n FROM certifications`).get().n} certifications, ${db.prepare(`SELECT COUNT(*) AS n FROM time_off_requests`).get().n} time-off requests
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM certifications`).get()).n} certifications, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_off_requests`).get()).n} time-off requests
 
 Sign-in codes (demo PINs):
   1001 / 2468   Vince Ortega      Administrator      W-2 salary, exempt

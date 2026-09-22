@@ -28,8 +28,8 @@ const geoSchema = z.object({
   accuracy: z.number().nonnegative().nullable().optional(),
 });
 
-function openEntryFor(userId) {
-  return db
+async function openEntryFor(userId) {
+  return (await db
     .prepare(
       `SELECT te.*, p.name AS post_name, p.instructions, p.check_in_interval_min,
               p.latitude AS post_lat, p.longitude AS post_lng, p.geofence_radius_m,
@@ -42,18 +42,18 @@ function openEntryFor(userId) {
        WHERE te.user_id = ? AND te.clock_out_at IS NULL
        ORDER BY te.clock_in_at DESC LIMIT 1`
     )
-    .get(userId);
+    .get(userId));
 }
 
 /**
  * The shift an officer is expected to work right now: the closest scheduled
  * shift whose start is within the early-clock-in window, or one already running.
  */
-function currentShiftFor(userId) {
+async function currentShiftFor(userId) {
   const now = new Date();
   const from = toSql(new Date(now.getTime() - 12 * 60 * 60000));
   const to = toSql(new Date(now.getTime() + RULES.earlyClockInMinutes * 60000));
-  return db
+  return (await db
     .prepare(
       `SELECT sh.*, p.name AS post_name, p.post_code, p.instructions,
               p.latitude AS post_lat, p.longitude AS post_lng,
@@ -68,7 +68,7 @@ function currentShiftFor(userId) {
        ORDER BY ABS(strftime('%s', sh.starts_at) - strftime('%s', ?))
        LIMIT 1`
     )
-    .get(userId, from, to, toSql(now));
+    .get(userId, from, to, toSql(now)));
 }
 
 /* ------------------------------------------------------------- dashboard --- */
@@ -77,10 +77,10 @@ function currentShiftFor(userId) {
 timeclockRouter.get(
   '/status',
   wrap(async (req, res) => {
-    const openEntry = openEntryFor(req.user.id);
-    const shift = currentShiftFor(req.user.id);
+    const openEntry = await openEntryFor(req.user.id);
+    const shift = await currentShiftFor(req.user.id);
 
-    const nextShift = db
+    const nextShift = (await db
       .prepare(
         `SELECT sh.*, p.name AS post_name, s.name AS site_name, s.address
          FROM shifts sh
@@ -89,23 +89,23 @@ timeclockRouter.get(
          WHERE sh.user_id = ? AND sh.starts_at > ? AND sh.status = 'scheduled'
          ORDER BY sh.starts_at LIMIT 1`
       )
-      .get(req.user.id, toSql(new Date()));
+      .get(req.user.id, toSql(new Date())));
 
-    const lastEntry = db
+    const lastEntry = (await db
       .prepare(
         `SELECT te.*, p.name AS post_name FROM time_entries te
          JOIN posts p ON p.id = te.post_id
          WHERE te.user_id = ? AND te.clock_out_at IS NOT NULL
          ORDER BY te.clock_out_at DESC LIMIT 1`
       )
-      .get(req.user.id);
+      .get(req.user.id));
 
     let checkIn = null;
     let minutesOnPost = null;
     if (openEntry) {
-      const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(openEntry.post_id);
-      scheduleNextCheckIn(openEntry, post);
-      checkIn = currentCheckIn(openEntry.id);
+      const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(openEntry.post_id));
+      await scheduleNextCheckIn(openEntry, post);
+      checkIn = await currentCheckIn(openEntry.id);
       minutesOnPost = minutesBetween(sqlToIso(openEntry.clock_in_at), new Date().toISOString());
     }
 
@@ -113,14 +113,14 @@ timeclockRouter.get(
     const weekStart = new Date();
     weekStart.setHours(0, 0, 0, 0);
     weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
-    const week = db
+    const week = (await db
       .prepare(
         `SELECT COALESCE(SUM(minutes_worked),0) AS minutes
          FROM time_entries WHERE user_id = ? AND clock_in_at >= ?`
       )
-      .get(req.user.id, toSql(weekStart));
+      .get(req.user.id, toSql(weekStart)));
 
-    const unread = db
+    const unread = (await db
       .prepare(
         `SELECT COUNT(*) AS n FROM broadcasts b
          WHERE (b.expires_at IS NULL OR b.expires_at > datetime('now'))
@@ -129,9 +129,9 @@ timeclockRouter.get(
              SELECT 1 FROM broadcast_receipts r
              WHERE r.broadcast_id = b.id AND r.user_id = ? AND r.read_at IS NOT NULL)`
       )
-      .get(req.user.role, req.user.id);
+      .get(req.user.role, req.user.id));
 
-    const trainingDue = db
+    const trainingDue = (await db
       .prepare(
         `SELECT COUNT(*) AS n FROM trainings t
          WHERE t.required = 1
@@ -140,7 +140,7 @@ timeclockRouter.get(
              SELECT 1 FROM training_progress tp
              WHERE tp.training_id = t.id AND tp.user_id = ? AND tp.completed_at IS NOT NULL)`
       )
-      .get(req.user.role, req.user.id);
+      .get(req.user.role, req.user.id));
 
     res.json({
       onDuty: Boolean(openEntry),
@@ -181,20 +181,20 @@ timeclockRouter.post(
   wrap(async (req, res) => {
     const body = parse(clockInSchema, req.body);
 
-    if (openEntryFor(req.user.id)) {
+    if (await openEntryFor(req.user.id)) {
       throw new HttpError(409, 'You are already clocked in. Clock out before starting a new shift.');
     }
 
     const shift = body.shiftId
-      ? db.prepare(`SELECT * FROM shifts WHERE id = ? AND user_id = ?`).get(body.shiftId, req.user.id)
-      : currentShiftFor(req.user.id);
+      ? (await db.prepare(`SELECT * FROM shifts WHERE id = ? AND user_id = ?`).get(body.shiftId, req.user.id))
+      : await currentShiftFor(req.user.id);
 
     const postId = body.postId || shift?.post_id || req.user.default_site_id;
     if (!postId) {
       throw new HttpError(400, 'No post assigned. Ask dispatch to add you to a shift before clocking in.');
     }
 
-    const post = db.prepare(`SELECT * FROM posts WHERE id = ? AND active = 1`).get(postId);
+    const post = (await db.prepare(`SELECT * FROM posts WHERE id = ? AND active = 1`).get(postId));
     if (!post) throw new HttpError(404, 'That post is not available.');
 
     const now = new Date();
@@ -237,7 +237,7 @@ timeclockRouter.post(
       ? Math.max(0, minutesBetween(sqlToIso(shift.starts_at), now.toISOString()) - RULES.lateGraceMinutes)
       : 0;
 
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO time_entries
          (user_id, shift_id, post_id, clock_in_at, clock_in_lat, clock_in_lng,
@@ -258,14 +258,14 @@ timeclockRouter.post(
         body.method,
         body.deviceId ?? null,
         lateMinutes
-      );
+      ));
 
-    const entry = db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(info.lastInsertRowid);
+    const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(info.lastInsertRowid));
 
     if (shift) {
-      db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(shift.id);
+      (await db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(shift.id));
     } else {
-      raiseFlag({
+      await raiseFlag({
         userId: req.user.id,
         type: FLAG_TYPES.UNSCHEDULED_SHIFT,
         occurredAt: now,
@@ -277,7 +277,7 @@ timeclockRouter.post(
     }
 
     if (lateMinutes > 0) {
-      raiseFlag({
+      await raiseFlag({
         userId: req.user.id,
         type: FLAG_TYPES.LATE_CLOCK_IN,
         occurredAt: now,
@@ -288,7 +288,7 @@ timeclockRouter.post(
     }
 
     if (fence.status === 'outside' || (body.overrideReason && fence.status !== 'inside')) {
-      raiseFlag({
+      await raiseFlag({
         userId: req.user.id,
         type: FLAG_TYPES.GEOFENCE_VIOLATION,
         occurredAt: now,
@@ -303,15 +303,15 @@ timeclockRouter.post(
       });
     }
 
-    scheduleNextCheckIn(entry, post);
-    audit(req.user.id, 'timeclock.in', 'time_entry', entry.id, { post: post.name, fence: fence.status }, req.ip);
+    await scheduleNextCheckIn(entry, post);
+    await audit(req.user.id, 'timeclock.in', 'time_entry', entry.id, { post: post.name, fence: fence.status }, req.ip);
 
     res.status(201).json({
       entry: isoFields(entry, ENTRY_TIMES),
       post: { id: post.id, name: post.name, instructions: post.instructions },
       geofence: fence,
       lateMinutes,
-      checkIn: currentCheckIn(entry.id),
+      checkIn: await currentCheckIn(entry.id),
     });
   })
 );
@@ -326,10 +326,10 @@ timeclockRouter.post(
   '/clock-out',
   wrap(async (req, res) => {
     const body = parse(clockOutSchema, req.body);
-    const entry = openEntryFor(req.user.id);
+    const entry = await openEntryFor(req.user.id);
     if (!entry) throw new HttpError(409, 'You are not currently clocked in.');
 
-    const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id);
+    const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
     const now = new Date();
     const fence = evaluateGeofence({
       lat: body.latitude ?? null,
@@ -340,7 +340,7 @@ timeclockRouter.post(
 
     const minutes = Math.max(0, minutesBetween(sqlToIso(entry.clock_in_at), now.toISOString()));
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE time_entries
        SET clock_out_at = ?, clock_out_lat = ?, clock_out_lng = ?, clock_out_accuracy = ?,
            clock_out_geofence = ?, minutes_worked = ?
@@ -353,20 +353,20 @@ timeclockRouter.post(
       fence.status,
       minutes,
       entry.id
-    );
+    ));
 
     // Any check-in still queued for this shift is no longer owed.
-    db.prepare(
+    (await db.prepare(
       `UPDATE status_checks SET status = 'cancelled' WHERE time_entry_id = ? AND status = 'pending'`
-    ).run(entry.id);
+    ).run(entry.id));
 
     if (entry.shift_id) {
-      db.prepare(`UPDATE shifts SET status = 'completed' WHERE id = ?`).run(entry.shift_id);
+      (await db.prepare(`UPDATE shifts SET status = 'completed' WHERE id = ?`).run(entry.shift_id));
 
       const endsAt = new Date(sqlToIso(entry.shift_ends_at));
       const earlyBy = minutesBetween(now.toISOString(), endsAt.toISOString());
       if (earlyBy > RULES.earlyDepartureMinutes) {
-        raiseFlag({
+        await raiseFlag({
           userId: req.user.id,
           type: FLAG_TYPES.EARLY_DEPARTURE,
           occurredAt: now,
@@ -378,14 +378,14 @@ timeclockRouter.post(
     }
 
     // An unfinished tour is closed out so it does not hang around forever.
-    db.prepare(
+    (await db.prepare(
       `UPDATE tour_runs SET status = 'abandoned', completed_at = ?
        WHERE time_entry_id = ? AND status = 'in_progress'`
-    ).run(toSql(now), entry.id);
+    ).run(toSql(now), entry.id));
 
-    audit(req.user.id, 'timeclock.out', 'time_entry', entry.id, { minutes }, req.ip);
+    await audit(req.user.id, 'timeclock.out', 'time_entry', entry.id, { minutes }, req.ip);
 
-    const updated = db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id);
+    const updated = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id));
     res.json({
       entry: isoFields(updated, ENTRY_TIMES),
       minutesWorked: minutes,
@@ -399,11 +399,11 @@ timeclockRouter.post(
 timeclockRouter.get(
   '/check-in',
   wrap(async (req, res) => {
-    const entry = openEntryFor(req.user.id);
+    const entry = await openEntryFor(req.user.id);
     if (!entry) return res.json({ checkIn: null });
-    const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id);
-    scheduleNextCheckIn(entry, post);
-    res.json({ checkIn: currentCheckIn(entry.id) });
+    const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
+    await scheduleNextCheckIn(entry, post);
+    res.json({ checkIn: await currentCheckIn(entry.id) });
   })
 );
 
@@ -416,7 +416,7 @@ timeclockRouter.post(
   '/check-in',
   wrap(async (req, res) => {
     const body = parse(checkInSchema, req.body);
-    const result = answerCheckIn({
+    const result = await answerCheckIn({
       checkId: body.checkId,
       userId: req.user.id,
       lat: body.latitude ?? null,
@@ -425,13 +425,13 @@ timeclockRouter.post(
     });
     if (!result) throw new HttpError(409, 'That check-in has already been answered or is no longer active.');
 
-    audit(req.user.id, 'checkin.answered', 'status_check', body.checkId, { status: result.status }, req.ip);
+    await audit(req.user.id, 'checkin.answered', 'status_check', body.checkId, { status: result.status }, req.ip);
 
-    const entry = openEntryFor(req.user.id);
+    const entry = await openEntryFor(req.user.id);
     res.json({
       status: result.status,
       respondedAt: result.responded_at,
-      next: entry ? currentCheckIn(entry.id) : null,
+      next: entry ? await currentCheckIn(entry.id) : null,
     });
   })
 );
@@ -442,7 +442,7 @@ timeclockRouter.get(
   '/entries',
   wrap(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 30, 200);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT te.*, p.name AS post_name, s.name AS site_name
          FROM time_entries te
@@ -451,16 +451,16 @@ timeclockRouter.get(
          WHERE te.user_id = ?
          ORDER BY te.clock_in_at DESC LIMIT ?`
       )
-      .all(req.user.id, limit);
+      .all(req.user.id, limit));
 
-    const checks = db
+    const checks = (await db
       .prepare(
         `SELECT time_entry_id,
-                SUM(status = 'missed') AS missed,
-                SUM(status IN ('ok','late')) AS answered
+                SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS missed,
+                SUM(CASE WHEN status IN ('ok','late') THEN 1 ELSE 0 END) AS answered
          FROM status_checks WHERE user_id = ? GROUP BY time_entry_id`
       )
-      .all(req.user.id);
+      .all(req.user.id));
     const byEntry = Object.fromEntries(checks.map((c) => [c.time_entry_id, c]));
 
     res.json({

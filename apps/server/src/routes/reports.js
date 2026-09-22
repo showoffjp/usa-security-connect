@@ -30,9 +30,9 @@ reportsRouter.get(
     const siteFilter = siteId ? 'AND s.id = ?' : '';
     const siteParam = siteId ? [siteId] : [];
 
-    const site = siteId ? db.prepare(`SELECT * FROM sites WHERE id = ?`).get(siteId) : null;
+    const site = siteId ? (await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(siteId)) : null;
 
-    const shifts = db
+    const shifts = (await db
       .prepare(
         `SELECT te.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
                 p.name AS post_name, s.name AS site_name, s.id AS site_id
@@ -43,9 +43,9 @@ reportsRouter.get(
          WHERE te.clock_in_at >= ? AND te.clock_in_at < ? ${siteFilter}
          ORDER BY s.name, te.clock_in_at`
       )
-      .all(from, to, ...siteParam);
+      .all(from, to, ...siteParam));
 
-    const tours = db
+    const tours = (await db
       .prepare(
         `SELECT tr.*, t.name AS tour_name, s.name AS site_name,
                 u.first_name || ' ' || u.last_name AS officer,
@@ -59,9 +59,9 @@ reportsRouter.get(
          WHERE tr.started_at >= ? AND tr.started_at < ? ${siteFilter}
          ORDER BY tr.started_at`
       )
-      .all(from, to, ...siteParam);
+      .all(from, to, ...siteParam));
 
-    const incidents = db
+    const incidents = (await db
       .prepare(
         `SELECT i.*, s.name AS site_name, p.name AS post_name,
                 u.first_name || ' ' || u.last_name AS officer
@@ -72,9 +72,9 @@ reportsRouter.get(
          WHERE i.occurred_at >= ? AND i.occurred_at < ? ${siteId ? 'AND i.site_id = ?' : ''}
          ORDER BY i.occurred_at`
       )
-      .all(from, to, ...siteParam);
+      .all(from, to, ...siteParam));
 
-    const visits = db
+    const visits = (await db
       .prepare(
         `SELECT v.*, s.name AS site_name, p.name AS post_name,
                 sup.first_name || ' ' || sup.last_name AS supervisor_name,
@@ -87,9 +87,9 @@ reportsRouter.get(
          WHERE v.visited_at >= ? AND v.visited_at < ? ${siteId ? 'AND v.site_id = ?' : ''}
          ORDER BY v.visited_at`
       )
-      .all(from, to, ...siteParam);
+      .all(from, to, ...siteParam));
 
-    const checks = db
+    const checks = (await db
       .prepare(
         `SELECT sc.status, COUNT(*) AS n
          FROM status_checks sc
@@ -98,16 +98,16 @@ reportsRouter.get(
          WHERE sc.due_at >= ? AND sc.due_at < ? ${siteId ? 'AND p.site_id = ?' : ''}
          GROUP BY sc.status`
       )
-      .all(from, to, ...siteParam);
+      .all(from, to, ...siteParam));
 
-    const exceptions = db
+    const exceptions = (await db
       .prepare(
         `SELECT f.*, u.first_name || ' ' || u.last_name AS officer
          FROM flags f JOIN users u ON u.id = f.user_id
          WHERE f.occurred_at >= ? AND f.occurred_at < ?
          ORDER BY f.occurred_at`
       )
-      .all(from, to);
+      .all(from, to));
 
     const totalMinutes = shifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0);
     const checkTotals = Object.fromEntries(checks.map((c) => [c.status, c.n]));
@@ -146,7 +146,7 @@ reportsRouter.get(
 reportsRouter.get(
   '/map',
   wrap(async (req, res) => {
-    const posts = db
+    const posts = (await db
       .prepare(
         `SELECT p.id, p.name, p.post_code, p.latitude, p.longitude, p.geofence_radius_m,
                 p.armed, p.address, s.id AS site_id, s.name AS site_name, s.address AS site_address,
@@ -154,9 +154,9 @@ reportsRouter.get(
          FROM posts p JOIN sites s ON s.id = p.site_id
          WHERE p.active = 1 AND p.latitude IS NOT NULL`
       )
-      .all();
+      .all());
 
-    const onDuty = db
+    const onDuty = (await db
       .prepare(
         `SELECT te.id, te.clock_in_at, te.clock_in_lat, te.clock_in_lng, te.clock_in_geofence,
                 te.clock_in_distance_m, u.id AS user_id, u.employee_code, u.phone,
@@ -169,16 +169,16 @@ reportsRouter.get(
          JOIN sites s ON s.id = p.site_id
          WHERE te.clock_out_at IS NULL`
       )
-      .all();
+      .all());
 
-    const alerts = db
+    const alerts = (await db
       .prepare(
         `SELECT pa.id, pa.latitude, pa.longitude, pa.triggered_at, pa.status,
                 u.first_name || ' ' || u.last_name AS officer, u.phone
          FROM panic_alerts pa JOIN users u ON u.id = pa.user_id
          WHERE pa.status IN ('active','acknowledged')`
       )
-      .all();
+      .all());
 
     res.json({
       posts,
@@ -267,7 +267,7 @@ reportsRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date();
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT s.id, s.name AS site_name, s.client_name,
                 COUNT(DISTINCT te.id) AS shifts,
@@ -285,7 +285,7 @@ reportsRouter.get(
          GROUP BY s.id
          ORDER BY minutes DESC`
       )
-      .all(toSql(from), toSql(to), toSql(from), toSql(to), toSql(from), toSql(to));
+      .all(toSql(from), toSql(to), toSql(from), toSql(to), toSql(from), toSql(to)));
 
     res.json({
       range: { from: from.toISOString(), to: to.toISOString() },

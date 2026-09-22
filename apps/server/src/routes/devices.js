@@ -19,7 +19,7 @@ devicesRouter.post(
   '/register',
   wrap(async (req, res) => {
     const body = parse(registerSchema, req.body);
-    const result = registerDevice({
+    const result = await registerDevice({
       userId: req.user.id,
       token: body.token,
       platform: body.platform,
@@ -28,7 +28,7 @@ devicesRouter.post(
 
     if (!result.ok) throw new HttpError(422, 'That push token is not in a recognised format.');
 
-    audit(req.user.id, 'device.registered', 'user', req.user.id, { platform: body.platform }, req.ip);
+    await audit(req.user.id, 'device.registered', 'user', req.user.id, { platform: body.platform }, req.ip);
     res.status(201).json({ ok: true });
   })
 );
@@ -37,7 +37,7 @@ devicesRouter.post(
   '/unregister',
   wrap(async (req, res) => {
     const token = String(req.body?.token || '');
-    if (token) unregisterDevice(token);
+    if (token) await unregisterDevice(token);
     res.json({ ok: true });
   })
 );
@@ -46,12 +46,12 @@ devicesRouter.post(
 devicesRouter.get(
   '/',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT id, platform, device_id, created_at, last_seen_at
          FROM device_tokens WHERE user_id = ? ORDER BY last_seen_at DESC`
       )
-      .all(req.user.id);
+      .all(req.user.id));
     res.json({ devices: rows });
   })
 );

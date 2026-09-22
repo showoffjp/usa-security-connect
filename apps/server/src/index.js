@@ -17,7 +17,8 @@ import { certificationsRouter, availabilityRouter, timeOffRouter } from './route
 import { panicRouter, breaksRouter } from './routes/safety.js';
 import { reportsRouter } from './routes/reports.js';
 
-migrate();
+// The schema must exist before the first request is served.
+await migrate();
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -40,15 +41,15 @@ app.get(
   '/api/reference',
   requireAuth,
   wrap(async (_req, res) => {
-    const sites = db.prepare(`SELECT id, name, address, city, state FROM sites WHERE active = 1 ORDER BY name`).all();
-    const posts = db
+    const sites = (await db.prepare(`SELECT id, name, address, city, state FROM sites WHERE active = 1 ORDER BY name`).all());
+    const posts = (await db
       .prepare(
         `SELECT p.id, p.name, p.post_code, p.site_id, p.requires_gps, p.check_in_interval_min,
                 p.latitude, p.longitude, p.geofence_radius_m, s.name AS site_name
          FROM posts p JOIN sites s ON s.id = p.site_id
          WHERE p.active = 1 ORDER BY s.name, p.name`
       )
-      .all();
+      .all());
     res.json({ sites, posts });
   })
 );
@@ -74,7 +75,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
 app.use(errorHandler);
 
-const stopWorker = startComplianceWorker(60000);
+const stopWorker = await startComplianceWorker(60000);
 
 const server = app.listen(PORT, () => {
   console.log(`USA Security Connect API listening on http://localhost:${PORT}`);

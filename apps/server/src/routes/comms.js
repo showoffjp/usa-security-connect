@@ -15,7 +15,7 @@ broadcastsRouter.use(requireAuth);
 broadcastsRouter.get(
   '/',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT b.*, u.first_name || ' ' || u.last_name AS author,
                 r.read_at, r.acknowledged_at
@@ -32,7 +32,7 @@ broadcastsRouter.get(
            CASE b.priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
            b.published_at DESC`
       )
-      .all(req.user.id, req.user.role, req.user.default_site_id ?? -1, req.user.id);
+      .all(req.user.id, req.user.role, req.user.default_site_id ?? -1, req.user.id));
 
     res.json({
       broadcasts: rows.map((r) => ({
@@ -48,13 +48,13 @@ broadcastsRouter.post(
   '/:id/receipt',
   wrap(async (req, res) => {
     const acknowledge = req.body?.acknowledge === true;
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO broadcast_receipts (broadcast_id, user_id, read_at, acknowledged_at)
        VALUES (?, ?, datetime('now'), ?)
        ON CONFLICT(broadcast_id, user_id) DO UPDATE SET
          read_at = COALESCE(read_at, datetime('now')),
          acknowledged_at = COALESCE(acknowledged_at, excluded.acknowledged_at)`
-    ).run(req.params.id, req.user.id, acknowledge ? toSql(new Date()) : null);
+    ).run(req.params.id, req.user.id, acknowledge ? toSql(new Date()) : null));
     res.json({ ok: true });
   })
 );
@@ -74,7 +74,7 @@ broadcastsRouter.post(
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
     const body = parse(broadcastSchema, req.body);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO broadcasts (title, body, priority, requires_ack, audience_role, audience_site_id, expires_at, created_by)
          VALUES (?,?,?,?,?,?,?,?)`
@@ -88,11 +88,11 @@ broadcastsRouter.post(
         body.audienceSiteId ?? null,
         body.expiresAt ? toSql(new Date(body.expiresAt)) : null,
         req.user.id
-      );
-    audit(req.user.id, 'broadcast.published', 'broadcast', Number(info.lastInsertRowid), { title: body.title }, req.ip);
+      ));
+    await audit(req.user.id, 'broadcast.published', 'broadcast', Number(info.lastInsertRowid), { title: body.title }, req.ip);
 
-    const broadcast = db.prepare(`SELECT * FROM broadcasts WHERE id = ?`).get(info.lastInsertRowid);
-    notifyBroadcast(broadcast);
+    const broadcast = (await db.prepare(`SELECT * FROM broadcasts WHERE id = ?`).get(info.lastInsertRowid));
+    await notifyBroadcast(broadcast);
 
     res.status(201).json({ broadcast });
   })
@@ -103,7 +103,7 @@ broadcastsRouter.get(
   '/:id/receipts',
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.id, u.employee_code, u.first_name || ' ' || u.last_name AS name, u.role,
                 r.read_at, r.acknowledged_at
@@ -112,7 +112,7 @@ broadcastsRouter.get(
          WHERE u.status = 'active'
          ORDER BY r.read_at IS NULL, u.last_name`
       )
-      .all(req.params.id);
+      .all(req.params.id));
     res.json({ receipts: rows.map((r) => isoFields(r, ['read_at', 'acknowledged_at'])) });
   })
 );
@@ -121,8 +121,8 @@ broadcastsRouter.delete(
   '/:id',
   requireRole(ROLES.ADMIN),
   wrap(async (req, res) => {
-    db.prepare(`DELETE FROM broadcasts WHERE id = ?`).run(req.params.id);
-    audit(req.user.id, 'broadcast.deleted', 'broadcast', Number(req.params.id), null, req.ip);
+    (await db.prepare(`DELETE FROM broadcasts WHERE id = ?`).run(req.params.id));
+    await audit(req.user.id, 'broadcast.deleted', 'broadcast', Number(req.params.id), null, req.ip);
     res.json({ ok: true });
   })
 );
@@ -135,7 +135,7 @@ trainingRouter.use(requireAuth);
 trainingRouter.get(
   '/',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT t.*, tp.seconds_watched, tp.completed_at
          FROM trainings t
@@ -143,7 +143,7 @@ trainingRouter.get(
          WHERE t.audience_role IS NULL OR t.audience_role = ?
          ORDER BY t.required DESC, t.created_at DESC`
       )
-      .all(req.user.id, req.user.role);
+      .all(req.user.id, req.user.role));
 
     res.json({
       trainings: rows.map((r) => ({
@@ -167,7 +167,7 @@ trainingRouter.post(
   '/:id/progress',
   wrap(async (req, res) => {
     const body = parse(progressSchema, req.body);
-    const training = db.prepare(`SELECT * FROM trainings WHERE id = ?`).get(req.params.id);
+    const training = (await db.prepare(`SELECT * FROM trainings WHERE id = ?`).get(req.params.id));
     if (!training) throw new HttpError(404, 'Training not found.');
 
     // A required video only counts as complete once it has actually been
@@ -180,16 +180,16 @@ trainingRouter.post(
       throw new HttpError(409, 'This video must be watched in full before it can be marked complete.');
     }
 
-    db.prepare(
+    (await db.prepare(
       `INSERT INTO training_progress (training_id, user_id, seconds_watched, completed_at)
        VALUES (?,?,?,?)
        ON CONFLICT(training_id, user_id) DO UPDATE SET
          seconds_watched = MAX(training_progress.seconds_watched, excluded.seconds_watched),
          completed_at = COALESCE(training_progress.completed_at, excluded.completed_at)`
-    ).run(training.id, req.user.id, body.secondsWatched, completed ? toSql(new Date()) : null);
+    ).run(training.id, req.user.id, body.secondsWatched, completed ? toSql(new Date()) : null));
 
     if (completed) {
-      audit(req.user.id, 'training.completed', 'training', training.id, { title: training.title }, req.ip);
+      await audit(req.user.id, 'training.completed', 'training', training.id, { title: training.title }, req.ip);
     }
     res.json({ ok: true, completed: Boolean(completed) });
   })
@@ -210,7 +210,7 @@ trainingRouter.post(
   requireRole(ROLES.ADMIN),
   wrap(async (req, res) => {
     const body = parse(trainingSchema, req.body);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO trainings (title, description, video_url, duration_seconds, required, due_at, audience_role, created_by)
          VALUES (?,?,?,?,?,?,?,?)`
@@ -224,8 +224,8 @@ trainingRouter.post(
         body.dueAt ? toSql(new Date(body.dueAt)) : null,
         body.audienceRole ?? null,
         req.user.id
-      );
-    res.status(201).json({ training: db.prepare(`SELECT * FROM trainings WHERE id = ?`).get(info.lastInsertRowid) });
+      ));
+    res.status(201).json({ training: (await db.prepare(`SELECT * FROM trainings WHERE id = ?`).get(info.lastInsertRowid)) });
   })
 );
 
@@ -234,7 +234,7 @@ trainingRouter.get(
   '/:id/completion',
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.id, u.employee_code, u.first_name || ' ' || u.last_name AS name,
                 tp.seconds_watched, tp.completed_at
@@ -243,7 +243,7 @@ trainingRouter.get(
          WHERE u.status = 'active'
          ORDER BY tp.completed_at IS NULL DESC, u.last_name`
       )
-      .all(req.params.id);
+      .all(req.params.id));
     res.json({ completion: rows.map((r) => isoFields(r, ['completed_at'])) });
   })
 );
@@ -256,57 +256,57 @@ messagesRouter.use(requireAuth);
 messagesRouter.get(
   '/threads',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT t.*, tp.last_read_at,
                 (SELECT body FROM messages m WHERE m.thread_id = t.id ORDER BY m.sent_at DESC LIMIT 1) AS preview,
                 (SELECT COUNT(*) FROM messages m
                    WHERE m.thread_id = t.id AND m.sender_id != ?
                      AND (tp.last_read_at IS NULL OR m.sent_at > tp.last_read_at)) AS unread,
-                (SELECT GROUP_CONCAT(u.first_name || ' ' || u.last_name, ', ')
+                (SELECT string_agg(u.first_name || ' ' || u.last_name, ', ')
                    FROM thread_participants x JOIN users u ON u.id = x.user_id
                    WHERE x.thread_id = t.id AND x.user_id != ?) AS participants
          FROM threads t
          JOIN thread_participants tp ON tp.thread_id = t.id AND tp.user_id = ?
          ORDER BY COALESCE(t.last_message_at, t.created_at) DESC`
       )
-      .all(req.user.id, req.user.id, req.user.id);
+      .all(req.user.id, req.user.id, req.user.id));
 
     res.json({ threads: rows.map((r) => isoFields(r, ['created_at', 'last_message_at', 'last_read_at'])) });
   })
 );
 
-function assertParticipant(threadId, userId) {
-  const row = db
+async function assertParticipant(threadId, userId) {
+  const row = (await db
     .prepare(`SELECT 1 FROM thread_participants WHERE thread_id = ? AND user_id = ?`)
-    .get(threadId, userId);
+    .get(threadId, userId));
   if (!row) throw new HttpError(403, 'You are not part of that conversation.');
 }
 
 messagesRouter.get(
   '/threads/:id',
   wrap(async (req, res) => {
-    assertParticipant(req.params.id, req.user.id);
+    await assertParticipant(req.params.id, req.user.id);
 
-    const messages = db
+    const messages = (await db
       .prepare(
         `SELECT m.*, u.first_name || ' ' || u.last_name AS sender_name, u.role AS sender_role
          FROM messages m JOIN users u ON u.id = m.sender_id
          WHERE m.thread_id = ? ORDER BY m.sent_at`
       )
-      .all(req.params.id);
+      .all(req.params.id));
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE thread_participants SET last_read_at = datetime('now') WHERE thread_id = ? AND user_id = ?`
-    ).run(req.params.id, req.user.id);
+    ).run(req.params.id, req.user.id));
 
-    const thread = db.prepare(`SELECT * FROM threads WHERE id = ?`).get(req.params.id);
-    const participants = db
+    const thread = (await db.prepare(`SELECT * FROM threads WHERE id = ?`).get(req.params.id));
+    const participants = (await db
       .prepare(
         `SELECT u.id, u.first_name || ' ' || u.last_name AS name, u.role
          FROM thread_participants tp JOIN users u ON u.id = tp.user_id WHERE tp.thread_id = ?`
       )
-      .all(req.params.id);
+      .all(req.params.id));
 
     res.json({
       thread: isoFields(thread, ['created_at', 'last_message_at']),
@@ -328,22 +328,22 @@ messagesRouter.post(
     const body = parse(newThreadSchema, req.body);
     const ids = [...new Set([...body.recipientIds, req.user.id])];
 
-    const found = db
+    const found = (await db
       .prepare(`SELECT id FROM users WHERE id IN (${ids.map(() => '?').join(',')}) AND status = 'active'`)
-      .all(...ids);
+      .all(...ids));
     if (found.length !== ids.length) throw new HttpError(422, 'One or more recipients are not available.');
 
-    const threadId = db.transaction(() => {
-      const info = db
+    const threadId = await db.transaction(async () => {
+      const info = (await db
         .prepare(`INSERT INTO threads (subject, created_by, last_message_at) VALUES (?,?,datetime('now'))`)
-        .run(body.subject ?? null, req.user.id);
+        .run(body.subject ?? null, req.user.id));
       const id = Number(info.lastInsertRowid);
       for (const uid of ids) {
-        db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`).run(id, uid);
+        (await db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`).run(id, uid));
       }
-      db.prepare(`INSERT INTO messages (thread_id, sender_id, body) VALUES (?,?,?)`).run(id, req.user.id, body.body);
-      db.prepare(`UPDATE thread_participants SET last_read_at = datetime('now') WHERE thread_id = ? AND user_id = ?`)
-        .run(id, req.user.id);
+      (await db.prepare(`INSERT INTO messages (thread_id, sender_id, body) VALUES (?,?,?)`).run(id, req.user.id, body.body));
+      (await db.prepare(`UPDATE thread_participants SET last_read_at = datetime('now') WHERE thread_id = ? AND user_id = ?`)
+        .run(id, req.user.id));
       return id;
     })();
 
@@ -355,23 +355,23 @@ messagesRouter.post(
   '/threads/:id/messages',
   wrap(async (req, res) => {
     const body = parse(z.object({ body: z.string().trim().min(1).max(4000) }), req.body);
-    assertParticipant(req.params.id, req.user.id);
+    await assertParticipant(req.params.id, req.user.id);
 
-    const info = db
+    const info = (await db
       .prepare(`INSERT INTO messages (thread_id, sender_id, body) VALUES (?,?,?)`)
-      .run(req.params.id, req.user.id, body.body);
-    db.prepare(`UPDATE threads SET last_message_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    db.prepare(`UPDATE thread_participants SET last_read_at = datetime('now') WHERE thread_id = ? AND user_id = ?`)
-      .run(req.params.id, req.user.id);
+      .run(req.params.id, req.user.id, body.body));
+    (await db.prepare(`UPDATE threads SET last_message_at = datetime('now') WHERE id = ?`).run(req.params.id));
+    (await db.prepare(`UPDATE thread_participants SET last_read_at = datetime('now') WHERE thread_id = ? AND user_id = ?`)
+      .run(req.params.id, req.user.id));
 
-    const message = db
+    const message = (await db
       .prepare(
         `SELECT m.*, u.first_name || ' ' || u.last_name AS sender_name
          FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?`
       )
-      .get(info.lastInsertRowid);
+      .get(info.lastInsertRowid));
 
-    notifyMessage({
+    await notifyMessage({
       threadId: Number(req.params.id),
       senderId: req.user.id,
       senderName: message.sender_name,
@@ -386,13 +386,13 @@ messagesRouter.post(
 messagesRouter.get(
   '/contacts',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT id, employee_code, first_name || ' ' || last_name AS name, role
          FROM users WHERE status = 'active' AND id != ?
          ORDER BY role DESC, last_name`
       )
-      .all(req.user.id);
+      .all(req.user.id));
     res.json({ contacts: rows });
   })
 );

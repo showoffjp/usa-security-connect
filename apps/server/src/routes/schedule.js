@@ -15,7 +15,7 @@ scheduleRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 21 * 86400000);
 
-    const shifts = db
+    const shifts = (await db
       .prepare(
         `SELECT sh.*, p.name AS post_name, p.post_code, p.instructions,
                 s.name AS site_name, s.address, s.city, s.state,
@@ -27,7 +27,7 @@ scheduleRouter.get(
          WHERE sh.user_id = ? AND sh.starts_at BETWEEN ? AND ?
          ORDER BY sh.starts_at`
       )
-      .all(req.user.id, toSql(from), toSql(to));
+      .all(req.user.id, toSql(from), toSql(to)));
 
     res.json({
       shifts: shifts.map((s) =>
@@ -49,30 +49,30 @@ scheduleRouter.get(
     const prevWeekStart = new Date(weekStart.getTime() - 7 * 86400000);
     const payPeriodStart = new Date(weekStart.getTime() - 7 * 86400000);
 
-    const sumSince = (start, end) =>
-      db
+    const sumSince = async (start, end) =>
+      (await db
         .prepare(
           `SELECT COALESCE(SUM(minutes_worked),0) AS minutes, COUNT(*) AS shifts
            FROM time_entries
            WHERE user_id = ? AND clock_in_at >= ? ${end ? 'AND clock_in_at < ?' : ''}`
         )
-        .get(...(end ? [req.user.id, toSql(start), toSql(end)] : [req.user.id, toSql(start)]));
+        .get(...(end ? [req.user.id, toSql(start), toSql(end)] : [req.user.id, toSql(start)])));
 
-    const thisWeek = sumSince(weekStart);
-    const lastWeek = sumSince(prevWeekStart, weekStart);
+    const thisWeek = await sumSince(weekStart);
+    const lastWeek = await sumSince(prevWeekStart, weekStart);
     const { regularMinutes, overtimeMinutes } = splitOvertime(thisWeek.minutes);
 
-    const byDay = db
+    const byDay = (await db
       .prepare(
         `SELECT date(clock_in_at) AS day, COALESCE(SUM(minutes_worked),0) AS minutes
          FROM time_entries WHERE user_id = ? AND clock_in_at >= ?
          GROUP BY date(clock_in_at) ORDER BY day`
       )
-      .all(req.user.id, toSql(payPeriodStart));
+      .all(req.user.id, toSql(payPeriodStart)));
 
-    const openFlags = db
+    const openFlags = (await db
       .prepare(`SELECT COUNT(*) AS n FROM flags WHERE user_id = ? AND resolved_at IS NULL`)
-      .get(req.user.id).n;
+      .get(req.user.id)).n;
 
     res.json({
       thisWeek: {
@@ -93,11 +93,11 @@ scheduleRouter.get(
 scheduleRouter.get(
   '/my-flags',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT * FROM flags WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 50`
       )
-      .all(req.user.id);
+      .all(req.user.id));
     res.json({ flags: rows.map((r) => isoFields(r, ['occurred_at', 'resolved_at', 'created_at'])) });
   })
 );

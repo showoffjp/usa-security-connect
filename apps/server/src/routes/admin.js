@@ -27,9 +27,9 @@ const onlyAdmin = requireRole(ROLES.ADMIN);
 adminRouter.get(
   '/dashboard',
   wrap(async (req, res) => {
-    sweep(); // never show a supervisor stale compliance numbers
+    await sweep(); // never show a supervisor stale compliance numbers
 
-    const onDuty = db
+    const onDuty = (await db
       .prepare(
         `SELECT te.id, te.clock_in_at, te.clock_in_geofence, te.late_minutes,
                 u.id AS user_id, u.employee_code,
@@ -46,36 +46,36 @@ adminRouter.get(
          WHERE te.clock_out_at IS NULL
          ORDER BY te.clock_in_at`
       )
-      .all();
+      .all());
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
     const counts = {
-      openFlags: db.prepare(`SELECT COUNT(*) AS n FROM flags WHERE resolved_at IS NULL`).get().n,
-      openIncidents: db.prepare(`SELECT COUNT(*) AS n FROM incidents WHERE status != 'closed'`).get().n,
+      openFlags: (await db.prepare(`SELECT COUNT(*) AS n FROM flags WHERE resolved_at IS NULL`).get()).n,
+      openIncidents: (await db.prepare(`SELECT COUNT(*) AS n FROM incidents WHERE status != 'closed'`).get()).n,
       onDuty: onDuty.length,
-      activeStaff: db.prepare(`SELECT COUNT(*) AS n FROM users WHERE status = 'active'`).get().n,
-      shiftsToday: db
+      activeStaff: (await db.prepare(`SELECT COUNT(*) AS n FROM users WHERE status = 'active'`).get()).n,
+      shiftsToday: (await db
         .prepare(`SELECT COUNT(*) AS n FROM shifts WHERE date(starts_at) = date('now')`)
-        .get().n,
+        .get()).n,
       hoursToday: toHours(
-        db
+        (await db
           .prepare(`SELECT COALESCE(SUM(minutes_worked),0) AS m FROM time_entries WHERE clock_in_at >= ?`)
-          .get(toSql(todayStart)).m
+          .get(toSql(todayStart))).m
       ),
     };
 
-    const recentFlags = db
+    const recentFlags = (await db
       .prepare(
         `SELECT f.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer
          FROM flags f JOIN users u ON u.id = f.user_id
          WHERE f.resolved_at IS NULL
          ORDER BY f.occurred_at DESC LIMIT 15`
       )
-      .all();
+      .all());
 
-    const upcoming = db
+    const upcoming = (await db
       .prepare(
         `SELECT sh.*, p.name AS post_name, s.name AS site_name,
                 u.first_name || ' ' || u.last_name AS officer
@@ -87,50 +87,50 @@ adminRouter.get(
            AND sh.status = 'scheduled'
          ORDER BY sh.starts_at LIMIT 20`
       )
-      .all();
+      .all());
 
-    const unfilled = db
+    const unfilled = (await db
       .prepare(
         `SELECT COUNT(*) AS n FROM shifts
          WHERE user_id IS NULL AND starts_at > datetime('now') AND status = 'scheduled'`
       )
-      .get().n;
+      .get()).n;
 
-    const activeAlerts = db
+    const activeAlerts = (await db
       .prepare(`SELECT COUNT(*) AS n FROM panic_alerts WHERE status IN ('active','acknowledged')`)
-      .get().n;
+      .get()).n;
 
-    const pendingTimeOff = db
+    const pendingTimeOff = (await db
       .prepare(`SELECT COUNT(*) AS n FROM time_off_requests WHERE status = 'pending'`)
-      .get().n;
+      .get()).n;
 
     // Anything that lapses within 60 days, across certifications, state
     // licences and contractor insurance.
     const expiringCredentials =
-      db
+      (await db
         .prepare(
           `SELECT COUNT(*) AS n FROM certifications c JOIN users u ON u.id = c.user_id
            WHERE c.expires_on IS NOT NULL AND u.status IN ('active','on_leave')
              AND date(c.expires_on) <= date('now','+60 days')`
         )
-        .get().n +
-      db
+        .get()).n +
+      (await db
         .prepare(
           `SELECT COUNT(*) AS n FROM users
            WHERE license_expires_on IS NOT NULL AND status IN ('active','on_leave')
              AND date(license_expires_on) <= date('now','+60 days')`
         )
-        .get().n +
-      db
+        .get()).n +
+      (await db
         .prepare(
           `SELECT COUNT(*) AS n FROM users
            WHERE insurance_expires_on IS NOT NULL AND employment_type = '1099'
              AND status IN ('active','on_leave')
              AND date(insurance_expires_on) <= date('now','+60 days')`
         )
-        .get().n;
+        .get()).n;
 
-    const openAlerts = db
+    const openAlerts = (await db
       .prepare(
         `SELECT p.*, u.first_name || ' ' || u.last_name AS officer, u.phone,
                 po.name AS post_name
@@ -140,7 +140,7 @@ adminRouter.get(
          WHERE p.status IN ('active','acknowledged')
          ORDER BY p.triggered_at DESC`
       )
-      .all();
+      .all());
 
     res.json({
       counts: {
@@ -185,20 +185,20 @@ adminRouter.get(
       params.push(q, q, q);
     }
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.*, s.name AS default_site_name,
                 (SELECT COUNT(*) FROM flags f WHERE f.user_id = u.id AND f.resolved_at IS NULL) AS open_flags,
                 (SELECT COALESCE(SUM(minutes_worked),0) FROM time_entries te
                    WHERE te.user_id = u.id
-                     AND te.clock_in_at >= datetime('now', 'weekday 1', '-7 days')) AS week_minutes,
+                     AND te.clock_in_at >= date_trunc('week', now())) AS week_minutes,
                 EXISTS(SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.clock_out_at IS NULL) AS on_duty
          FROM users u
          LEFT JOIN sites s ON s.id = u.default_site_id
          ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
          ORDER BY u.status, u.last_name, u.first_name`
       )
-      .all(...params);
+      .all(...params));
 
     res.json({
       employees: rows.map((u) => ({
@@ -269,9 +269,9 @@ adminRouter.post(
   onlyAdmin,
   wrap(async (req, res) => {
     const body = parse(employeeSchema, req.body);
-    const code = body.employeeCode || generateEmployeeCode();
+    const code = body.employeeCode || await generateEmployeeCode();
 
-    if (db.prepare(`SELECT 1 FROM users WHERE employee_code = ?`).get(code)) {
+    if ((await db.prepare(`SELECT 1 FROM users WHERE employee_code = ?`).get(code))) {
       throw new HttpError(409, `Employee code ${code} is already in use.`, [
         { field: 'employeeCode', message: 'Already taken.' },
       ]);
@@ -326,17 +326,17 @@ adminRouter.post(
     };
 
     const columns = Object.keys(values);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO users (${columns.join(', ')}, pin_set_at, must_change_pin)
-         VALUES (${columns.map(() => '?').join(', ')}, datetime('now'), 1)`
+         VALUES (${columns.map(() => '?').join(', ')}, now(), true)`
       )
-      .run(...Object.values(values));
+      .run(...Object.values(values)));
 
-    audit(req.user.id, 'employee.created', 'user', Number(info.lastInsertRowid), { code, role: body.role }, req.ip);
+    await audit(req.user.id, 'employee.created', 'user', Number(info.lastInsertRowid), { code, role: body.role }, req.ip);
 
     res.status(201).json({
-      employee: publicUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid)),
+      employee: publicUser((await db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid))),
       credentials: {
         employeeCode: code,
         pin,
@@ -349,10 +349,10 @@ adminRouter.post(
 adminRouter.get(
   '/employees/:id',
   wrap(async (req, res) => {
-    const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+    const user = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id));
     if (!user) throw new HttpError(404, 'Employee not found.');
 
-    const entries = db
+    const entries = (await db
       .prepare(
         `SELECT te.*, p.name AS post_name, s.name AS site_name
          FROM time_entries te
@@ -360,43 +360,43 @@ adminRouter.get(
          JOIN sites s ON s.id = p.site_id
          WHERE te.user_id = ? ORDER BY te.clock_in_at DESC LIMIT 60`
       )
-      .all(user.id);
+      .all(user.id));
 
-    const flags = db
+    const flags = (await db
       .prepare(`SELECT * FROM flags WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 40`)
-      .all(user.id);
+      .all(user.id));
 
-    const shifts = db
+    const shifts = (await db
       .prepare(
         `SELECT sh.*, p.name AS post_name, s.name AS site_name
          FROM shifts sh JOIN posts p ON p.id = sh.post_id JOIN sites s ON s.id = p.site_id
          WHERE sh.user_id = ? AND sh.starts_at > datetime('now','-7 days')
          ORDER BY sh.starts_at LIMIT 40`
       )
-      .all(user.id);
+      .all(user.id));
 
-    const totals = db
+    const totals = (await db
       .prepare(
         `SELECT COALESCE(SUM(minutes_worked),0) AS minutes, COUNT(*) AS shifts,
-                COALESCE(SUM(late_minutes > 0),0) AS late_count
+                COALESCE(SUM(CASE WHEN late_minutes > 0 THEN 1 ELSE 0 END),0) AS late_count
          FROM time_entries WHERE user_id = ? AND clock_in_at >= datetime('now','-30 days')`
       )
-      .get(user.id);
+      .get(user.id));
 
-    const certifications = db
+    const certifications = (await db
       .prepare(`SELECT * FROM certifications WHERE user_id = ? ORDER BY expires_on IS NULL, expires_on`)
-      .all(user.id);
+      .all(user.id));
 
-    const availability = db
+    const availability = (await db
       .prepare(`SELECT * FROM availability WHERE user_id = ? ORDER BY weekday`)
-      .all(user.id);
+      .all(user.id));
 
-    const timeOff = db
+    const timeOff = (await db
       .prepare(
         `SELECT * FROM time_off_requests WHERE user_id = ?
          ORDER BY starts_on DESC LIMIT 20`
       )
-      .all(user.id);
+      .all(user.id));
 
     // Show the money the same way the timesheet does, so the two agree.
     const pay = computePay({
@@ -440,7 +440,7 @@ adminRouter.patch(
   onlyAdmin,
   wrap(async (req, res) => {
     const body = parse(employeeSchema.partial(), req.body);
-    const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+    const user = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id));
     if (!user) throw new HttpError(404, 'Employee not found.');
 
     // Never let the last administrator demote or disable themselves out of the system.
@@ -448,9 +448,9 @@ adminRouter.patch(
       user.role === ROLES.ADMIN &&
       ((body.role && body.role !== ROLES.ADMIN) || (body.status && body.status !== 'active'));
     if (losingAdmin) {
-      const admins = db
+      const admins = (await db
         .prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'active'`)
-        .get().n;
+        .get()).n;
       if (admins <= 1) throw new HttpError(409, 'This is the only active administrator. Promote someone else first.');
     }
 
@@ -520,10 +520,10 @@ adminRouter.patch(
 
     sets.push(`updated_at = datetime('now')`);
     params.push(user.id);
-    db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    (await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params));
 
-    audit(req.user.id, 'employee.updated', 'user', user.id, Object.keys(body), req.ip);
-    res.json({ employee: publicUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(user.id)) });
+    await audit(req.user.id, 'employee.updated', 'user', user.id, Object.keys(body), req.ip);
+    res.json({ employee: publicUser((await db.prepare(`SELECT * FROM users WHERE id = ?`).get(user.id))) });
   })
 );
 
@@ -532,22 +532,22 @@ adminRouter.post(
   '/employees/:id/reset-pin',
   onlyAdmin,
   wrap(async (req, res) => {
-    const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+    const user = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id));
     if (!user) throw new HttpError(404, 'Employee not found.');
 
     const length = Number(req.body?.length) === 6 ? 6 : 4;
     const pin = generatePin(length);
     const { hash, salt } = hashPin(pin);
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE users
        SET pin_hash = ?, pin_salt = ?, pin_set_at = datetime('now'),
            must_change_pin = 1, failed_attempts = 0, locked_until = NULL,
            updated_at = datetime('now')
        WHERE id = ?`
-    ).run(hash, salt, user.id);
+    ).run(hash, salt, user.id));
 
-    audit(req.user.id, 'employee.pin_reset', 'user', user.id, null, req.ip);
+    await audit(req.user.id, 'employee.pin_reset', 'user', user.id, null, req.ip);
     res.json({
       employeeCode: user.employee_code,
       pin,
@@ -559,8 +559,8 @@ adminRouter.post(
 adminRouter.post(
   '/employees/:id/unlock',
   wrap(async (req, res) => {
-    db.prepare(`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`).run(req.params.id);
-    audit(req.user.id, 'employee.unlocked', 'user', Number(req.params.id), null, req.ip);
+    (await db.prepare(`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`).run(req.params.id));
+    await audit(req.user.id, 'employee.unlocked', 'user', Number(req.params.id), null, req.ip);
     res.json({ ok: true });
   })
 );
@@ -573,7 +573,7 @@ adminRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 14 * 86400000);
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT sh.*, p.name AS post_name, p.post_code, s.name AS site_name, s.id AS site_id,
                 u.first_name || ' ' || u.last_name AS officer, u.employee_code,
@@ -593,7 +593,7 @@ adminRouter.get(
         toSql(to),
         ...(req.query.siteId ? [Number(req.query.siteId)] : []),
         ...(req.query.userId ? [Number(req.query.userId)] : [])
-      );
+      ));
 
     res.json({
       shifts: rows.map((s) => isoFields(s, ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at'])),
@@ -615,9 +615,9 @@ const shiftSchema = z
   });
 
 /** Reject a shift that overlaps one the officer already has. */
-function assertNoOverlap({ userId, startsAt, endsAt, excludeShiftId }) {
+async function assertNoOverlap({ userId, startsAt, endsAt, excludeShiftId }) {
   if (!userId) return;
-  const clash = db
+  const clash = (await db
     .prepare(
       `SELECT sh.id, sh.starts_at, sh.ends_at, p.name AS post_name
        FROM shifts sh JOIN posts p ON p.id = sh.post_id
@@ -626,7 +626,7 @@ function assertNoOverlap({ userId, startsAt, endsAt, excludeShiftId }) {
          ${excludeShiftId ? 'AND sh.id != ?' : ''}
        LIMIT 1`
     )
-    .get(userId, toSql(new Date(endsAt)), toSql(new Date(startsAt)), ...(excludeShiftId ? [excludeShiftId] : []));
+    .get(userId, toSql(new Date(endsAt)), toSql(new Date(startsAt)), ...(excludeShiftId ? [excludeShiftId] : [])));
 
   if (clash) {
     throw new HttpError(409, `That officer already has a shift at ${clash.post_name} covering this time.`, {
@@ -639,9 +639,9 @@ adminRouter.post(
   '/shifts',
   wrap(async (req, res) => {
     const body = parse(shiftSchema, req.body);
-    assertNoOverlap(body);
+    await assertNoOverlap(body);
 
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO shifts (user_id, post_id, starts_at, ends_at, notes, created_by)
          VALUES (?,?,?,?,?,?)`
@@ -653,10 +653,10 @@ adminRouter.post(
         toSql(new Date(body.endsAt)),
         body.notes ?? null,
         req.user.id
-      );
+      ));
 
-    audit(req.user.id, 'shift.created', 'shift', Number(info.lastInsertRowid), null, req.ip);
-    res.status(201).json({ shift: isoFields(db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(info.lastInsertRowid), ['starts_at', 'ends_at']) });
+    await audit(req.user.id, 'shift.created', 'shift', Number(info.lastInsertRowid), null, req.ip);
+    res.status(201).json({ shift: isoFields((await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(info.lastInsertRowid)), ['starts_at', 'ends_at']) });
   })
 );
 
@@ -698,7 +698,7 @@ adminRouter.post(
       if (endsAt <= startsAt) endsAt.setDate(endsAt.getDate() + 1);
 
       try {
-        assertNoOverlap({ userId: body.userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+        await assertNoOverlap({ userId: body.userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
       } catch (err) {
         if (body.skipConflicts) {
           skipped.push({ date: startsAt.toISOString().slice(0, 10), reason: err.message });
@@ -707,13 +707,13 @@ adminRouter.post(
         throw err;
       }
 
-      const info = db
+      const info = (await db
         .prepare(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at, created_by) VALUES (?,?,?,?,?)`)
-        .run(body.userId ?? null, body.postId, toSql(startsAt), toSql(endsAt), req.user.id);
+        .run(body.userId ?? null, body.postId, toSql(startsAt), toSql(endsAt), req.user.id));
       created.push(Number(info.lastInsertRowid));
     }
 
-    audit(req.user.id, 'shift.bulk_created', 'shift', null, { count: created.length }, req.ip);
+    await audit(req.user.id, 'shift.bulk_created', 'shift', null, { count: created.length }, req.ip);
     res.status(201).json({ created: created.length, skipped });
   })
 );
@@ -722,7 +722,7 @@ adminRouter.patch(
   '/shifts/:id',
   wrap(async (req, res) => {
     const body = parse(shiftSchema.partial(), req.body);
-    const shift = db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(req.params.id);
+    const shift = (await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(req.params.id));
     if (!shift) throw new HttpError(404, 'Shift not found.');
 
     const startsAt = body.startsAt ? new Date(body.startsAt) : new Date(sqlToIso(shift.starts_at));
@@ -730,9 +730,9 @@ adminRouter.patch(
     const userId = body.userId !== undefined ? body.userId : shift.user_id;
 
     if (endsAt <= startsAt) throw new HttpError(422, 'The shift must end after it starts.');
-    assertNoOverlap({ userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), excludeShiftId: shift.id });
+    await assertNoOverlap({ userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), excludeShiftId: shift.id });
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE shifts SET user_id = ?, post_id = ?, starts_at = ?, ends_at = ?, notes = ?, status = ? WHERE id = ?`
     ).run(
       userId ?? null,
@@ -742,27 +742,27 @@ adminRouter.patch(
       body.notes !== undefined ? body.notes : shift.notes,
       req.body.status || shift.status,
       shift.id
-    );
+    ));
 
-    audit(req.user.id, 'shift.updated', 'shift', shift.id, null, req.ip);
-    res.json({ shift: isoFields(db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(shift.id), ['starts_at', 'ends_at']) });
+    await audit(req.user.id, 'shift.updated', 'shift', shift.id, null, req.ip);
+    res.json({ shift: isoFields((await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(shift.id)), ['starts_at', 'ends_at']) });
   })
 );
 
 adminRouter.delete(
   '/shifts/:id',
   wrap(async (req, res) => {
-    const shift = db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(req.params.id);
+    const shift = (await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(req.params.id));
     if (!shift) throw new HttpError(404, 'Shift not found.');
     // Keep any shift that has already been worked; cancel it instead of deleting.
-    const worked = db.prepare(`SELECT 1 FROM time_entries WHERE shift_id = ?`).get(shift.id);
+    const worked = (await db.prepare(`SELECT 1 FROM time_entries WHERE shift_id = ?`).get(shift.id));
     if (worked) {
-      db.prepare(`UPDATE shifts SET status = 'cancelled' WHERE id = ?`).run(shift.id);
-      audit(req.user.id, 'shift.cancelled', 'shift', shift.id, null, req.ip);
+      (await db.prepare(`UPDATE shifts SET status = 'cancelled' WHERE id = ?`).run(shift.id));
+      await audit(req.user.id, 'shift.cancelled', 'shift', shift.id, null, req.ip);
       return res.json({ ok: true, cancelled: true });
     }
-    db.prepare(`DELETE FROM shifts WHERE id = ?`).run(shift.id);
-    audit(req.user.id, 'shift.deleted', 'shift', shift.id, null, req.ip);
+    (await db.prepare(`DELETE FROM shifts WHERE id = ?`).run(shift.id));
+    await audit(req.user.id, 'shift.deleted', 'shift', shift.id, null, req.ip);
     res.json({ ok: true, deleted: true });
   })
 );
@@ -775,7 +775,7 @@ adminRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date();
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.id AS user_id, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
                 u.role, u.pay_rate_cents, u.bill_rate_cents, u.salary_cents,
@@ -785,7 +785,7 @@ adminRouter.get(
                 COALESCE(SUM(te.minutes_worked),0) AS gross_minutes,
                 COALESCE(SUM(te.unpaid_break_minutes),0) AS break_minutes,
                 COALESCE(SUM(CASE WHEN te.late_minutes > 0 THEN 1 ELSE 0 END),0) AS late_shifts,
-                COALESCE(SUM(te.auto_closed),0) AS auto_closed,
+                COALESCE(SUM(CASE WHEN te.auto_closed THEN 1 ELSE 0 END),0) AS auto_closed,
                 COALESCE(SUM(CASE WHEN te.clock_in_geofence = 'outside' THEN 1 ELSE 0 END),0) AS geofence_issues
          FROM users u
          LEFT JOIN time_entries te
@@ -794,7 +794,7 @@ adminRouter.get(
          GROUP BY u.id
          ORDER BY gross_minutes DESC`
       )
-      .all(toSql(from), toSql(to));
+      .all(toSql(from), toSql(to)));
 
     const weeks = Math.max(1, Math.ceil((to - from) / (7 * 86400000)));
 
@@ -862,7 +862,7 @@ adminRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date();
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT te.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
                 p.name AS post_name, s.name AS site_name,
@@ -875,7 +875,7 @@ adminRouter.get(
          ${req.query.userId ? 'AND te.user_id = ?' : ''}
          ORDER BY te.clock_in_at DESC LIMIT 500`
       )
-      .all(toSql(from), toSql(to), ...(req.query.userId ? [Number(req.query.userId)] : []));
+      .all(toSql(from), toSql(to), ...(req.query.userId ? [Number(req.query.userId)] : [])));
 
     res.json({ entries: rows.map((r) => isoFields(r, ['clock_in_at', 'clock_out_at', 'created_at'])) });
   })
@@ -893,7 +893,7 @@ adminRouter.patch(
   onlyAdmin,
   wrap(async (req, res) => {
     const body = parse(adjustSchema, req.body);
-    const entry = db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(req.params.id);
+    const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(req.params.id));
     if (!entry) throw new HttpError(404, 'Time entry not found.');
 
     const clockIn = body.clockInAt ? new Date(body.clockInAt) : new Date(sqlToIso(entry.clock_in_at));
@@ -908,7 +908,7 @@ adminRouter.patch(
 
     if (clockOut && clockOut <= clockIn) throw new HttpError(422, 'Clock-out must be after clock-in.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE time_entries
        SET clock_in_at = ?, clock_out_at = ?, minutes_worked = ?,
            original_clock_in_at = COALESCE(original_clock_in_at, ?),
@@ -924,10 +924,10 @@ adminRouter.patch(
       req.user.id,
       body.reason,
       entry.id
-    );
+    ));
 
-    audit(req.user.id, 'time_entry.adjusted', 'time_entry', entry.id, { reason: body.reason }, req.ip);
-    res.json({ entry: isoFields(db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id), ['clock_in_at', 'clock_out_at']) });
+    await audit(req.user.id, 'time_entry.adjusted', 'time_entry', entry.id, { reason: body.reason }, req.ip);
+    res.json({ entry: isoFields((await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id)), ['clock_in_at', 'clock_out_at']) });
   })
 );
 
@@ -937,7 +937,7 @@ adminRouter.get(
   '/flags',
   wrap(async (req, res) => {
     const resolved = req.query.resolved === 'true';
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT f.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
                 r.first_name || ' ' || r.last_name AS resolved_by_name
@@ -952,13 +952,14 @@ adminRouter.get(
       .all(
         ...(req.query.type ? [req.query.type] : []),
         ...(req.query.userId ? [Number(req.query.userId)] : [])
-      );
+      ));
 
     res.json({
       flags: rows.map((f) => ({
         ...isoFields(f, ['occurred_at', 'resolved_at', 'created_at']),
         label: FLAG_LABEL[f.type] || f.type,
-        detail: f.detail ? JSON.parse(f.detail) : null,
+        // `detail` is a jsonb column, so the driver has already parsed it.
+        detail: typeof f.detail === 'string' ? JSON.parse(f.detail) : (f.detail ?? null),
       })),
     });
   })
@@ -970,11 +971,11 @@ adminRouter.post(
     const note = String(req.body?.note || '').slice(0, 500);
     if (note.trim().length < 3) throw new HttpError(422, 'Add a short note explaining the outcome.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE flags SET resolved_at = datetime('now'), resolved_by = ?, resolution_note = ? WHERE id = ?`
-    ).run(req.user.id, note, req.params.id);
+    ).run(req.user.id, note, req.params.id));
 
-    audit(req.user.id, 'flag.resolved', 'flag', Number(req.params.id), { note }, req.ip);
+    await audit(req.user.id, 'flag.resolved', 'flag', Number(req.params.id), { note }, req.ip);
     res.json({ ok: true });
   })
 );
@@ -984,15 +985,15 @@ adminRouter.post(
 adminRouter.get(
   '/sites',
   wrap(async (_req, res) => {
-    const sites = db
+    const sites = (await db
       .prepare(
         `SELECT s.*, (SELECT COUNT(*) FROM posts p WHERE p.site_id = s.id AND p.active = 1) AS post_count
          FROM sites s ORDER BY s.active DESC, s.name`
       )
-      .all();
-    const posts = db
+      .all());
+    const posts = (await db
       .prepare(`SELECT p.*, s.name AS site_name FROM posts p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.name`)
-      .all();
+      .all());
     res.json({ sites, posts });
   })
 );
@@ -1016,15 +1017,15 @@ adminRouter.post(
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(siteSchema, req.body);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO sites (name, client_name, address, city, state, postal_code, latitude, longitude, contact_name, contact_phone, active)
          VALUES (?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(b.name, b.clientName ?? null, b.address ?? null, b.city ?? null, b.state ?? 'FL',
            b.postalCode ?? null, b.latitude ?? null, b.longitude ?? null,
-           b.contactName ?? null, b.contactPhone ?? null, b.active ? 1 : 0);
-    res.status(201).json({ site: db.prepare(`SELECT * FROM sites WHERE id = ?`).get(info.lastInsertRowid) });
+           b.contactName ?? null, b.contactPhone ?? null, b.active ? 1 : 0));
+    res.status(201).json({ site: (await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(info.lastInsertRowid)) });
   })
 );
 
@@ -1048,7 +1049,7 @@ adminRouter.post(
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(postSchema, req.body);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO posts (site_id, name, post_code, instructions, address, latitude, longitude,
                             geofence_radius_m, check_in_interval_min, requires_gps, armed, active)
@@ -1056,8 +1057,8 @@ adminRouter.post(
       )
       .run(b.siteId, b.name, b.postCode ?? null, b.instructions ?? null, b.address ?? null,
            b.latitude ?? null, b.longitude ?? null,
-           b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.active ? 1 : 0);
-    res.status(201).json({ post: db.prepare(`SELECT * FROM posts WHERE id = ?`).get(info.lastInsertRowid) });
+           b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.active ? 1 : 0));
+    res.status(201).json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(info.lastInsertRowid)) });
   })
 );
 
@@ -1066,7 +1067,7 @@ adminRouter.patch(
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(postSchema.partial(), req.body);
-    const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(req.params.id);
+    const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(req.params.id));
     if (!post) throw new HttpError(404, 'Post not found.');
 
     const map = {
@@ -1084,9 +1085,9 @@ adminRouter.patch(
     }
     if (sets.length) {
       params.push(post.id);
-      db.prepare(`UPDATE posts SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      (await db.prepare(`UPDATE posts SET ${sets.join(', ')} WHERE id = ?`).run(...params));
     }
-    res.json({ post: db.prepare(`SELECT * FROM posts WHERE id = ?`).get(post.id) });
+    res.json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(post.id)) });
   })
 );
 
@@ -1095,13 +1096,13 @@ adminRouter.patch(
 adminRouter.get(
   '/tours',
   wrap(async (_req, res) => {
-    const tours = db
+    const tours = (await db
       .prepare(
         `SELECT t.*, s.name AS site_name,
                 (SELECT COUNT(*) FROM checkpoints c WHERE c.tour_id = t.id) AS checkpoint_count
          FROM tours t JOIN sites s ON s.id = t.site_id ORDER BY s.name, t.name`
       )
-      .all();
+      .all());
     res.json({ tours });
   })
 );
@@ -1109,16 +1110,16 @@ adminRouter.get(
 adminRouter.get(
   '/tours/:id',
   wrap(async (req, res) => {
-    const tour = db.prepare(`SELECT * FROM tours WHERE id = ?`).get(req.params.id);
+    const tour = (await db.prepare(`SELECT * FROM tours WHERE id = ?`).get(req.params.id));
     if (!tour) throw new HttpError(404, 'Tour not found.');
-    const checkpoints = db.prepare(`SELECT * FROM checkpoints WHERE tour_id = ? ORDER BY sequence, id`).all(tour.id);
-    const tasks = db
+    const checkpoints = (await db.prepare(`SELECT * FROM checkpoints WHERE tour_id = ? ORDER BY sequence, id`).all(tour.id));
+    const tasks = (await db
       .prepare(
         `SELECT ct.* FROM checkpoint_tasks ct
          JOIN checkpoints c ON c.id = ct.checkpoint_id
          WHERE c.tour_id = ? ORDER BY ct.sequence, ct.id`
       )
-      .all(tour.id);
+      .all(tour.id));
     res.json({
       tour,
       checkpoints: checkpoints.map((c) => ({ ...c, tasks: tasks.filter((t) => t.checkpoint_id === c.id) })),
@@ -1155,29 +1156,33 @@ adminRouter.post(
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(tourSchema, req.body);
-    const tourId = db.transaction(() => {
-      const info = db
+    const tourId = await db.transaction(async () => {
+      const info = (await db
         .prepare(`INSERT INTO tours (site_id, name, description, expected_minutes) VALUES (?,?,?,?)`)
-        .run(b.siteId, b.name, b.description ?? null, b.expectedMinutes ?? null);
+        .run(b.siteId, b.name, b.description ?? null, b.expectedMinutes ?? null));
       const id = Number(info.lastInsertRowid);
 
-      b.checkpoints.forEach((cp, i) => {
-        const cpInfo = db
+      // Sequential: an async callback handed to forEach would leave the
+      // transaction to commit before the inserts had run.
+      for (const [i, cp] of b.checkpoints.entries()) {
+        const cpInfo = await db
           .prepare(
             `INSERT INTO checkpoints (tour_id, name, sequence, nfc_tag_id, qr_code, latitude, longitude, instructions, required)
              VALUES (?,?,?,?,?,?,?,?,?)`
           )
           .run(id, cp.name, i, cp.nfcTagId ?? null, cp.qrCode ?? null,
                cp.latitude ?? null, cp.longitude ?? null, cp.instructions ?? null, cp.required ? 1 : 0);
-        cp.tasks.forEach((task, ti) => {
-          db.prepare(`INSERT INTO checkpoint_tasks (checkpoint_id, label, sequence, required) VALUES (?,?,?,?)`)
+
+        for (const [ti, task] of cp.tasks.entries()) {
+          await db
+            .prepare(`INSERT INTO checkpoint_tasks (checkpoint_id, label, sequence, required) VALUES (?,?,?,?)`)
             .run(Number(cpInfo.lastInsertRowid), task.label, ti, task.required ? 1 : 0);
-        });
-      });
+        }
+      }
       return id;
     })();
 
-    audit(req.user.id, 'tour.created', 'tour', tourId, { name: b.name }, req.ip);
+    await audit(req.user.id, 'tour.created', 'tour', tourId, { name: b.name }, req.ip);
     res.status(201).json({ tourId });
   })
 );
@@ -1186,7 +1191,7 @@ adminRouter.post(
 adminRouter.get(
   '/tour-runs',
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT tr.*, t.name AS tour_name, s.name AS site_name,
                 u.first_name || ' ' || u.last_name AS officer,
@@ -1200,7 +1205,7 @@ adminRouter.get(
          WHERE tr.started_at >= ?
          ORDER BY tr.started_at DESC LIMIT 200`
       )
-      .all(toSql(req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000)));
+      .all(toSql(req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000))));
     res.json({ runs: rows.map((r) => isoFields(r, ['started_at', 'completed_at'])) });
   })
 );
@@ -1211,14 +1216,14 @@ adminRouter.get(
   '/audit',
   onlyAdmin,
   wrap(async (req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT a.*, u.employee_code, u.first_name || ' ' || u.last_name AS actor
          FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
          ${req.query.action ? 'WHERE a.action LIKE ?' : ''}
          ORDER BY a.created_at DESC LIMIT 300`
       )
-      .all(...(req.query.action ? [`${req.query.action}%`] : []));
+      .all(...(req.query.action ? [`${req.query.action}%`] : [])));
     res.json({ entries: rows.map((r) => isoFields(r, ['created_at'])) });
   })
 );
@@ -1230,7 +1235,7 @@ adminRouter.get(
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000);
     const to = req.query.to ? new Date(req.query.to) : new Date();
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.employee_code, u.last_name, u.first_name, p.name AS post, s.name AS site,
                 te.clock_in_at, te.clock_out_at, te.minutes_worked, te.late_minutes,
@@ -1242,7 +1247,7 @@ adminRouter.get(
          WHERE te.clock_in_at BETWEEN ? AND ?
          ORDER BY u.last_name, te.clock_in_at`
       )
-      .all(toSql(from), toSql(to));
+      .all(toSql(from), toSql(to)));
 
     const esc = (v) => {
       const s = v == null ? '' : String(v);
@@ -1261,7 +1266,7 @@ adminRouter.get(
       ].map(esc).join(','));
     }
 
-    audit(req.user.id, 'export.timesheets', null, null, { rows: rows.length }, req.ip);
+    await audit(req.user.id, 'export.timesheets', null, null, { rows: rows.length }, req.ip);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="usc-timesheets-${from.toISOString().slice(0, 10)}.csv"`);
     res.send(lines.join('\n'));

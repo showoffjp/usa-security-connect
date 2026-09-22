@@ -21,10 +21,10 @@ authRouter.post(
   rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `code:${req.body?.employeeCode || 'none'}` }),
   wrap(async (req, res) => {
     const { employeeCode, pin, deviceId } = parse(loginSchema, req.body);
-    const { user, token } = authenticate({ employeeCode, pin, ip: req.ip });
+    const { user, token } = await authenticate({ employeeCode, pin, ip: req.ip });
 
     if (deviceId) {
-      audit(user.id, 'login.device', 'user', user.id, { deviceId }, req.ip);
+      await audit(user.id, 'login.device', 'user', user.id, { deviceId }, req.ip);
     }
 
     res.json({
@@ -66,15 +66,15 @@ authRouter.post(
     }
 
     const { hash, salt } = hashPin(newPin);
-    db.prepare(
+    (await db.prepare(
       `UPDATE users
        SET pin_hash = ?, pin_salt = ?, pin_set_at = datetime('now'),
            must_change_pin = 0, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(hash, salt, req.user.id);
+    ).run(hash, salt, req.user.id));
 
-    audit(req.user.id, 'pin.changed', 'user', req.user.id, null, req.ip);
-    const fresh = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id);
+    await audit(req.user.id, 'pin.changed', 'user', req.user.id, null, req.ip);
+    const fresh = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id));
 
     // Hand back a fresh token so the client drops the must-change-pin state.
     res.json({ ok: true, token: issueToken(fresh), user: publicUser(fresh) });
@@ -86,7 +86,7 @@ authRouter.get(
   requireAuth,
   wrap(async (req, res) => {
     const site = req.user.default_site_id
-      ? db.prepare(`SELECT id, name, address, city, state FROM sites WHERE id = ?`).get(req.user.default_site_id)
+      ? (await db.prepare(`SELECT id, name, address, city, state FROM sites WHERE id = ?`).get(req.user.default_site_id))
       : null;
     res.json({
       user: publicUser(req.user),
@@ -101,7 +101,7 @@ authRouter.post(
   requireAuth,
   wrap(async (req, res) => {
     // Tokens are stateless; the client discards it. Recorded for the audit trail.
-    audit(req.user.id, 'logout', 'user', req.user.id, null, req.ip);
+    await audit(req.user.id, 'logout', 'user', req.user.id, null, req.ip);
     res.json({ ok: true });
   })
 );

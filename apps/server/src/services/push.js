@@ -14,12 +14,12 @@ const BATCH_SIZE = 100;
 /** Expo tokens look like ExponentPushToken[xxxxxxxx]. */
 const looksValid = (token) => typeof token === 'string' && /^Expo(nent)?PushToken\[.+\]$/.test(token);
 
-export function registerDevice({ userId, token, platform, deviceId }) {
+export async function registerDevice({ userId, token, platform, deviceId }) {
   if (!looksValid(token)) return { ok: false, reason: 'invalid_token' };
 
   // A phone can be handed between officers, so the token belongs to whoever
   // signed in last rather than accumulating across accounts.
-  db.prepare(
+  (await db.prepare(
     `INSERT INTO device_tokens (user_id, token, platform, device_id)
      VALUES (?,?,?,?)
      ON CONFLICT(token) DO UPDATE SET
@@ -27,29 +27,29 @@ export function registerDevice({ userId, token, platform, deviceId }) {
        platform = excluded.platform,
        device_id = excluded.device_id,
        last_seen_at = datetime('now')`
-  ).run(userId, token, platform ?? null, deviceId ?? null);
+  ).run(userId, token, platform ?? null, deviceId ?? null));
 
   return { ok: true };
 }
 
-export function unregisterDevice(token) {
-  db.prepare(`DELETE FROM device_tokens WHERE token = ?`).run(token);
+export async function unregisterDevice(token) {
+  (await db.prepare(`DELETE FROM device_tokens WHERE token = ?`).run(token));
 }
 
-function tokensFor(userIds) {
+async function tokensFor(userIds) {
   if (!userIds?.length) return [];
   const placeholders = userIds.map(() => '?').join(',');
-  return db
+  return (await db
     .prepare(`SELECT token FROM device_tokens WHERE user_id IN (${placeholders})`)
-    .all(...userIds)
+    .all(...userIds))
     .map((r) => r.token);
 }
 
 /** Everyone who should hear about a compliance problem. */
-export function supervisorIds() {
-  return db
+export async function supervisorIds() {
+  return (await db
     .prepare(`SELECT id FROM users WHERE role IN ('supervisor','admin') AND status = 'active'`)
-    .all()
+    .all())
     .map((r) => r.id);
 }
 
@@ -60,7 +60,7 @@ export function supervisorIds() {
 export async function sendPush(userIds, { title, body, data, priority = 'default' } = {}) {
   if (process.env.USC_PUSH_DISABLED === '1') return { sent: 0, skipped: 'disabled' };
 
-  const tokens = tokensFor([...new Set(userIds || [])]);
+  const tokens = await tokensFor([...new Set(userIds || [])]);
   if (!tokens.length) return { sent: 0, skipped: 'no_devices' };
 
   const messages = tokens.map((to) => ({
@@ -85,18 +85,18 @@ export async function sendPush(userIds, { title, body, data, priority = 'default
       const payload = await res.json().catch(() => null);
       const tickets = payload?.data || [];
 
-      tickets.forEach((ticket, idx) => {
+      for (const [idx, ticket] of tickets.entries()) {
         if (ticket?.status === 'ok') {
           sent += 1;
-          return;
+          continue;
         }
         // A token for an uninstalled app is dead; stop sending to it.
         if (ticket?.details?.error === 'DeviceNotRegistered') {
-          unregisterDevice(batch[idx].to);
+          await unregisterDevice(batch[idx].to);
         } else {
           console.warn('[usc] push rejected', ticket?.message || ticket?.details?.error);
         }
-      });
+      }
     } catch (err) {
       console.error('[usc] push delivery failed', err.message);
     }
@@ -107,13 +107,15 @@ export async function sendPush(userIds, { title, body, data, priority = 'default
 
 /** Fire and forget: used from request handlers that must not wait on push. */
 export function pushAsync(userIds, message) {
+  // Deliberately not awaited: an officer's clock-in must not wait on, or fail
+  // because of, a third-party notification service.
   sendPush(userIds, message).catch((err) => console.error('[usc] push error', err.message));
 }
 
 /* ----------------------------------------------------- domain messages --- */
 
-export function notifyBroadcast(broadcast) {
-  const audience = db
+export async function notifyBroadcast(broadcast) {
+  const audience = (await db
     .prepare(
       `SELECT id FROM users
        WHERE status = 'active'
@@ -125,7 +127,7 @@ export function notifyBroadcast(broadcast) {
       broadcast.audience_role ?? null,
       broadcast.audience_site_id ?? null,
       broadcast.audience_site_id ?? null
-    )
+    ))
     .map((r) => r.id);
 
   const urgent = broadcast.priority === 'urgent';
@@ -141,8 +143,8 @@ export function notifyBroadcast(broadcast) {
  * Nudge officers whose status check-in is due, once each. `notified_at` keeps
  * the sweep from re-sending the same prompt every minute.
  */
-export function notifyDueCheckIns(now = new Date()) {
-  const due = db
+export async function notifyDueCheckIns(now = new Date()) {
+  const due = (await db
     .prepare(
       `SELECT sc.id, sc.user_id, sc.due_at, p.name AS post_name
        FROM status_checks sc
@@ -152,10 +154,10 @@ export function notifyDueCheckIns(now = new Date()) {
          AND sc.notified_at IS NULL
          AND sc.due_at <= ?`
     )
-    .all(now.toISOString().replace('T', ' ').slice(0, 19));
+    .all(now.toISOString().replace('T', ' ').slice(0, 19)));
 
   for (const check of due) {
-    db.prepare(`UPDATE status_checks SET notified_at = datetime('now') WHERE id = ?`).run(check.id);
+    (await db.prepare(`UPDATE status_checks SET notified_at = datetime('now') WHERE id = ?`).run(check.id));
     pushAsync([check.user_id], {
       title: 'Status check-in due',
       body: `Confirm you are on post at ${check.post_name}.`,
@@ -167,20 +169,20 @@ export function notifyDueCheckIns(now = new Date()) {
 }
 
 /** Tell supervisors about serious flags, once per flag. */
-export function notifyNewFlags() {
-  const flags = db
+export async function notifyNewFlags() {
+  const flags = (await db
     .prepare(
       `SELECT f.id, f.type, f.severity, u.first_name || ' ' || u.last_name AS officer
        FROM flags f JOIN users u ON u.id = f.user_id
        WHERE f.notified_at IS NULL AND f.resolved_at IS NULL AND f.severity = 'critical'`
     )
-    .all();
+    .all());
 
   if (!flags.length) return 0;
-  const recipients = supervisorIds();
+  const recipients = await supervisorIds();
 
   for (const flag of flags) {
-    db.prepare(`UPDATE flags SET notified_at = datetime('now') WHERE id = ?`).run(flag.id);
+    (await db.prepare(`UPDATE flags SET notified_at = datetime('now') WHERE id = ?`).run(flag.id));
     const labels = {
       missed_check_in: 'missed a status check-in',
       geofence_violation: 'clocked in away from the post',
@@ -196,10 +198,10 @@ export function notifyNewFlags() {
   return flags.length;
 }
 
-export function notifyMessage({ threadId, senderId, senderName, body }) {
-  const recipients = db
+export async function notifyMessage({ threadId, senderId, senderName, body }) {
+  const recipients = (await db
     .prepare(`SELECT user_id FROM thread_participants WHERE thread_id = ? AND user_id != ?`)
-    .all(threadId, senderId)
+    .all(threadId, senderId))
     .map((r) => r.user_id);
 
   pushAsync(recipients, {

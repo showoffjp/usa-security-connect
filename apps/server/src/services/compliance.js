@@ -15,11 +15,18 @@ import { RULES, FLAG_TYPES, FLAG_SEVERITY, minutesBetween } from '../shared.js';
 import { notifyDueCheckIns, notifyNewFlags } from './push.js';
 
 /** Store timestamps the way SQLite's datetime() does, so comparisons line up. */
-export const toSql = (d = new Date()) => new Date(d).toISOString().replace('T', ' ').slice(0, 19);
+/**
+ * Timestamp for binding into a query.
+ *
+ * Always a full ISO string with the Z: a naive 'YYYY-MM-DD HH:MM:SS' would be
+ * read in the server's session timezone rather than UTC, which shifts every
+ * clock event by the offset.
+ */
+export const toSql = (d = new Date()) => new Date(d).toISOString();
 export const fromSql = sqlToIso;
 
-export function raiseFlag({ userId, type, occurredAt, refType, refId, detail, severity }) {
-  return db
+export async function raiseFlag({ userId, type, occurredAt, refType, refId, detail, severity }) {
+  return (await db
     .prepare(
       `INSERT INTO flags (user_id, type, severity, occurred_at, ref_type, ref_id, detail)
        VALUES (?,?,?,?,?,?,?)
@@ -33,7 +40,7 @@ export function raiseFlag({ userId, type, occurredAt, refType, refId, detail, se
       refType ?? null,
       refId ?? null,
       detail ? (typeof detail === 'string' ? detail : JSON.stringify(detail)) : null
-    );
+    ));
 }
 
 /* ------------------------------------------------------------ check-ins --- */
@@ -42,45 +49,45 @@ export function raiseFlag({ userId, type, occurredAt, refType, refId, detail, se
  * Queue the next status check-in for an open shift.
  * Officers must acknowledge within `window_minutes` or the check is missed.
  */
-export function scheduleNextCheckIn(timeEntry, post) {
+export async function scheduleNextCheckIn(timeEntry, post) {
   const interval = post?.check_in_interval_min || RULES.defaultCheckInIntervalMinutes;
   if (!interval || interval <= 0) return null;
 
-  const open = db
+  const open = (await db
     .prepare(
       `SELECT * FROM status_checks
        WHERE time_entry_id = ? AND status = 'pending'
        ORDER BY due_at LIMIT 1`
     )
-    .get(timeEntry.id);
+    .get(timeEntry.id));
   if (open) return open;
 
-  const last = db
+  const last = (await db
     .prepare(`SELECT MAX(due_at) AS last_due FROM status_checks WHERE time_entry_id = ?`)
-    .get(timeEntry.id)?.last_due;
+    .get(timeEntry.id))?.last_due;
 
   const from = last ? new Date(fromSql(last)) : new Date(fromSql(timeEntry.clock_in_at));
   const due = new Date(from.getTime() + interval * 60000);
 
-  const info = db
+  const info = (await db
     .prepare(
       `INSERT INTO status_checks (time_entry_id, user_id, due_at, window_minutes)
        VALUES (?,?,?,?)`
     )
-    .run(timeEntry.id, timeEntry.user_id, toSql(due), RULES.checkInWindowMinutes);
+    .run(timeEntry.id, timeEntry.user_id, toSql(due), RULES.checkInWindowMinutes));
 
-  return db.prepare(`SELECT * FROM status_checks WHERE id = ?`).get(info.lastInsertRowid);
+  return (await db.prepare(`SELECT * FROM status_checks WHERE id = ?`).get(info.lastInsertRowid));
 }
 
 /** The check-in the officer is being asked for right now, if any. */
-export function currentCheckIn(timeEntryId) {
-  const row = db
+export async function currentCheckIn(timeEntryId) {
+  const row = (await db
     .prepare(
       `SELECT * FROM status_checks
        WHERE time_entry_id = ? AND status = 'pending'
        ORDER BY due_at LIMIT 1`
     )
-    .get(timeEntryId);
+    .get(timeEntryId));
   if (!row) return null;
 
   const dueAt = new Date(fromSql(row.due_at));
@@ -98,8 +105,8 @@ export function currentCheckIn(timeEntryId) {
   };
 }
 
-export function answerCheckIn({ checkId, userId, lat, lng, note }) {
-  const row = db.prepare(`SELECT * FROM status_checks WHERE id = ? AND user_id = ?`).get(checkId, userId);
+export async function answerCheckIn({ checkId, userId, lat, lng, note }) {
+  const row = (await db.prepare(`SELECT * FROM status_checks WHERE id = ? AND user_id = ?`).get(checkId, userId));
   if (!row || row.status !== 'pending') return null;
 
   const dueAt = new Date(fromSql(row.due_at));
@@ -107,14 +114,14 @@ export function answerCheckIn({ checkId, userId, lat, lng, note }) {
   // Answering after the window still counts, but it is recorded as late.
   const status = now > new Date(dueAt.getTime() + row.window_minutes * 60000) ? 'late' : 'ok';
 
-  db.prepare(
+  (await db.prepare(
     `UPDATE status_checks
      SET responded_at = ?, status = ?, latitude = ?, longitude = ?, note = ?
      WHERE id = ?`
-  ).run(toSql(now), status, lat ?? null, lng ?? null, note ?? null, checkId);
+  ).run(toSql(now), status, lat ?? null, lng ?? null, note ?? null, checkId));
 
   if (status === 'late') {
-    raiseFlag({
+    await raiseFlag({
       userId,
       type: FLAG_TYPES.MISSED_CHECK_IN,
       occurredAt: dueAt,
@@ -125,10 +132,10 @@ export function answerCheckIn({ checkId, userId, lat, lng, note }) {
     });
   }
 
-  const entry = db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(row.time_entry_id);
+  const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(row.time_entry_id));
   if (entry && !entry.clock_out_at) {
-    const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id);
-    scheduleNextCheckIn(entry, post);
+    const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
+    await scheduleNextCheckIn(entry, post);
   }
 
   return { ...row, status, responded_at: now.toISOString() };
@@ -137,8 +144,8 @@ export function answerCheckIn({ checkId, userId, lat, lng, note }) {
 /* --------------------------------------------------------------- sweeps --- */
 
 /** Status check-ins whose window has fully elapsed with no answer. */
-function sweepMissedCheckIns(now) {
-  const overdue = db
+async function sweepMissedCheckIns(now) {
+  const overdue = (await db
     .prepare(
       `SELECT sc.*, te.post_id
        FROM status_checks sc
@@ -146,11 +153,11 @@ function sweepMissedCheckIns(now) {
        WHERE sc.status = 'pending'
          AND datetime(sc.due_at, '+' || sc.window_minutes || ' minutes') < ?`
     )
-    .all(toSql(now));
+    .all(toSql(now)));
 
   for (const check of overdue) {
-    db.prepare(`UPDATE status_checks SET status = 'missed' WHERE id = ?`).run(check.id);
-    raiseFlag({
+    (await db.prepare(`UPDATE status_checks SET status = 'missed' WHERE id = ?`).run(check.id));
+    await raiseFlag({
       userId: check.user_id,
       type: FLAG_TYPES.MISSED_CHECK_IN,
       occurredAt: fromSql(check.due_at),
@@ -160,19 +167,19 @@ function sweepMissedCheckIns(now) {
     });
 
     // Keep the cadence going so the officer still gets the next prompt.
-    const entry = db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(check.time_entry_id);
+    const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(check.time_entry_id));
     if (entry && !entry.clock_out_at) {
-      const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id);
-      scheduleNextCheckIn(entry, post);
+      const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
+      await scheduleNextCheckIn(entry, post);
     }
   }
   return overdue.length;
 }
 
 /** Scheduled shifts nobody ever clocked into. */
-function sweepNoShows(now) {
+async function sweepNoShows(now) {
   const cutoff = toSql(new Date(now.getTime() - RULES.noShowMinutes * 60000));
-  const missed = db
+  const missed = (await db
     .prepare(
       `SELECT s.* FROM shifts s
        WHERE s.status = 'scheduled'
@@ -180,11 +187,11 @@ function sweepNoShows(now) {
          AND s.starts_at < ?
          AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.shift_id = s.id)`
     )
-    .all(cutoff);
+    .all(cutoff));
 
   for (const shift of missed) {
-    db.prepare(`UPDATE shifts SET status = 'missed' WHERE id = ?`).run(shift.id);
-    raiseFlag({
+    (await db.prepare(`UPDATE shifts SET status = 'missed' WHERE id = ?`).run(shift.id));
+    await raiseFlag({
       userId: shift.user_id,
       type: FLAG_TYPES.NO_SHOW,
       occurredAt: fromSql(shift.starts_at),
@@ -197,15 +204,15 @@ function sweepNoShows(now) {
 }
 
 /** Shifts still open long after they should have ended. */
-function sweepAbandonedShifts(now) {
-  const open = db
+async function sweepAbandonedShifts(now) {
+  const open = (await db
     .prepare(
       `SELECT te.*, s.ends_at
        FROM time_entries te
        LEFT JOIN shifts s ON s.id = te.shift_id
        WHERE te.clock_out_at IS NULL`
     )
-    .all();
+    .all());
 
   let closed = 0;
   for (const entry of open) {
@@ -216,17 +223,17 @@ function sweepAbandonedShifts(now) {
     if (now <= deadline) continue;
 
     const minutes = minutesBetween(fromSql(entry.clock_in_at), reference.toISOString());
-    db.prepare(
+    (await db.prepare(
       `UPDATE time_entries
        SET clock_out_at = ?, minutes_worked = ?, auto_closed = 1
        WHERE id = ?`
-    ).run(toSql(reference), Math.max(0, minutes), entry.id);
+    ).run(toSql(reference), Math.max(0, minutes), entry.id));
 
     if (entry.shift_id) {
-      db.prepare(`UPDATE shifts SET status = 'completed' WHERE id = ?`).run(entry.shift_id);
+      (await db.prepare(`UPDATE shifts SET status = 'completed' WHERE id = ?`).run(entry.shift_id));
     }
 
-    raiseFlag({
+    await raiseFlag({
       userId: entry.user_id,
       type: FLAG_TYPES.MISSED_CLOCK_OUT,
       occurredAt: reference,
@@ -246,19 +253,19 @@ function sweepAbandonedShifts(now) {
  * Run every sweep. Called on a timer by the server and again on demand from
  * the admin dashboard so a supervisor never looks at stale numbers.
  */
-export function sweep(now = new Date()) {
+export async function sweep(now = new Date()) {
   const result = { missedCheckIns: 0, noShows: 0, autoClosed: 0, notified: 0, alerted: 0 };
-  db.transaction(() => {
-    result.missedCheckIns = sweepMissedCheckIns(now);
-    result.noShows = sweepNoShows(now);
-    result.autoClosed = sweepAbandonedShifts(now);
+  await db.transaction(async () => {
+    result.missedCheckIns = await sweepMissedCheckIns(now);
+    result.noShows = await sweepNoShows(now);
+    result.autoClosed = await sweepAbandonedShifts(now);
   })();
 
   // Notifications run outside the transaction: they call out to a third-party
   // service, and a slow or failing push must never hold a database write open.
   try {
-    result.notified = notifyDueCheckIns(now);
-    result.alerted = notifyNewFlags();
+    result.notified = await notifyDueCheckIns(now);
+    result.alerted = await notifyNewFlags();
   } catch (err) {
     console.error('[usc] notification pass failed', err.message);
   }
@@ -267,15 +274,15 @@ export function sweep(now = new Date()) {
 }
 
 /** Background timer. Returns a stop function. */
-export function startComplianceWorker(intervalMs = 60000) {
-  const tick = () => {
+export async function startComplianceWorker(intervalMs = 60000) {
+  const tick = async () => {
     try {
-      sweep();
+      await sweep();
     } catch (err) {
       console.error('[usc] compliance sweep failed', err);
     }
   };
-  tick();
+  await tick();
   const handle = setInterval(tick, intervalMs);
   handle.unref?.();
   return () => clearInterval(handle);

@@ -35,11 +35,11 @@ const upload = multer({
 });
 
 /** USC-2026-0041 style reference, unique per year. */
-function nextRefNumber() {
+async function nextRefNumber() {
   const year = new Date().getFullYear();
-  const row = db
+  const row = (await db
     .prepare(`SELECT COUNT(*) AS n FROM incidents WHERE ref_number LIKE ?`)
-    .get(`USC-${year}-%`);
+    .get(`USC-${year}-%`));
   return `USC-${year}-${String(row.n + 1).padStart(4, '0')}`;
 }
 
@@ -72,16 +72,16 @@ incidentsRouter.post(
   wrap(async (req, res) => {
     // multipart bodies arrive as strings; zod coercion handles the numbers.
     const body = parse(incidentSchema, req.body);
-    const ref = nextRefNumber();
+    const ref = await nextRefNumber();
 
     const postId = body.postId || null;
     const siteId =
       body.siteId ||
-      (postId ? db.prepare(`SELECT site_id FROM posts WHERE id = ?`).get(postId)?.site_id : null) ||
+      (postId ? (await db.prepare(`SELECT site_id FROM posts WHERE id = ?`).get(postId))?.site_id : null) ||
       req.user.default_site_id ||
       null;
 
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO incidents
          (ref_number, user_id, site_id, post_id, tour_run_id, checkpoint_id, officer_name,
@@ -111,20 +111,20 @@ incidentsRouter.post(
         body.policeNotified ? 1 : 0,
         body.policeReportNumber ?? null,
         body.costRecovery != null ? Math.round(body.costRecovery * 100) : null
-      );
+      ));
 
     const incidentId = Number(info.lastInsertRowid);
 
     for (const file of req.files || []) {
-      db.prepare(
+      (await db.prepare(
         `INSERT INTO incident_photos (incident_id, filename, original_name, mime_type, size_bytes)
          VALUES (?,?,?,?,?)`
-      ).run(incidentId, file.filename, file.originalname, file.mimetype, file.size);
+      ).run(incidentId, file.filename, file.originalname, file.mimetype, file.size));
     }
 
-    audit(req.user.id, 'incident.created', 'incident', incidentId, { ref, severity: body.severity }, req.ip);
+    await audit(req.user.id, 'incident.created', 'incident', incidentId, { ref, severity: body.severity }, req.ip);
 
-    const row = db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incidentId);
+    const row = (await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incidentId));
     res.status(201).json({ incident: isoFields(row, TIMES), refNumber: ref, photos: (req.files || []).length });
   })
 );
@@ -161,7 +161,7 @@ incidentsRouter.get(
       params.push(q, q, q);
     }
 
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT i.*, s.name AS site_name, p.name AS post_name,
                 u.first_name || ' ' || u.last_name AS reported_by,
@@ -173,7 +173,7 @@ incidentsRouter.get(
          ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
          ORDER BY i.occurred_at DESC LIMIT ?`
       )
-      .all(...params, limit);
+      .all(...params, limit));
 
     res.json({ incidents: rows.map((r) => isoFields(r, TIMES)) });
   })
@@ -182,7 +182,7 @@ incidentsRouter.get(
 incidentsRouter.get(
   '/:id',
   wrap(async (req, res) => {
-    const row = db
+    const row = (await db
       .prepare(
         `SELECT i.*, s.name AS site_name, p.name AS post_name,
                 u.first_name || ' ' || u.last_name AS reported_by,
@@ -194,16 +194,16 @@ incidentsRouter.get(
          LEFT JOIN users r ON r.id = i.reviewed_by
          WHERE i.id = ?`
       )
-      .get(req.params.id);
+      .get(req.params.id));
 
     if (!row) throw new HttpError(404, 'Incident not found.');
     if (row.user_id !== req.user.id && !atLeast(req.user.role, ROLES.SUPERVISOR)) {
       throw new HttpError(403, 'You can only open your own reports.');
     }
 
-    const photos = db
+    const photos = (await db
       .prepare(`SELECT id, filename, original_name, caption FROM incident_photos WHERE incident_id = ?`)
-      .all(row.id);
+      .all(row.id));
 
     res.json({ incident: isoFields(row, TIMES), photos });
   })
@@ -213,14 +213,14 @@ incidentsRouter.get(
 incidentsRouter.get(
   '/:id/photos/:photoId',
   wrap(async (req, res) => {
-    const incident = db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(req.params.id);
+    const incident = (await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(req.params.id));
     if (!incident) throw new HttpError(404, 'Incident not found.');
     if (incident.user_id !== req.user.id && !atLeast(req.user.role, ROLES.SUPERVISOR)) {
       throw new HttpError(403, 'Not permitted.');
     }
-    const photo = db
+    const photo = (await db
       .prepare(`SELECT * FROM incident_photos WHERE id = ? AND incident_id = ?`)
-      .get(req.params.photoId, req.params.id);
+      .get(req.params.photoId, req.params.id));
     if (!photo) throw new HttpError(404, 'Photo not found.');
 
     const filePath = path.join(UPLOAD_DIR, photo.filename);
@@ -245,18 +245,18 @@ incidentsRouter.patch(
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
     const body = parse(reviewSchema, req.body);
-    const incident = db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(req.params.id);
+    const incident = (await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(req.params.id));
     if (!incident) throw new HttpError(404, 'Incident not found.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE incidents
        SET status = ?, review_notes = ?, severity = COALESCE(?, severity),
            reviewed_by = ?, reviewed_at = datetime('now')
        WHERE id = ?`
-    ).run(body.status, body.reviewNotes ?? null, body.severity ?? null, req.user.id, incident.id);
+    ).run(body.status, body.reviewNotes ?? null, body.severity ?? null, req.user.id, incident.id));
 
-    audit(req.user.id, 'incident.reviewed', 'incident', incident.id, { status: body.status }, req.ip);
-    res.json({ incident: isoFields(db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incident.id), TIMES) });
+    await audit(req.user.id, 'incident.reviewed', 'incident', incident.id, { status: body.status }, req.ip);
+    res.json({ incident: isoFields((await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incident.id)), TIMES) });
   })
 );
 
@@ -287,7 +287,7 @@ visitsRouter.post(
     const body = parse(visitSchema, req.body);
     const bit = (v) => (v == null ? null : v ? 1 : 0);
 
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO supervisor_visits
          (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok,
@@ -308,10 +308,10 @@ visitsRouter.post(
         body.notes ?? null,
         body.latitude ?? null,
         body.longitude ?? null
-      );
+      ));
 
-    audit(req.user.id, 'visit.logged', 'supervisor_visit', Number(info.lastInsertRowid), null, req.ip);
-    res.status(201).json({ visit: db.prepare(`SELECT * FROM supervisor_visits WHERE id = ?`).get(info.lastInsertRowid) });
+    await audit(req.user.id, 'visit.logged', 'supervisor_visit', Number(info.lastInsertRowid), null, req.ip);
+    res.status(201).json({ visit: (await db.prepare(`SELECT * FROM supervisor_visits WHERE id = ?`).get(info.lastInsertRowid)) });
   })
 );
 
@@ -320,7 +320,7 @@ visitsRouter.get(
   wrap(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const supervisorOnly = !atLeast(req.user.role, ROLES.ADMIN);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT v.*, s.name AS site_name, p.name AS post_name,
                 sup.first_name || ' ' || sup.last_name AS supervisor_name,
@@ -333,7 +333,7 @@ visitsRouter.get(
          ${supervisorOnly ? 'WHERE v.supervisor_id = ? OR v.officer_id = ?' : ''}
          ORDER BY v.visited_at DESC LIMIT ?`
       )
-      .all(...(supervisorOnly ? [req.user.id, req.user.id] : []), limit);
+      .all(...(supervisorOnly ? [req.user.id, req.user.id] : []), limit));
 
     res.json({ visits: rows.map((r) => isoFields(r, ['visited_at', 'created_at'])) });
   })

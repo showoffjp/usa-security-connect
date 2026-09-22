@@ -32,7 +32,7 @@ certificationsRouter.get(
   '/',
   wrap(async (req, res) => {
     const userId = targetUserId(req);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT c.*, v.first_name || ' ' || v.last_name AS verified_by_name
          FROM certifications c
@@ -40,7 +40,7 @@ certificationsRouter.get(
          WHERE c.user_id = ?
          ORDER BY c.expires_on IS NULL, c.expires_on`
       )
-      .all(userId);
+      .all(userId));
 
     res.json({
       certifications: rows.map((c) => ({
@@ -58,7 +58,7 @@ certificationsRouter.get(
   wrap(async (req, res) => {
     const days = Math.min(Number(req.query.days) || 60, 365);
 
-    const certs = db
+    const certs = (await db
       .prepare(
         `SELECT c.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer, u.status
          FROM certifications c
@@ -68,11 +68,11 @@ certificationsRouter.get(
            AND date(c.expires_on) <= date('now', '+' || ? || ' days')
          ORDER BY c.expires_on`
       )
-      .all(days);
+      .all(days));
 
     // The licence fields on the user record predate the certifications table,
     // so they are folded in here rather than being silently missed.
-    const licences = db
+    const licences = (await db
       .prepare(
         `SELECT id AS user_id, employee_code, first_name || ' ' || last_name AS officer,
                 license_type AS type, license_number AS number, license_expires_on AS expires_on
@@ -82,9 +82,9 @@ certificationsRouter.get(
            AND date(license_expires_on) <= date('now', '+' || ? || ' days')
          ORDER BY license_expires_on`
       )
-      .all(days);
+      .all(days));
 
-    const insurance = db
+    const insurance = (await db
       .prepare(
         `SELECT id AS user_id, employee_code, first_name || ' ' || last_name AS officer,
                 'Certificate of Insurance' AS type, NULL AS number, insurance_expires_on AS expires_on
@@ -95,7 +95,7 @@ certificationsRouter.get(
            AND date(insurance_expires_on) <= date('now', '+' || ? || ' days')
          ORDER BY insurance_expires_on`
       )
-      .all(days);
+      .all(days));
 
     const decorate = (row, source) => ({
       ...row,
@@ -128,7 +128,7 @@ certificationsRouter.post(
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
     const body = parse(certSchema, req.body);
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO certifications
          (user_id, type, number, issuing_authority, issued_on, expires_on, notes, verified_by, verified_at)
@@ -143,11 +143,11 @@ certificationsRouter.post(
         body.expiresOn || null,
         body.notes ?? null,
         req.user.id
-      );
+      ));
 
-    audit(req.user.id, 'certification.added', 'user', body.userId, { type: body.type }, req.ip);
+    await audit(req.user.id, 'certification.added', 'user', body.userId, { type: body.type }, req.ip);
     res.status(201).json({
-      certification: db.prepare(`SELECT * FROM certifications WHERE id = ?`).get(info.lastInsertRowid),
+      certification: (await db.prepare(`SELECT * FROM certifications WHERE id = ?`).get(info.lastInsertRowid)),
     });
   })
 );
@@ -156,8 +156,8 @@ certificationsRouter.delete(
   '/:id',
   requireRole(ROLES.ADMIN),
   wrap(async (req, res) => {
-    db.prepare(`DELETE FROM certifications WHERE id = ?`).run(req.params.id);
-    audit(req.user.id, 'certification.removed', 'certification', Number(req.params.id), null, req.ip);
+    (await db.prepare(`DELETE FROM certifications WHERE id = ?`).run(req.params.id));
+    await audit(req.user.id, 'certification.removed', 'certification', Number(req.params.id), null, req.ip);
     res.json({ ok: true });
   })
 );
@@ -173,9 +173,9 @@ availabilityRouter.get(
   '/',
   wrap(async (req, res) => {
     const userId = targetUserId(req);
-    const rows = db
+    const rows = (await db
       .prepare(`SELECT * FROM availability WHERE user_id = ? ORDER BY weekday`)
-      .all(userId);
+      .all(userId));
     res.json({ availability: rows });
   })
 );
@@ -205,9 +205,9 @@ availabilityRouter.put(
       throw new HttpError(403, 'You can only set your own availability.');
     }
 
-    db.transaction(() => {
+    await db.transaction(async () => {
       for (const day of body.days) {
-        db.prepare(
+        (await db.prepare(
           `INSERT INTO availability (user_id, weekday, start_time, end_time, available, note)
            VALUES (?,?,?,?,?,?)
            ON CONFLICT(user_id, weekday) DO UPDATE SET
@@ -215,12 +215,12 @@ availabilityRouter.put(
              end_time = excluded.end_time,
              available = excluded.available,
              note = excluded.note`
-        ).run(userId, day.weekday, day.startTime, day.endTime, day.available ? 1 : 0, day.note ?? null);
+        ).run(userId, day.weekday, day.startTime, day.endTime, day.available ? 1 : 0, day.note ?? null));
       }
     })();
 
-    audit(req.user.id, 'availability.updated', 'user', userId, null, req.ip);
-    res.json({ availability: db.prepare(`SELECT * FROM availability WHERE user_id = ? ORDER BY weekday`).all(userId) });
+    await audit(req.user.id, 'availability.updated', 'user', userId, null, req.ip);
+    res.json({ availability: (await db.prepare(`SELECT * FROM availability WHERE user_id = ? ORDER BY weekday`).all(userId)) });
   })
 );
 
@@ -233,7 +233,7 @@ timeOffRouter.get(
   '/',
   wrap(async (req, res) => {
     const all = req.query.scope === 'all' && atLeast(req.user.role, ROLES.SUPERVISOR);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT t.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
                 d.first_name || ' ' || d.last_name AS decided_by_name
@@ -244,7 +244,7 @@ timeOffRouter.get(
          ${req.query.status ? (all ? 'WHERE' : 'AND') + ' t.status = ?' : ''}
          ORDER BY t.starts_on DESC LIMIT 200`
       )
-      .all(...(all ? [] : [req.user.id]), ...(req.query.status ? [req.query.status] : []));
+      .all(...(all ? [] : [req.user.id]), ...(req.query.status ? [req.query.status] : [])));
 
     res.json({ requests: rows.map((r) => isoFields(r, ['created_at', 'decided_at'])) });
   })
@@ -268,32 +268,32 @@ timeOffRouter.post(
     const body = parse(timeOffSchema, req.body);
 
     // Overlapping requests just create confusion for whoever approves them.
-    const clash = db
+    const clash = (await db
       .prepare(
         `SELECT id FROM time_off_requests
          WHERE user_id = ? AND status IN ('pending','approved')
            AND date(starts_on) <= date(?) AND date(ends_on) >= date(?)`
       )
-      .get(req.user.id, body.endsOn, body.startsOn);
+      .get(req.user.id, body.endsOn, body.startsOn));
     if (clash) throw new HttpError(409, 'You already have a request covering those dates.');
 
-    const info = db
+    const info = (await db
       .prepare(
         `INSERT INTO time_off_requests (user_id, type, starts_on, ends_on, reason)
          VALUES (?,?,?,?,?)`
       )
-      .run(req.user.id, body.type, body.startsOn, body.endsOn, body.reason ?? null);
+      .run(req.user.id, body.type, body.startsOn, body.endsOn, body.reason ?? null));
 
-    audit(req.user.id, 'timeoff.requested', 'time_off_request', Number(info.lastInsertRowid), body, req.ip);
+    await audit(req.user.id, 'timeoff.requested', 'time_off_request', Number(info.lastInsertRowid), body, req.ip);
 
-    pushAsync(supervisorIds(), {
+    pushAsync(await supervisorIds(), {
       title: 'Time-off request',
       body: `${req.user.first_name} ${req.user.last_name} requested ${body.type} leave from ${body.startsOn}.`,
       data: { type: 'time_off', id: Number(info.lastInsertRowid) },
     });
 
     res.status(201).json({
-      request: db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(info.lastInsertRowid),
+      request: (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(info.lastInsertRowid)),
     });
   })
 );
@@ -308,27 +308,27 @@ timeOffRouter.patch(
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
     const body = parse(decisionSchema, req.body);
-    const request = db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(req.params.id);
+    const request = (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(req.params.id));
     if (!request) throw new HttpError(404, 'Request not found.');
     if (request.status !== 'pending') throw new HttpError(409, 'That request has already been decided.');
 
-    db.prepare(
+    (await db.prepare(
       `UPDATE time_off_requests
        SET status = ?, decided_by = ?, decided_at = datetime('now'), decision_note = ?
        WHERE id = ?`
-    ).run(body.status, req.user.id, body.note ?? null, request.id);
+    ).run(body.status, req.user.id, body.note ?? null, request.id));
 
     // An approved request with shifts already on the roster needs a human to
     // re-cover them, so say so plainly rather than silently unassigning.
-    const affected = db
+    const affected = (await db
       .prepare(
         `SELECT COUNT(*) AS n FROM shifts
          WHERE user_id = ? AND status = 'scheduled'
            AND date(starts_at) BETWEEN date(?) AND date(?)`
       )
-      .get(request.user_id, request.starts_on, request.ends_on).n;
+      .get(request.user_id, request.starts_on, request.ends_on)).n;
 
-    audit(req.user.id, `timeoff.${body.status}`, 'time_off_request', request.id, { affected }, req.ip);
+    await audit(req.user.id, `timeoff.${body.status}`, 'time_off_request', request.id, { affected }, req.ip);
 
     pushAsync([request.user_id], {
       title: `Time off ${body.status}`,
@@ -337,7 +337,7 @@ timeOffRouter.patch(
     });
 
     res.json({
-      request: db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(request.id),
+      request: (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(request.id)),
       shiftsToRecover: body.status === 'approved' ? affected : 0,
     });
   })
@@ -346,7 +346,7 @@ timeOffRouter.patch(
 timeOffRouter.delete(
   '/:id',
   wrap(async (req, res) => {
-    const request = db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(req.params.id);
+    const request = (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(req.params.id));
     if (!request) throw new HttpError(404, 'Request not found.');
     if (request.user_id !== req.user.id && !atLeast(req.user.role, ROLES.ADMIN)) {
       throw new HttpError(403, 'You can only withdraw your own request.');
@@ -354,7 +354,7 @@ timeOffRouter.delete(
     if (request.status !== 'pending' && !atLeast(req.user.role, ROLES.ADMIN)) {
       throw new HttpError(409, 'That request has already been decided.');
     }
-    db.prepare(`DELETE FROM time_off_requests WHERE id = ?`).run(request.id);
+    (await db.prepare(`DELETE FROM time_off_requests WHERE id = ?`).run(request.id));
     res.json({ ok: true });
   })
 );

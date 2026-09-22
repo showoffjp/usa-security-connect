@@ -30,7 +30,11 @@ export const nowIso = () => new Date().toISOString();
 /** Convert a SQLite "YYYY-MM-DD HH:MM:SS" (UTC) value into a real ISO string. */
 export function sqlToIso(value) {
   if (!value) return null;
+  // Postgres hands back timestamptz as a Date; dates as 'YYYY-MM-DD' strings.
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value !== 'string') return value;
   if (value.includes('T')) return value;
+  if (!value.includes(':')) return value; // a plain calendar date
   return value.replace(' ', 'T') + 'Z';
 }
 
