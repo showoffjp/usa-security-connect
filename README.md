@@ -119,9 +119,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   every step, so an officer without a current Class G licence cannot end up on an armed
   post; approving a claim automatically declines the officers who lost out.
 - **Invoices** — raised from hours already on the clock at the bill rate that applied,
-  one line per post. Preview before committing, tax and payment terms per invoice,
-  CSV export, and a receivables view with margin and an overdue count. A period that
-  overlaps an existing invoice is flagged before the same hours get billed twice.
+  one line per post. Preview before committing, tax and payment terms per invoice, a
+  printable invoice document and CSV export, and a receivables view with margin and an
+  overdue count. A period that overlaps an existing invoice is flagged before the same
+  hours get billed twice.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
 - **Timesheets** — hours by officer with the regular/overtime split **driven by
@@ -160,7 +161,8 @@ a PIN — and sees, for their own properties only:
   API rather than handed out as storage URLs.
 - **Daily activity report** — the same document the account manager reviews, laid out to
   print straight to PDF.
-- **Invoices** — their own issued invoices, with the hours and the rate charged.
+- **Invoices** — their own issued invoices, with the hours and the rate charged, as a
+  printable document they can save as a PDF.
 
 What a client can never see: another client's property, any pay rate, classification or
 margin, an officer's employment record, or the internal review notes on an incident.

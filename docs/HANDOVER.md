@@ -176,9 +176,12 @@ Honest list. None of it blocks going live, but you will want to know.
 - **No email.** Portal passwords, invoices and broadcasts are all read off the
   screen and sent by hand. Wiring a provider is the single highest-value
   addition.
-- **Invoices export as CSV, not PDF.** The daily activity report prints to PDF
-  through the browser; invoices do not. `window.print()` on a styled invoice
-  page would close the gap without a PDF library.
+- **Your company details are not filled in.** `COMPANY` in
+  `packages/shared/src/domain.js` has only the name and the state licence
+  number, because those are the only two facts this project knows. The address,
+  phone, email and payment instructions are blank and are simply omitted from
+  the printed invoice; the admin console says so on every invoice until they
+  are set. Fill them in before sending one to a client.
 - **Invoice cost is base pay only.** The overtime premium accrues to an
   officer's week, not to one client's site, and apportioning it across sites is
   a judgement call nobody has made yet. Margin is therefore slightly

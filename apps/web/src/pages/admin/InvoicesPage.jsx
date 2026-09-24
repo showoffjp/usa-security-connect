@@ -4,6 +4,8 @@ import { fmtDate, fmtMoney, fmtHours, toDateInput } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, Spinner, StatusChip, Stat, useToast,
 } from '../../components/ui.jsx';
+import { InvoiceSheet, printInvoice } from '../../components/InvoiceSheet.jsx';
+import { missingCompanyDetails } from '@shared/domain.js';
 
 /* --------------------------------------------------------- raise dialog -- */
 
@@ -276,6 +278,7 @@ function InvoiceDialog({ id, onClose, onChanged }) {
   };
 
   const invoice = data?.invoice;
+  const missing = missingCompanyDetails();
   const margin = invoice && invoice.subtotal_cents > 0
     ? Math.round(((invoice.subtotal_cents - invoice.cost_cents) / invoice.subtotal_cents) * 1000) / 10
     : null;
@@ -288,6 +291,9 @@ function InvoiceDialog({ id, onClose, onChanged }) {
       footer={
         invoice && (
           <>
+            <button className="btn btn-ghost" onClick={printInvoice}>
+              <Icon name="clipboard" size={16} /> Print / PDF
+            </button>
             <button className="btn btn-ghost" onClick={downloadCsv}>
               <Icon name="download" size={16} /> CSV
             </button>
@@ -330,69 +336,16 @@ function InvoiceDialog({ id, onClose, onChanged }) {
             {invoice.overdue_days > 0 && <Chip kind="danger">{invoice.overdue_days} days overdue</Chip>}
           </div>
 
-          <dl className="kv">
-            <dt>Client</dt>
-            <dd>{invoice.client_name || invoice.site_name}</dd>
-            <dt>Site</dt>
-            <dd>{invoice.site_name}</dd>
-            <dt>Period</dt>
-            <dd>
-              {fmtDate(invoice.period_start)} to {fmtDate(invoice.period_end)}
-            </dd>
-            <dt>Due</dt>
-            <dd>{invoice.due_on ? fmtDate(invoice.due_on) : '--'}</dd>
-            {invoice.notes && (
-              <>
-                <dt>Notes</dt>
-                <dd>{invoice.notes}</dd>
-              </>
-            )}
-          </dl>
+          {missing.length > 0 && (
+            <Banner kind="warn" title="This invoice is missing your company details">
+              No {missing.join(', ')} is set, so those lines are left off the printed
+              invoice. Fill them in at <code>COMPANY</code> in{' '}
+              <code>packages/shared/src/domain.js</code> before sending one to a client.
+            </Banner>
+          )}
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Post</th>
-                  <th scope="col">Hours</th>
-                  <th scope="col">Rate</th>
-                  <th scope="col">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.lines.map((l) => (
-                  <tr key={l.id}>
-                    <td>{l.description}</td>
-                    <td className="nowrap">{fmtHours(l.hours)}</td>
-                    <td className="nowrap">{fmtMoney(l.rate_cents)}/hr</td>
-                    <td className="nowrap strong">{fmtMoney(l.amount_cents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={3} className="muted">
-                    Subtotal
-                  </td>
-                  <td className="nowrap">{fmtMoney(invoice.subtotal_cents)}</td>
-                </tr>
-                {invoice.tax_cents > 0 && (
-                  <tr>
-                    <td colSpan={3} className="muted">
-                      Tax
-                    </td>
-                    <td className="nowrap">{fmtMoney(invoice.tax_cents)}</td>
-                  </tr>
-                )}
-                <tr>
-                  <td colSpan={3} className="strong">
-                    Total
-                  </td>
-                  <td className="nowrap strong">{fmtMoney(invoice.total_cents)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          {/* The document itself, so what is reviewed is what gets sent. */}
+          <InvoiceSheet invoice={invoice} lines={data.lines} site={invoice} />
 
           <Banner kind="info" title="Internal only">
             Direct labour cost {fmtMoney(invoice.cost_cents)}, margin {fmtMoney(invoice.subtotal_cents - invoice.cost_cents)}

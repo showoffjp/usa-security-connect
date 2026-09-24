@@ -520,6 +520,9 @@ const publicInvoice = (row) => ({
   number: row.number,
   site_id: row.site_id,
   site_name: row.site_name,
+  // Their own company name, so the invoice is addressed to them rather than
+  // to the property.
+  client_name: row.client_name,
   period_start: row.period_start,
   period_end: row.period_end,
   status: row.status,
@@ -542,7 +545,7 @@ clientRouter.get(
     // to see yet.
     const rows = await db
       .prepare(
-        `SELECT i.*, s.name AS site_name
+        `SELECT i.*, s.name AS site_name, s.client_name
          FROM invoices i JOIN sites s ON s.id = i.site_id
          WHERE s.id IN (${sql}) AND i.status IN ('sent','paid')
          ORDER BY i.period_end DESC, i.id DESC LIMIT 100`
@@ -563,7 +566,7 @@ clientRouter.get(
     const { sql, ids } = scope(req);
     const row = await db
       .prepare(
-        `SELECT i.*, s.name AS site_name, s.address, s.city, s.state, s.postal_code
+        `SELECT i.*, s.name AS site_name, s.client_name, s.address, s.city, s.state, s.postal_code
          FROM invoices i JOIN sites s ON s.id = i.site_id
          WHERE i.id = ? AND s.id IN (${sql}) AND i.status IN ('sent','paid')`
       )

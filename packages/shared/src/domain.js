@@ -407,6 +407,38 @@ export function isWeakPin(pin) {
 
 export const INCIDENT_REF_PREFIX = 'USC';
 
+/* ================================================================ company === */
+
+/**
+ * What appears at the top of an invoice.
+ *
+ * Only the name and the state licence number are filled in, because they are
+ * the only two facts this project actually knows. The rest is left blank
+ * deliberately: an address, a phone number or bank details invented here
+ * would be wrong in a way nobody would notice until a client tried to use
+ * them. Fill them in before sending a real invoice - every blank field is
+ * simply omitted from the document, and the admin console says so.
+ */
+export const COMPANY = {
+  name: 'USA Security & Protection Group',
+  licence: 'B 3400341',
+  addressLines: [],   // e.g. ['1200 Riverside Ave, Suite 400', 'Jacksonville, FL 32204']
+  phone: '',
+  email: '',
+  website: 'usasecuritygroup.com',
+  /** Free text under the totals: how to pay, terms, late fees. */
+  paymentTerms: '',
+};
+
+/** Which of the above still need filling in before an invoice goes out. */
+export const missingCompanyDetails = (company = COMPANY) =>
+  [
+    company.addressLines?.length ? null : 'address',
+    company.phone ? null : 'phone number',
+    company.email ? null : 'email address',
+    company.paymentTerms ? null : 'payment instructions',
+  ].filter(Boolean);
+
 /* ============================================================== invoicing === */
 
 export const INVOICE_STATUS = ['draft', 'sent', 'paid', 'void'];

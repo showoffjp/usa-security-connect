@@ -259,6 +259,26 @@ log(
   'lines show the rate charged but not the cost'
 );
 
+// Everything the printable invoice needs, and nothing it does not. The
+// document is addressed to the client's company, not to the property.
+log(
+  Boolean(clientDetail.data.invoice.client_name),
+  'the invoice is addressed to the client company',
+  clientDetail.data.invoice.client_name
+);
+log(
+  ['number', 'period_start', 'period_end', 'subtotal_cents', 'total_cents', 'site_name'].every(
+    (f) => clientDetail.data.invoice[f] !== undefined
+  ),
+  'and carries every field the printed document needs'
+);
+log(
+  clientDetail.data.invoice.cost_cents === undefined &&
+    clientDetail.data.invoice.margin_cents === undefined &&
+    clientDetail.data.invoice.created_by === undefined,
+  'while still withholding cost, margin and who raised it'
+);
+
 const marcus = (
   await call('/client/login', {
     method: 'POST',

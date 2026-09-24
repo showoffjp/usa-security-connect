@@ -12,6 +12,7 @@ import {
   Banner, Chip, Empty, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
 import { AuthedImage } from '../../components/AuthedImage.jsx';
+import { InvoiceSheet, printInvoice } from '../../components/InvoiceSheet.jsx';
 
 /* ------------------------------------------------------------ shared -- */
 
@@ -729,81 +730,26 @@ function InvoiceDialog({ id, onClose }) {
   const { data, error, loading, reload } = usePortal(`/client/invoices/${id}`, [id]);
 
   return (
-    <Modal title={data ? `Invoice ${data.invoice.number}` : 'Invoice'} onClose={onClose} wide>
+    <Modal
+      title={data ? `Invoice ${data.invoice.number}` : 'Invoice'}
+      onClose={onClose}
+      wide
+      footer={
+        data && (
+          <button className="btn btn-ghost" onClick={printInvoice}>
+            <Icon name="clipboard" size={16} /> Print / save PDF
+          </button>
+        )
+      }
+    >
       <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading the invoice">
         {data && (
           <div className="stack">
-            <div className="row wrap" style={{ gap: 8 }}>
-              <StatusChip value={data.invoice.status} />
-              {data.invoice.overdue_days > 0 && <Chip kind="danger">{data.invoice.overdue_days} days overdue</Chip>}
-            </div>
-
-            <dl className="kv">
-              <dt>Property</dt>
-              <dd>{data.invoice.site_name}</dd>
-              <dt>Period</dt>
-              <dd>
-                {fmtDate(data.invoice.period_start)} to {fmtDate(data.invoice.period_end)}
-              </dd>
-              <dt>Due</dt>
-              <dd>{data.invoice.due_on ? fmtDate(data.invoice.due_on) : '--'}</dd>
-              {data.invoice.notes && (
-                <>
-                  <dt>Notes</dt>
-                  <dd>{data.invoice.notes}</dd>
-                </>
-              )}
-            </dl>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Post</th>
-                    <th scope="col">Hours</th>
-                    <th scope="col">Rate</th>
-                    <th scope="col">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td>{l.description}</td>
-                      <td className="nowrap">{fmtHours(l.hours)}</td>
-                      <td className="nowrap">{fmtMoney(l.rate_cents)}/hr</td>
-                      <td className="nowrap strong">{fmtMoney(l.amount_cents)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={3} className="muted">
-                      Subtotal
-                    </td>
-                    <td className="nowrap">{fmtMoney(data.invoice.subtotal_cents)}</td>
-                  </tr>
-                  {data.invoice.tax_cents > 0 && (
-                    <tr>
-                      <td colSpan={3} className="muted">
-                        Tax
-                      </td>
-                      <td className="nowrap">{fmtMoney(data.invoice.tax_cents)}</td>
-                    </tr>
-                  )}
-                  <tr>
-                    <td colSpan={3} className="strong">
-                      Total
-                    </td>
-                    <td className="nowrap strong">{fmtMoney(data.invoice.total_cents)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <p className="tiny muted" style={{ marginBottom: 0 }}>
-              Every hour above comes from an officer's own clock-in and clock-out at your property. The coverage
-              record shows the same hours shift by shift.
-            </p>
+            {data.invoice.overdue_days > 0 && (
+              <Banner kind="warn">This invoice is {data.invoice.overdue_days} days past its due date.</Banner>
+            )}
+            {/* The same document the account manager sends, so they cannot differ. */}
+            <InvoiceSheet invoice={data.invoice} lines={data.lines} site={data.invoice} />
           </div>
         )}
       </Loaded>
