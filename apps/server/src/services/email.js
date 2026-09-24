@@ -12,8 +12,8 @@
  * nothing leaves the building and rows land as 'skipped' - visible in the
  * admin console, so "did the client get told?" has an answer either way.
  *
- * Secrets are never sent by email. A portal password is given to a contact by
- * their account manager; the message only tells them an account exists.
+ * Secrets are never sent by email. A portal contact chooses their own password
+ * through a single-use link, so no password ever exists for anyone to leak.
  */
 
 import { db } from '../lib/db.js';
@@ -120,15 +120,23 @@ export function sendAsync(message) {
 
 /* ------------------------------------------------------------ messages --- */
 
-const signOff = () => {
+/** `skip-link` for messages that already carry a link of their own. */
+const signOff = (mode) => {
   const url = publicUrl();
+  const showLink = mode !== 'skip-link';
   return [
     '',
-    url ? `Sign in: ${url}/portal` : 'Sign in to the client portal to see the detail.',
+    showLink
+      ? url
+        ? `Sign in: ${url}/portal`
+        : 'Sign in to the client portal to see the detail.'
+      : null,
     '',
     'USA Security & Protection Group',
     'Licensed Florida security agency - B 3400341',
-  ].join('\n');
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
 };
 
 const money = (cents) => `$${((cents || 0) / 100).toFixed(2)}`;
@@ -176,11 +184,14 @@ export async function notifyInvoiceIssued(invoice) {
 /**
  * Tell a new contact their portal account exists.
  *
- * Deliberately carries no password. Whoever creates the account reads it to
- * them; an emailed credential outlives the conversation in an inbox.
+ * Carries a single-use link rather than a password. A link expires on its own
+ * and works once; an emailed credential outlives the conversation in an inbox.
  */
-export async function notifyPortalAccount({ client, sites = [], reset = false }) {
-  const url = publicUrl();
+export async function notifyPortalAccount({ client, sites = [], reset = false, link, expiresAt }) {
+  const expires = expiresAt
+    ? new Date(expiresAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
+    : null;
+
   return send({
     to: client.email,
     name: client.name,
@@ -188,26 +199,28 @@ export async function notifyPortalAccount({ client, sites = [], reset = false })
     entity: 'client_user',
     entityId: client.id,
     subject: reset
-      ? 'Your client portal password has been reset'
+      ? 'Choose a new client portal password'
       : 'Your client portal account is ready',
     body: [
       `Dear ${client.name},`,
       '',
       reset
-        ? 'The password for your client portal account has been reset. Your account'
+        ? 'The password for your client portal account has been reset. Choose a new'
         : 'An account has been created for you on the USA Security Connect client',
-      reset
-        ? 'manager will pass the new password to you directly.'
-        : 'portal. Your account manager will pass your password to you directly.',
+      reset ? 'one using the link below.' : 'portal. Use the link below to choose your password.',
       '',
-      'For your security the password is never sent by email.',
+      link || 'Your account manager will send you a link to set your password.',
+      '',
+      expires ? `The link works once and expires on ${expires}.` : 'The link works once.',
+      '',
+      'We never send a password by email, and nobody here can see the one you',
+      'choose. If you did not expect this message, tell your account manager and',
+      'ignore the link - it expires on its own.',
       '',
       sites.length > 0 ? `You will see: ${sites.map((s) => s.name).join(', ')}.` : null,
-      '',
-      url ? `The portal is at ${url}/portal` : null,
-      'There you can see who was on post, patrol records, incident reports and',
-      'your invoices.',
-      signOff(),
+      'In the portal you can see who was on post, patrol records, incident reports',
+      'and your invoices.',
+      signOff('skip-link'),
     ]
       .filter((l) => l !== null)
       .join('\n'),

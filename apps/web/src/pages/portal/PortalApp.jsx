@@ -7,10 +7,11 @@
  */
 
 import { useState } from 'react';
-import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
 import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../components/ui.jsx';
 import PortalLogin from './PortalLogin.jsx';
+import SetPassword from './SetPassword.jsx';
 import {
   PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
 } from './PortalPages.jsx';
@@ -215,7 +216,22 @@ function PortalShell() {
 /* ------------------------------------------------------------ routing -- */
 
 function PortalRoutes() {
-  const { client, sites, notice, loading, signOut } = useClientAuth();
+  const { client, sites, notice, loading, signOut, refresh } = useClientAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Reachable without a session: it is how a contact gets one in the first
+  // place, so it has to come before the sign-in gate.
+  if (location.pathname.endsWith('/set-password')) {
+    return (
+      <SetPassword
+        onDone={async () => {
+          await refresh();
+          navigate('/portal', { replace: true });
+        }}
+      />
+    );
+  }
 
   if (loading) return <LoadingPage label="Opening your portal" />;
   if (!client) return <PortalLogin />;

@@ -68,13 +68,18 @@ const inviteBody = (await call(`/admin/emails/${invite.id}`, { token: admin })).
 
 // The single most important check here.
 log(
-  !inviteBody.body.includes(created.data.password),
-  'the generated password is NOT in the message'
+  !/password is\s+\S+/i.test(inviteBody.body) && created.data.password === undefined,
+  'there is no password anywhere - none was ever generated'
 );
 log(
-  /never sent by email/i.test(inviteBody.body),
-  'and the message says so explicitly'
+  inviteBody.body.includes(created.data.link),
+  'the message carries the single-use link'
 );
+log(
+  /never send a password by email/i.test(inviteBody.body),
+  'and says explicitly that a password is never emailed'
+);
+log(/works once/i.test(inviteBody.body), 'it tells them the link is single-use');
 log(inviteBody.body.includes('Coral Bay Retail Plaza'), 'it names the property they will see');
 
 /* ======================================================= password reset === */
@@ -93,7 +98,8 @@ const notice = afterReset.emails.find(
 log(Boolean(notice), 'a reset notice is recorded');
 
 const noticeBody = (await call(`/admin/emails/${notice.id}`, { token: admin })).data.email;
-log(!noticeBody.body.includes(reset.data.password), 'the new password is NOT in it either');
+log(reset.data.password === undefined, 'the reset returns no password either');
+log(noticeBody.body.includes(reset.data.link), 'the reset notice carries its own link');
 
 /* ====================================================== invoice issued === */
 section('issuing an invoice tells the client');

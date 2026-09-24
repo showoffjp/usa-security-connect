@@ -112,13 +112,13 @@ function ReceiptsDialog({ broadcast, onClose }) {
           <div className="stat">
             <div className="label">Read</div>
             <div className="value">{read}/{receipts.length}</div>
-            <div className="foot"><Progress value={read} max={receipts.length} ok={read === receipts.length} /></div>
+            <div className="foot"><Progress label="Officers who have read it" value={read} max={receipts.length} ok={read === receipts.length} /></div>
           </div>
           {Boolean(broadcast.requires_ack) && (
             <div className="stat">
               <div className="label">Acknowledged</div>
               <div className="value">{acked}/{receipts.length}</div>
-              <div className="foot"><Progress value={acked} max={receipts.length} ok={acked === receipts.length} /></div>
+              <div className="foot"><Progress label="Officers who have acknowledged it" value={acked} max={receipts.length} ok={acked === receipts.length} /></div>
             </div>
           )}
         </div>
@@ -238,7 +238,11 @@ export default function BroadcastsPage() {
                     <Icon name="eye" size={14} /> Receipts
                   </button>
                   {isAdmin && (
-                    <button className="btn btn-sm btn-ghost" onClick={() => remove(b)}>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      aria-label={`Delete broadcast: ${b.title}`}
+                      onClick={() => remove(b)}
+                    >
                       <Icon name="x" size={14} />
                     </button>
                   )}

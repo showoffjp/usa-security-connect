@@ -53,6 +53,113 @@ export function generatePassword() {
 
 export const passwordIsStrongEnough = (password) => String(password || '').length >= 12;
 
+/* -------------------------------------------------- set-password links --- */
+
+/**
+ * How long a link lives.
+ *
+ * An invitation is sent to somebody who may not read email for a few days. A
+ * reset is a response to something happening now, so it is deliberately short.
+ */
+export const TOKEN_HOURS = {
+  invite: Number(process.env.USC_INVITE_HOURS) || 168, // seven days
+  reset: Number(process.env.USC_RESET_HOURS) || 24,
+};
+
+/** Only ever store the hash: a leaked table must not yield working links. */
+const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+/**
+ * Mint a link for a contact to choose their own password.
+ *
+ * Any earlier unused token for that contact is expired first, so the most
+ * recent link is the only one that works - otherwise an old invitation
+ * forwarded to the wrong person stays live.
+ */
+export async function createPasswordToken({ clientUserId, purpose = 'invite', createdBy = null }) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const hours = TOKEN_HOURS[purpose] ?? TOKEN_HOURS.reset;
+  const expiresAt = new Date(Date.now() + hours * 3600000);
+
+  await db
+    .prepare(
+      `UPDATE client_password_tokens SET expires_at = now()
+       WHERE client_user_id = ? AND used_at IS NULL AND expires_at > now()`
+    )
+    .run(clientUserId);
+
+  await db
+    .prepare(
+      `INSERT INTO client_password_tokens (client_user_id, token_hash, purpose, expires_at, created_by)
+       VALUES (?,?,?,?,?)`
+    )
+    .run(clientUserId, hashToken(token), purpose, expiresAt.toISOString(), createdBy);
+
+  return { token, expiresAt, purpose };
+}
+
+/** The contact behind a link, or null when it is unknown, used or expired. */
+export async function readPasswordToken(token) {
+  if (!token) return null;
+  const row = await db
+    .prepare(
+      `SELECT t.*, c.email, c.name, c.company, c.status
+       FROM client_password_tokens t
+       JOIN client_users c ON c.id = t.client_user_id
+       WHERE t.token_hash = ?`
+    )
+    .get(hashToken(token));
+
+  if (!row) return null;
+  if (row.used_at) return { ...row, valid: false, reason: 'used' };
+  if (new Date(row.expires_at) <= new Date()) return { ...row, valid: false, reason: 'expired' };
+  if (row.status !== 'active') return { ...row, valid: false, reason: 'inactive' };
+  return { ...row, valid: true };
+}
+
+/**
+ * Set the password a link was issued for.
+ *
+ * The token is spent and every existing session for that contact is retired,
+ * in one transaction: a half-applied password change is worse than a failed
+ * one.
+ */
+export async function consumePasswordToken({ token, password }) {
+  const record = await readPasswordToken(token);
+  if (!record) throw new HttpError(404, 'That link is not valid. Ask your account manager for a new one.');
+  if (!record.valid) {
+    const message = {
+      used: 'That link has already been used. Ask your account manager for a new one.',
+      expired: 'That link has expired. Ask your account manager for a new one.',
+      inactive: 'This account is not active. Contact your account manager.',
+    }[record.reason];
+    throw new HttpError(410, message);
+  }
+  if (!passwordIsStrongEnough(password)) {
+    throw new HttpError(422, 'Please correct the highlighted fields.', [
+      { field: 'password', message: 'Use at least 12 characters.' },
+    ]);
+  }
+
+  const { hash, salt } = hashPassword(password);
+
+  await db.transaction(async () => {
+    await db
+      .prepare(`UPDATE client_password_tokens SET used_at = now() WHERE id = ?`)
+      .run(record.id);
+    await db
+      .prepare(
+        `UPDATE client_users
+         SET password_hash = ?, password_salt = ?, token_version = token_version + 1,
+             failed_attempts = 0, locked_until = NULL
+         WHERE id = ?`
+      )
+      .run(hash, salt, record.client_user_id);
+  })();
+
+  return db.prepare(`SELECT * FROM client_users WHERE id = ?`).get(record.client_user_id);
+}
+
 /* ---------------------------------------------------------------- token --- */
 
 export const issueClientToken = (client) =>

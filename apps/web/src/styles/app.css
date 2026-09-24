@@ -19,20 +19,26 @@
   --ink: #171717;
   --ink-2: #292929;
   --ink-3: #4a4a4a;
-  --muted: #7e7e7e;
+  /* Secondary text sits on white and on the off-white surface, so it has to
+     clear 4.5:1 against the darker of the two. The original #7e7e7e was
+     4.05:1 on white and failed on every screen; this is the lightest grey
+     that passes on #f6f7f9 as well. */
+  --muted: #6b6b6b;
   --line: #e5e5e5;
   --line-2: #d4d4d4;
   --surface: #ffffff;
   --surface-2: #f6f7f9;
   --surface-3: #f0f2f5;
 
-  --ok: #1e8e4e;
+  /* Chip text sits on its own tinted background, so these are the darkened
+     variants that clear 4.5:1 there rather than on white. */
+  --ok: #157038;
   --ok-bg: #e3f7ec;
-  --warn: #b26a00;
+  --warn: #8a5200;
   --warn-bg: #fdf0df;
-  --danger: #c0392b;
+  --danger: #a82a1c;
   --danger-bg: #fdecea;
-  --info: #1b6fb8;
+  --info: #145d9e;
   --info-bg: #e4f0fa;
 
   --r-sm: 6px;
@@ -238,6 +244,8 @@ table.data tr.clickable { cursor: pointer; }
 .topbar .brand .name { font-weight: 800; font-size: 0.95rem; letter-spacing: -0.01em; line-height: 1.1; }
 .topbar .brand .sub { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.68; }
 .topbar .spacer { flex: 1; }
+/* .muted is tuned for a light surface; on the navy bar it needs the opposite. */
+.topbar .muted { color: rgba(255, 255, 255, 0.78); }
 .topbar .duty {
   display: inline-flex; align-items: center; gap: 7px;
   background: rgba(255, 255, 255, 0.12); padding: 5px 11px; border-radius: 999px;
@@ -295,7 +303,9 @@ table.data tr.clickable { cursor: pointer; }
 }
 .sidebar .group {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.4); font-weight: 700; padding: 14px 10px 6px;
+  /* 0.4 alpha on the navy came out at 3.79:1, under the 4.5 needed for text
+     this small. 0.62 reads the same as a quiet section label and clears it. */
+  color: rgba(255, 255, 255, 0.62); font-weight: 700; padding: 14px 10px 6px;
 }
 .sidebar a {
   display: flex; align-items: center; gap: 10px;

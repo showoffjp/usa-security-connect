@@ -24,6 +24,8 @@ import {
   verifyPassword,
   passwordIsStrongEnough,
   issueClientToken,
+  readPasswordToken,
+  consumePasswordToken,
 } from '../lib/clientAuth.js';
 import { toHours, daysOverdue } from '../shared.js';
 import * as storage from '../services/storage.js';
@@ -79,12 +81,68 @@ const loginSchema = z.object({
 
 clientRouter.post(
   '/login',
-  rateLimit({ windowMs: 5 * 60000, max: 20, key: (req) => `ip:${req.ip}` }),
+  // Several contacts at one company share an office IP, so the per-address
+  // allowance is generous; the meaningful limit is per email address.
+  rateLimit({ windowMs: 5 * 60000, max: 60, key: (req) => `ip:${req.ip}` }),
   rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `email:${req.body?.email || 'none'}` }),
   wrap(async (req, res) => {
     const body = parse(loginSchema, req.body);
     const { client, token } = await authenticateClient({ ...body, ip: req.ip });
     res.json({ token, client: publicClient(client), mustChangePassword: false });
+  })
+);
+
+/* ------------------------------------------------- choosing a password --- */
+
+/**
+ * What is behind a set-password link, without spending it.
+ *
+ * Lets the page say "this link has expired" before somebody types a password
+ * into a form that was never going to work.
+ */
+clientRouter.get(
+  '/set-password/:token',
+  rateLimit({ windowMs: 5 * 60000, max: 30, key: (req) => `token-check:${req.ip}` }),
+  wrap(async (req, res) => {
+    const record = await readPasswordToken(req.params.token);
+    if (!record) throw new HttpError(404, 'That link is not valid. Ask your account manager for a new one.');
+    res.json({
+      valid: record.valid,
+      reason: record.reason || null,
+      // Enough to reassure them the link is theirs; nothing they did not know.
+      name: record.valid ? record.name : null,
+      email: record.valid ? record.email : null,
+      purpose: record.purpose,
+      expiresAt: sqlToIso(record.expires_at),
+    });
+  })
+);
+
+clientRouter.post(
+  '/set-password',
+  rateLimit({ windowMs: 5 * 60000, max: 15, key: (req) => `set-password:${req.ip}` }),
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({
+        token: z.string().min(10, 'That link is not valid.'),
+        password: z.string().min(12, 'Use at least 12 characters.'),
+        confirmPassword: z.string().min(1, 'Confirm the password.'),
+      }),
+      req.body
+    );
+
+    if (body.password !== body.confirmPassword) {
+      throw new HttpError(422, 'Please correct the highlighted fields.', [
+        { field: 'confirmPassword', message: 'The two passwords do not match.' },
+      ]);
+    }
+
+    const client = await consumePasswordToken({ token: body.token, password: body.password });
+    await audit(null, 'client.password_set', 'client_user', client.id, null, req.ip);
+
+    // Straight into the portal: making them retype what they just chose is
+    // friction with nothing behind it.
+    res.json({ token: issueClientToken(client), client: publicClient(client) });
   })
 );
 

@@ -83,22 +83,57 @@ export const errorHandler = (err, req, res, _next) => {
   });
 };
 
-/** Naive in-memory rate limiter - enough for a single-instance deployment. */
+/**
+ * Rate limiting, counted in the database.
+ *
+ * An in-process counter is per-instance, and a serverless deployment runs as
+ * many instances as it feels like - so an attacker spreading attempts across
+ * them sees no limit at all. One row per key, updated atomically, gives one
+ * shared count however many instances are running.
+ *
+ * The update is a single statement on purpose: read-then-write would let two
+ * concurrent requests both read the same count and both be allowed.
+ *
+ * If the database itself is unreachable the request is allowed through. That
+ * is not a hole worth worrying about - the thing being protected is a login,
+ * which cannot succeed without the database either.
+ */
 export function rateLimit({ windowMs = 60000, max = 30, key = (req) => req.ip } = {}) {
-  const hits = new Map();
   return (req, res, next) => {
-    const k = key(req);
-    const now = Date.now();
-    const entry = hits.get(k);
-    if (!entry || now > entry.resetAt) {
-      hits.set(k, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-    entry.count += 1;
-    if (entry.count > max) {
-      res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
-      return next(new HttpError(429, 'Too many requests. Please slow down.'));
-    }
-    next();
+    (async () => {
+      const { db } = await import('./db.js');
+      const resetAt = new Date(Date.now() + windowMs).toISOString();
+
+      const row = await db
+        .prepare(
+          `INSERT INTO rate_limits (key, count, reset_at)
+           VALUES (?, 1, ?)
+           ON CONFLICT (key) DO UPDATE SET
+             count = CASE WHEN rate_limits.reset_at <= now() THEN 1 ELSE rate_limits.count + 1 END,
+             reset_at = CASE WHEN rate_limits.reset_at <= now() THEN ? ELSE rate_limits.reset_at END
+           RETURNING count, reset_at`
+        )
+        .get(key(req), resetAt, resetAt);
+
+      if (row && row.count > max) {
+        const seconds = Math.max(1, Math.ceil((new Date(row.reset_at) - Date.now()) / 1000));
+        res.setHeader('Retry-After', seconds);
+        throw new HttpError(429, 'Too many requests. Please slow down.');
+      }
+    })().then(
+      () => next(),
+      (err) => {
+        if (err instanceof HttpError) return next(err);
+        console.error('[usc] rate limit check failed, allowing request:', err.message);
+        next();
+      }
+    );
   };
+}
+
+/** Drop spent counters. Called by the compliance sweep. */
+export async function pruneRateLimits() {
+  const { db } = await import('./db.js');
+  const res = await db.prepare(`DELETE FROM rate_limits WHERE reset_at <= now()`).run();
+  return res?.changes ?? 0;
 }

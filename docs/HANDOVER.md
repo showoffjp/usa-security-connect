@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-305 checks across seven suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+338 checks across eight suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -150,9 +150,14 @@ bundle for both platforms.
 | `smoke.mjs` | 45 | auth, lockout, geofencing, tours, training, scheduling, payroll export |
 | `features.mjs` | 62 | classification, overtime, margin, certifications, time off, breaks, duress, DAR, maps, photos, push |
 | `shifts.mjs` | 31 | open shifts, claims, swaps, drops, the armed-post licence rule |
-| `portal.mjs` | 74 | client scoping, token separation, and that no pay data leaks |
+| `portal.mjs` | 80 | client scoping, token separation, and that no pay data leaks |
 | `invoices.mjs` | 55 | billing arithmetic, status transitions, what clients may see |
-| `email.mjs` | 29 | what is composed and addressed, and that no password is in it |
+| `email.mjs` | 32 | what is composed and addressed, and that no password is in it |
+| `security.mjs` | 24 | set-password links, and the shared rate limiter |
+
+There is also an accessibility audit, run separately because it needs a
+browser: `npm run test:a11y --workspace @usc/web` drives all 35 screens
+through axe-core with the API and web app running.
 
 **The suites are mostly adversarial, deliberately.** `portal.mjs` walks every
 response looking for forbidden keys rather than trusting the SELECT lists;
@@ -186,10 +191,9 @@ Honest list. None of it blocks going live, but you will want to know.
   two moments send anything today: an invoice being issued, and a portal
   account being created or reset. Broadcasts and flag alerts are still
   in-app only.
-- **Portal passwords are still handed over verbally**, on purpose - an emailed
-  credential outlives the conversation in an inbox. The proper fix is a
-  single-use set-password link rather than emailing the password; the token
-  table and expiry are not built.
+- **Nothing is emailed automatically until a provider is configured.** Portal
+  invitations and invoice notices land in the outbox as 'skipped' and an admin
+  sends them by hand from there.
 - **Your company details are not filled in.** `COMPANY` in
   `packages/shared/src/domain.js` has only the name and the state licence
   number, because those are the only two facts this project knows. The address,
@@ -200,13 +204,14 @@ Honest list. None of it blocks going live, but you will want to know.
   officer's week, not to one client's site, and apportioning it across sites is
   a judgement call nobody has made yet. Margin is therefore slightly
   optimistic on weeks with overtime. This is stated in the UI.
-- **The rate limiter is per-instance and in memory.** Fine for one Vercel
-  function; a second concurrent instance gets its own counters. Move it to the
-  database or a KV store before it matters.
-- **No automated accessibility test.** The pass was done by sweeping every
-  screen in a real browser for unlabelled controls, missing names and missing
-  alt text. That sweep is not automated, so it will drift. `axe-core` in a
-  Playwright run would keep it honest.
+- **Rate-limit counters are rows, and they are written on every login
+  attempt.** That is one extra write per attempt. It is the right trade at this
+  size; at a much larger one it belongs in a KV store.
+- **The accessibility audit needs a browser on the machine.** It drives
+  whichever Chromium-based browser is installed rather than downloading
+  Playwright's own, so CI would need `npx playwright install chromium` or a
+  runner image with Chrome. It is not wired into CI for that reason - run it
+  yourself with `npm run test:a11y --workspace @usc/web`.
 - **Retention is not implemented.** GPS traces on every check-in accumulate
   forever. Decide a policy with counsel and write the sweep.
 

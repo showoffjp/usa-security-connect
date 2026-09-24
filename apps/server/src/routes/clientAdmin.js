@@ -10,14 +10,23 @@ import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { hashPassword, generatePassword, publicClient } from '../lib/clientAuth.js';
+import { publicClient, createPasswordToken } from '../lib/clientAuth.js';
 import { ROLES } from '../shared.js';
-import { notifyPortalAccount } from '../services/email.js';
+import { notifyPortalAccount, publicUrl } from '../services/email.js';
 
 export const clientAdminRouter = Router();
 clientAdminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
 
 const onlyAdmin = requireRole(ROLES.ADMIN);
+
+/**
+ * The link a contact follows to choose their password.
+ *
+ * Falls back to a bare path when USC_PUBLIC_URL is unset, so a developer
+ * still gets something they can paste after localhost.
+ */
+const setPasswordLink = (token) =>
+  `${publicUrl() || ''}/portal/set-password?token=${encodeURIComponent(token)}`;
 const TIMES = ['created_at', 'last_login_at'];
 
 const contactSchema = z.object({
@@ -95,16 +104,15 @@ clientAdminRouter.post(
       throw new HttpError(409, 'A portal login already exists for that email address.');
     }
 
-    // Generated rather than chosen, so a weak password never reaches the table.
-    const password = generatePassword();
-    const { hash, salt } = hashPassword(password);
-
+    // No password is set here at all. The contact chooses their own through a
+    // single-use link, so one never exists in a form somebody could read out,
+    // paste into a chat, or leave in an inbox.
     const created = await db
       .prepare(
-        `INSERT INTO client_users (email, name, company, password_hash, password_salt, created_by)
-         VALUES (?,?,?,?,?,?)`
+        `INSERT INTO client_users (email, name, company, created_by)
+         VALUES (?,?,?,?)`
       )
-      .run(body.email.trim(), body.name.trim(), body.company?.trim() || null, hash, salt, req.user.id);
+      .run(body.email.trim(), body.name.trim(), body.company?.trim() || null, req.user.id);
 
     const id = Number(created.lastInsertRowid);
     await setSites(id, body.siteIds);
@@ -118,12 +126,19 @@ clientAdminRouter.post(
           .prepare(`SELECT name FROM sites WHERE id IN (${body.siteIds.map(() => '?').join(',')})`)
           .all(...body.siteIds)
       : [];
-    const notice = await notifyPortalAccount({ client: row, sites });
+    const { token, expiresAt } = await createPasswordToken({
+      clientUserId: id,
+      purpose: 'invite',
+      createdBy: req.user.id,
+    });
+    const link = setPasswordLink(token);
+    const notice = await notifyPortalAccount({ client: row, sites, link, expiresAt });
 
     res.status(201).json({
       client: isoFields(publicClient(row), TIMES),
-      password,
-      note: 'Send this to the contact now. It is not stored and cannot be shown again.',
+      link,
+      expiresAt: expiresAt.toISOString(),
+      note: 'Send this link to the contact. It works once and cannot be shown again.',
       emailed: notice.ok,
     });
   })
@@ -180,27 +195,34 @@ clientAdminRouter.post(
     const client = await db.prepare(`SELECT * FROM client_users WHERE id = ?`).get(req.params.id);
     if (!client) throw new HttpError(404, 'Client login not found.');
 
-    const password = generatePassword();
-    const { hash, salt } = hashPassword(password);
-    // Bumping the version ends any session the contact still had open, which
-    // is the point of a reset when a laptop has gone missing.
+    // The old password stops working immediately and every open session goes
+    // with it - that is the point of a reset when a laptop has gone missing.
+    // The contact then chooses a new one through the link.
     await db
       .prepare(
         `UPDATE client_users
-         SET password_hash = ?, password_salt = ?, token_version = token_version + 1,
+         SET password_hash = NULL, password_salt = NULL,
+             token_version = token_version + 1,
              failed_attempts = 0, locked_until = NULL
          WHERE id = ?`
       )
-      .run(hash, salt, client.id);
+      .run(client.id);
 
     await audit(req.user.id, 'client.password_reset', 'client_user', client.id, null, req.ip);
 
-    const notice = await notifyPortalAccount({ client, reset: true });
+    const { token, expiresAt } = await createPasswordToken({
+      clientUserId: client.id,
+      purpose: 'reset',
+      createdBy: req.user.id,
+    });
+    const link = setPasswordLink(token);
+    const notice = await notifyPortalAccount({ client, reset: true, link, expiresAt });
 
     res.json({
       email: client.email,
-      password,
-      note: 'Send this to the contact now. It is not stored and cannot be shown again.',
+      link,
+      expiresAt: expiresAt.toISOString(),
+      note: 'Send this link to the contact. It works once and cannot be shown again.',
       emailed: notice.ok,
     });
   })

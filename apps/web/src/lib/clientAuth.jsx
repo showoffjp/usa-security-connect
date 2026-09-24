@@ -93,9 +93,21 @@ export function ClientAuthProvider({ children }) {
     signOutLocal();
   }, [signOutLocal]);
 
+  /** Re-read the session, for when a token arrives from outside sign-in. */
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      await loadMe();
+    } catch {
+      signOutLocal();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadMe, signOutLocal]);
+
   const value = useMemo(
-    () => ({ client, sites, notice, loading, signIn, signOut, changePassword }),
-    [client, sites, notice, loading, signIn, signOut, changePassword]
+    () => ({ client, sites, notice, loading, signIn, signOut, changePassword, refresh }),
+    [client, sites, notice, loading, signIn, signOut, changePassword, refresh]
   );
 
   return <ClientAuthContext.Provider value={value}>{children}</ClientAuthContext.Provider>;

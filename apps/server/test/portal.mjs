@@ -209,7 +209,17 @@ const created = await call('/admin/clients', {
     siteIds: [],
   },
 });
-log(created.status === 201 && created.data.password?.length >= 12, 'a login is created with a generated password');
+log(created.status === 201, 'a login is created');
+log(
+  /\/portal\/set-password\?token=/.test(created.data?.link || ''),
+  'and comes back with a set-password link, not a password'
+);
+log(created.data.password === undefined, 'no password is returned at all');
+
+/** Pull the token out of a set-password link. */
+const tokenFrom = (link) => new URL(link, 'http://localhost').searchParams.get('token');
+
+const NINA_PASSWORD = 'coral-bay-portal-2026';
 
 const duplicate = await call('/admin/clients', {
   token: admin,
@@ -218,8 +228,29 @@ const duplicate = await call('/admin/clients', {
 });
 log(duplicate.status === 409, 'the same email cannot be added twice, whatever the case', duplicate.data?.error);
 
+// Setting a password through the link signs them straight in.
+const setup = await call('/client/set-password', {
+  method: 'POST',
+  body: {
+    token: tokenFrom(created.data.link),
+    password: NINA_PASSWORD,
+    confirmPassword: NINA_PASSWORD,
+  },
+});
+log(setup.status === 200 && Boolean(setup.data.token), 'the link sets a password and signs them in');
+
+const reused = await call('/client/set-password', {
+  method: 'POST',
+  body: {
+    token: tokenFrom(created.data.link),
+    password: 'another-long-password',
+    confirmPassword: 'another-long-password',
+  },
+});
+log(reused.status === 410, 'the same link cannot be used twice', reused.data?.error);
+
 // A contact with no sites is told why the portal is empty rather than shown one.
-const ninaToken = await portalSignIn('nina.alvarez@coralbaypg.com', created.data.password);
+const ninaToken = await portalSignIn('nina.alvarez@coralbaypg.com', NINA_PASSWORD);
 const ninaOverview = await call('/client/overview', { token: ninaToken });
 log(ninaOverview.status === 403, 'a contact with no sites is told to call their account manager', ninaOverview.data?.error);
 
@@ -272,14 +303,15 @@ log(suspendedAccess.status === 401, 'a suspended contact loses access on their e
 
 const suspendedLogin = await call('/client/login', {
   method: 'POST',
-  body: { email: 'nina.alvarez@coralbaypg.com', password: created.data.password },
+  body: { email: 'nina.alvarez@coralbaypg.com', password: NINA_PASSWORD },
 });
 log(suspendedLogin.status === 403, 'and cannot sign in again', suspendedLogin.data?.error);
 
 await call(`/admin/clients/${ninaId}`, { token: admin, method: 'PATCH', body: { status: 'active' } });
 
 const reset = await call(`/admin/clients/${ninaId}/reset-password`, { token: admin, method: 'POST' });
-log(reset.status === 200 && reset.data.password?.length >= 12, 'admin resets the password');
+log(reset.status === 200 && /set-password\?token=/.test(reset.data?.link || ''), 'admin sends a reset link');
+log(reset.data.password === undefined, 'a reset returns no password either');
 
 // The whole point of a reset is that a session someone else has open dies.
 const staleSession = await call('/client/me', { token: ninaToken });
@@ -287,12 +319,19 @@ log(staleSession.status === 401, 'a reset kills the session that was already ope
 
 const oldPassword = await call('/client/login', {
   method: 'POST',
-  body: { email: 'nina.alvarez@coralbaypg.com', password: created.data.password },
+  body: { email: 'nina.alvarez@coralbaypg.com', password: NINA_PASSWORD },
 });
-log(oldPassword.status === 401, 'the old password stops working');
+log(oldPassword.status === 401, 'the old password stops working immediately');
 
-const newToken = await portalSignIn('nina.alvarez@coralbaypg.com', reset.data.password);
-log(Boolean(newToken), 'the new password works');
+const NEW_PASSWORD = 'coral-bay-portal-two';
+const newSetup = await call('/client/set-password', {
+  method: 'POST',
+  body: { token: tokenFrom(reset.data.link), password: NEW_PASSWORD, confirmPassword: NEW_PASSWORD },
+});
+log(newSetup.status === 200, 'the reset link sets a new one');
+
+const newToken = await portalSignIn('nina.alvarez@coralbaypg.com', NEW_PASSWORD);
+log(Boolean(newToken), 'and the new password works');
 
 /* ------------------------------------------------------ self-service --- */
 
@@ -306,14 +345,14 @@ log(badCurrent.status === 401, 'changing a password needs the current one');
 const tooShort = await call('/client/change-password', {
   token: newToken,
   method: 'POST',
-  body: { currentPassword: reset.data.password, newPassword: 'short', confirmPassword: 'short' },
+  body: { currentPassword: NEW_PASSWORD, newPassword: 'short', confirmPassword: 'short' },
 });
 log(tooShort.status === 422, 'a short password is refused');
 
 const mismatch = await call('/client/change-password', {
   token: newToken,
   method: 'POST',
-  body: { currentPassword: reset.data.password, newPassword: 'a-much-longer-passphrase', confirmPassword: 'something-else-entirely' },
+  body: { currentPassword: NEW_PASSWORD, newPassword: 'a-much-longer-passphrase', confirmPassword: 'something-else-entirely' },
 });
 log(mismatch.status === 422, 'the confirmation has to match');
 
@@ -321,7 +360,7 @@ const changed = await call('/client/change-password', {
   token: newToken,
   method: 'POST',
   body: {
-    currentPassword: reset.data.password,
+    currentPassword: NEW_PASSWORD,
     newPassword: 'a-much-longer-passphrase',
     confirmPassword: 'a-much-longer-passphrase',
   },

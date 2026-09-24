@@ -151,7 +151,12 @@ export default function FlagsPage() {
             { value: 'closed', label: 'Closed' },
           ]}
         />
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 'auto' }}>
+        <select
+          aria-label="Filter by flag type"
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          style={{ width: 'auto' }}
+        >
           <option value="">All types</option>
           {Object.entries(FLAG_LABEL).map(([value, label]) => (
             <option key={value} value={value}>

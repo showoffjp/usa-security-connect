@@ -102,7 +102,7 @@ function CompletionDialog({ training, onClose }) {
         <div className="stat">
           <div className="label">Completed</div>
           <div className="value">{done}/{rows.length}</div>
-          <div className="foot"><Progress value={done} max={rows.length} ok={done === rows.length} /></div>
+          <div className="foot"><Progress label="Officers who have completed it" value={done} max={rows.length} ok={done === rows.length} /></div>
         </div>
         <div className="table-wrap">
           <table className="data">
@@ -121,6 +121,7 @@ function CompletionDialog({ training, onClose }) {
                   <td className="small">{r.name}</td>
                   <td style={{ minWidth: 120 }}>
                     <Progress
+                      label="Progress through this training"
                       value={Math.min(training.duration_seconds, r.seconds_watched || 0)}
                       max={training.duration_seconds || 1}
                       ok={Boolean(r.completed_at)}

@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
-import { fmtRelative } from '../../lib/format.js';
+import { fmtRelative, fmtDateTime } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, StatusChip, useToast,
 } from '../../components/ui.jsx';
 
 /**
- * A generated password is shown once and never again, so it gets its own
- * dialog rather than a toast that scrolls away while the admin finds the phone.
+ * The link is shown once and never again, so it gets its own dialog rather
+ * than a toast that scrolls away while the admin finds the contact.
  */
 function CredentialDialog({ credential, onClose }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(`${credential.email}\n${credential.password}`);
+      await navigator.clipboard.writeText(credential.link);
       setCopied(true);
     } catch {
       setCopied(false);
@@ -23,12 +23,13 @@ function CredentialDialog({ credential, onClose }) {
 
   return (
     <Modal
-      title="Portal password"
+      title="Set-password link"
       onClose={onClose}
+      wide
       footer={
         <>
           <button className="btn btn-ghost" onClick={copy}>
-            <Icon name="clipboard" size={16} /> {copied ? 'Copied' : 'Copy'}
+            <Icon name="clipboard" size={16} /> {copied ? 'Copied' : 'Copy link'}
           </button>
           <button className="btn btn-primary" onClick={onClose}>
             I have sent it
@@ -37,19 +38,38 @@ function CredentialDialog({ credential, onClose }) {
       }
     >
       <div className="stack">
-        <Banner kind="warn" title="Shown once">
-          {credential.note}
+        <Banner kind={credential.emailed ? 'ok' : 'warn'} title={credential.emailed ? 'Emailed to them' : 'Send this yourself'}>
+          {credential.emailed
+            ? 'A message with this link has been sent. The link below is the same one, if you need it.'
+            : 'No mail provider is configured, so nothing was sent. Copy the link and give it to them yourself.'}
         </Banner>
+
         <dl className="kv">
-          <dt>Sign in at</dt>
-          <dd className="mono">{window.location.origin}/portal</dd>
-          <dt>Email</dt>
+          <dt>Contact</dt>
           <dd className="mono">{credential.email}</dd>
-          <dt>Password</dt>
-          <dd className="mono strong" style={{ fontSize: '1.1rem', letterSpacing: '0.02em' }}>
-            {credential.password}
-          </dd>
+          <dt>Expires</dt>
+          <dd>{fmtDateTime(credential.expiresAt)}</dd>
         </dl>
+
+        <div>
+          <div className="small strong" style={{ marginBottom: 5 }}>
+            Link
+          </div>
+          <div
+            className="mono"
+            style={{
+              wordBreak: 'break-all', padding: 12, fontSize: '0.82rem',
+              background: 'var(--surface-2, #f6f7f9)', borderRadius: 8,
+            }}
+          >
+            {credential.link}
+          </div>
+        </div>
+
+        <p className="tiny muted" style={{ margin: 0 }}>
+          It works once and then stops. They choose their own password, which nobody here
+          can see - that is why there is no password to read out.
+        </p>
       </div>
     </Modal>
   );
@@ -88,7 +108,12 @@ function ContactDialog({ contact, sites, onClose, onSaved, onCredential }) {
           company: company.trim() || null,
           siteIds,
         });
-        onCredential({ email: res.client.email, password: res.password, note: res.note });
+        onCredential({
+          email: res.client.email,
+          link: res.link,
+          expiresAt: res.expiresAt,
+          emailed: res.emailed,
+        });
       }
       onSaved();
     } catch (err) {
@@ -204,8 +229,13 @@ export default function ClientsPage() {
   const resetPassword = (c) =>
     act(async () => {
       const res = await api.post(`/admin/clients/${c.id}/reset-password`);
-      setCredential({ email: res.email, password: res.password, note: res.note });
-    }, 'Password reset.');
+      setCredential({
+        email: res.email,
+        link: res.link,
+        expiresAt: res.expiresAt,
+        emailed: res.emailed,
+      });
+    }, 'Password reset. Send them the new link.');
 
   const remove = (c) => {
     if (!window.confirm(`Delete the portal login for ${c.name}? They will lose access immediately.`)) return;
@@ -308,7 +338,7 @@ export default function ClientsPage() {
                         </button>
                       )}
                       <button className="btn btn-sm btn-ghost" onClick={() => resetPassword(c)}>
-                        Reset password
+                        Send reset link
                       </button>
                       <button className="btn btn-sm btn-ghost" onClick={() => toggleStatus(c)}>
                         {c.status === 'active' ? 'Suspend' : 'Reactivate'}

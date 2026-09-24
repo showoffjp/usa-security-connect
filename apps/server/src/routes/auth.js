@@ -17,7 +17,9 @@ authRouter.post(
   '/login',
   // Per-code limiting as well as per-IP, so one shared office IP cannot be
   // used to lock everyone out, and one code cannot be sprayed from many IPs.
-  rateLimit({ windowMs: 5 * 60000, max: 20, key: (req) => `ip:${req.ip}` }),
+  // A whole guard force can share one office IP at shift change, so the
+  // per-address allowance is generous; the meaningful limit is per identity.
+  rateLimit({ windowMs: 5 * 60000, max: 60, key: (req) => `ip:${req.ip}` }),
   rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `code:${req.body?.employeeCode || 'none'}` }),
   wrap(async (req, res) => {
     const { employeeCode, pin, deviceId } = parse(loginSchema, req.body);

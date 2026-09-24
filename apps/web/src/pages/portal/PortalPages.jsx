@@ -468,7 +468,7 @@ export function PortalPatrols({ sites }) {
                         {r.scanned} of {r.checkpoints} checkpoints
                         {r.skipped > 0 ? ` · ${r.skipped} skipped` : ''}
                       </div>
-                      <Progress value={r.scanned} max={r.checkpoints} ok={r.scanned === r.checkpoints} />
+                      <Progress label="Checkpoints scanned on this round" value={r.scanned} max={r.checkpoints} ok={r.scanned === r.checkpoints} />
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <StatusChip value={r.status} />
@@ -509,7 +509,7 @@ export function PortalPatrols({ sites }) {
                           {r.scanned} of {r.checkpoints}
                           {r.skipped > 0 ? ` · ${r.skipped} skipped` : ''}
                         </div>
-                        <Progress value={r.scanned} max={r.checkpoints} ok={r.scanned === r.checkpoints} />
+                        <Progress label="Checkpoints scanned on this round" value={r.scanned} max={r.checkpoints} ok={r.scanned === r.checkpoints} />
                       </td>
                       <td>
                         <StatusChip value={r.status} />

@@ -257,7 +257,7 @@ export default function TourRunPage() {
             {progress.done}/{progress.total}
           </Chip>
         </div>
-        <Progress value={progress.done} max={progress.total} ok={progress.done === progress.total} />
+        <Progress label="Checkpoints completed" value={progress.done} max={progress.total} ok={progress.done === progress.total} />
       </div>
 
       <div className="card">

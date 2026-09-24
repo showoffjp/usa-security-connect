@@ -10,7 +10,7 @@
  */
 
 import { db } from '../lib/db.js';
-import { sqlToIso } from '../lib/http.js';
+import { sqlToIso, pruneRateLimits } from '../lib/http.js';
 import { RULES, FLAG_TYPES, FLAG_SEVERITY, minutesBetween } from '../shared.js';
 import { notifyDueCheckIns, notifyNewFlags } from './push.js';
 
@@ -268,6 +268,14 @@ export async function sweep(now = new Date()) {
     result.alerted = await notifyNewFlags();
   } catch (err) {
     console.error('[usc] notification pass failed', err.message);
+  }
+
+  // Spent rate-limit counters. Housekeeping rather than compliance, but this
+  // is the only thing that runs on a timer.
+  try {
+    result.rateLimitsPruned = await pruneRateLimits();
+  } catch (err) {
+    console.error('[usc] rate limit prune failed', err.message);
   }
 
   return result;

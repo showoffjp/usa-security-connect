@@ -221,7 +221,7 @@ function TrainingPlayer({ training, onClose, onDone }) {
             </div>
           </div>
           <div style={{ position: 'absolute', left: 12, right: 12, bottom: 10 }}>
-            <Progress value={seconds} max={training.duration_seconds} ok={watchedEnough} />
+            <Progress label="How much you have watched" value={seconds} max={training.duration_seconds} ok={watchedEnough} />
             <div className="row-between tiny" style={{ marginTop: 5, opacity: 0.85 }}>
               <span>{mmss(seconds)}</span>
               <span>{mmss(training.duration_seconds)}</span>
@@ -281,7 +281,7 @@ function TrainingList() {
                 {t.due_at && !t.watched && <div className="tiny muted">Due {fmtDate(t.due_at)}</div>}
                 {!t.watched && t.percent > 0 && (
                   <div style={{ marginTop: 5, maxWidth: 200 }}>
-                    <Progress value={t.percent} max={100} />
+                    <Progress label={`Progress through ${t.title}`} value={t.percent} max={100} />
                   </div>
                 )}
               </div>

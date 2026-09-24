@@ -60,7 +60,12 @@ export default function AuditPage() {
             Every sign-in, clock event, PIN reset and record change, with who did it.
           </p>
         </div>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 'auto' }}>
+        <select
+          aria-label="Filter by activity type"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          style={{ width: 'auto' }}
+        >
           <option value="">All activity</option>
           {families.map((f) => (
             <option key={f} value={f}>

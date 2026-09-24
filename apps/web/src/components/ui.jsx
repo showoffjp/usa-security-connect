@@ -460,10 +460,19 @@ export function Segmented({ value, onChange, options, label = 'Filter' }) {
   );
 }
 
-export function Progress({ value, max = 100, ok = false }) {
+export function Progress({ value, max = 100, ok = false, label = 'Progress' }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+    // A progressbar with no name is announced as a bare percentage, which
+    // tells a screen reader user nothing about what is progressing.
+    <div
+      className="progress"
+      role="progressbar"
+      aria-label={label}
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <span className={ok ? 'ok' : ''} style={{ width: `${pct}%` }} />
     </div>
   );
