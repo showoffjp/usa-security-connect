@@ -18,7 +18,7 @@ covers a single company's guard force.
 
 > **Local development needs none of this.** `npm run dev` uses PGlite — Postgres compiled
 > to WebAssembly, living in `apps/server/data/pgdata`. No database server, no Docker,
-> no cloud account. `npm run verify` reseeds, starts the API and runs all six suites.
+> no cloud account. `npm run verify` reseeds, starts the API and runs all seven suites.
 
 ---
 
@@ -38,7 +38,7 @@ On Windows, if you hit `Filename too long`:
 git config --global core.longpaths true
 ```
 
-`.github/workflows/ci.yml` then runs on every push: all six API suites (which seed a
+`.github/workflows/ci.yml` then runs on every push: all seven API suites (which seed a
 fresh database and so exercise the schema), the web build, and a mobile bundle for
 Android and iOS. No secrets needed — CI generates a throwaway JWT secret, runs against a
 local PGlite database and disables push delivery.
@@ -84,6 +84,9 @@ repeatedly and safe to redeploy over.
    | `BLOB_READ_WRITE_TOKEN` | Added automatically when you create a Blob store | for photos |
    | `USC_ALLOWED_ORIGINS` | Your own domain, e.g. `https://connect.usasecuritygroup.com` | recommended |
    | `USC_MAPS_API_KEY` | Only for Google geocoding; maps work without it | no |
+   | `USC_PUBLIC_URL` | Your deployed URL, e.g. `https://connect.usasecuritygroup.com` | for email links |
+   | `USC_EMAIL_API_KEY` | A [Resend](https://resend.com) API key | for email |
+   | `USC_EMAIL_FROM` | `USA Security Connect <billing@yourdomain.com>` | for email |
 
    Generate the two secrets:
 
@@ -100,6 +103,21 @@ repeatedly and safe to redeploy over.
 
 5. Deploy. Check `https://your-app.vercel.app/api/health` — it should return JSON. The
    first request after a deploy is slower because it applies the schema.
+
+### Email
+
+Without `USC_EMAIL_API_KEY` nothing is sent. Messages are still composed and
+recorded, and **Billing → Outbox** in the admin console lists them for somebody
+to send by hand, text ready to copy. That is a perfectly workable way to start.
+
+To have them delivered, create a Resend account, verify the domain you want to
+send from, and set `USC_EMAIL_API_KEY`, `USC_EMAIL_FROM` and `USC_PUBLIC_URL`.
+Sending from an unverified domain is the usual reason messages are accepted and
+then never arrive. Check the outbox after the first invoice: a row reading
+'failed' carries the provider's own reason.
+
+Passwords are never emailed, by design. A portal contact gets their password
+from whoever set the account up.
 
 ### The cron job
 

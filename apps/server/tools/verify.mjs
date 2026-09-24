@@ -17,7 +17,7 @@ const serverRoot = path.resolve(here, '..');
 const PORT = process.env.PORT || 4000;
 const BASE = `http://localhost:${PORT}/api`;
 
-const env = { ...process.env, USC_PUSH_DISABLED: '1', PORT: String(PORT) };
+const env = { ...process.env, USC_PUSH_DISABLED: '1', USC_EMAIL_DISABLED: '1', PORT: String(PORT) };
 
 function run(script, args = []) {
   return new Promise((resolve) => {
@@ -56,20 +56,20 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/8  SQL dialect translation\n');
+console.log('1/9  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
   process.exit(1);
 }
 
-console.log('\n2/8  Seeding\n');
+console.log('\n2/9  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n3/8  Starting the API');
+console.log('\n3/9  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -98,24 +98,27 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('4/8  Core suite\n');
+console.log('4/9  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n5/8  Feature suite\n');
+console.log('\n5/9  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n6/8  Shift request suite\n');
+console.log('\n6/9  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n7/8  Client portal suite\n');
+console.log('\n7/9  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n8/8  Invoicing suite\n');
+console.log('\n8/9  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
+
+console.log('\n9/9  Email suite\n');
+const email = await run('test/email.mjs');
 
 stop();
 
-const failed = dialect !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0;
+const failed = dialect !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

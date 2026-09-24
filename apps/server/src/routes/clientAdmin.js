@@ -12,6 +12,7 @@ import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { hashPassword, generatePassword, publicClient } from '../lib/clientAuth.js';
 import { ROLES } from '../shared.js';
+import { notifyPortalAccount } from '../services/email.js';
 
 export const clientAdminRouter = Router();
 clientAdminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -110,10 +111,20 @@ clientAdminRouter.post(
     await audit(req.user.id, 'client.created', 'client_user', id, { sites: body.siteIds.length }, req.ip);
 
     const row = await db.prepare(`SELECT * FROM client_users WHERE id = ?`).get(id);
+
+    // Tells them the account exists; deliberately carries no password.
+    const sites = body.siteIds.length
+      ? await db
+          .prepare(`SELECT name FROM sites WHERE id IN (${body.siteIds.map(() => '?').join(',')})`)
+          .all(...body.siteIds)
+      : [];
+    const notice = await notifyPortalAccount({ client: row, sites });
+
     res.status(201).json({
       client: isoFields(publicClient(row), TIMES),
       password,
       note: 'Send this to the contact now. It is not stored and cannot be shown again.',
+      emailed: notice.ok,
     });
   })
 );
@@ -183,10 +194,14 @@ clientAdminRouter.post(
       .run(hash, salt, client.id);
 
     await audit(req.user.id, 'client.password_reset', 'client_user', client.id, null, req.ip);
+
+    const notice = await notifyPortalAccount({ client, reset: true });
+
     res.json({
       email: client.email,
       password,
       note: 'Send this to the contact now. It is not stored and cannot be shown again.',
+      emailed: notice.ok,
     });
   })
 );

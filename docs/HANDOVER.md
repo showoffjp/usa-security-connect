@@ -126,6 +126,11 @@ Both staff screens had plain `<img src>` and never loaded a single photo.
 **`SUM(boolean)` is not valid Postgres.** Use
 `SUM(CASE WHEN x THEN 1 ELSE 0 END)`. Likewise `GROUP_CONCAT` is `string_agg`.
 
+**Never put a secret in an email.** `services/email.js` composes the portal
+invitation and reset notices and deliberately omits the password; `email.mjs`
+asserts the generated password does not appear in the body. If you add a
+message, add the check too.
+
 ---
 
 ## Testing
@@ -135,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-263 checks across six suites. `verify.mjs` reseeds, starts the API, runs each
+305 checks across seven suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -145,8 +150,9 @@ bundle for both platforms.
 | `smoke.mjs` | 45 | auth, lockout, geofencing, tours, training, scheduling, payroll export |
 | `features.mjs` | 62 | classification, overtime, margin, certifications, time off, breaks, duress, DAR, maps, photos, push |
 | `shifts.mjs` | 31 | open shifts, claims, swaps, drops, the armed-post licence rule |
-| `portal.mjs` | 64 | client scoping, token separation, and that no pay data leaks |
-| `invoices.mjs` | 52 | billing arithmetic, status transitions, what clients may see |
+| `portal.mjs` | 74 | client scoping, token separation, and that no pay data leaks |
+| `invoices.mjs` | 55 | billing arithmetic, status transitions, what clients may see |
+| `email.mjs` | 29 | what is composed and addressed, and that no password is in it |
 
 **The suites are mostly adversarial, deliberately.** `portal.mjs` walks every
 response looking for forbidden keys rather than trusting the SELECT lists;
@@ -173,9 +179,17 @@ Honest list. None of it blocks going live, but you will want to know.
   but no `eas build` has produced a binary. NFC and push both need a
   development build — they degrade gracefully in Expo Go, which is what CI
   exercises. See `apps/mobile/BUILDING.md`.
-- **No email.** Portal passwords, invoices and broadcasts are all read off the
-  screen and sent by hand. Wiring a provider is the single highest-value
-  addition.
+- **Email is built but not switched on.** `services/email.js` composes and
+  records every message; delivery needs `USC_EMAIL_API_KEY` (Resend) and
+  `USC_EMAIL_FROM` with a verified sending domain. Until then everything lands
+  in the outbox as 'skipped' and an admin sends it by hand from there. Only
+  two moments send anything today: an invoice being issued, and a portal
+  account being created or reset. Broadcasts and flag alerts are still
+  in-app only.
+- **Portal passwords are still handed over verbally**, on purpose - an emailed
+  credential outlives the conversation in an inbox. The proper fix is a
+  single-use set-password link rather than emailing the password; the token
+  table and expiry are not built.
 - **Your company details are not filled in.** `COMPANY` in
   `packages/shared/src/domain.js` has only the name and the state licence
   number, because those are the only two facts this project knows. The address,

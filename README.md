@@ -125,6 +125,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   hours get billed twice.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
+- **Outbox** — every message the system decided to send: invoice notices to client
+  contacts, portal account notices. Each one is recorded whether or not a mail provider
+  is configured, so with no provider set this becomes the list of what to send by hand,
+  with the text ready to copy. Passwords are never included in a message.
 - **Timesheets** — hours by officer with the regular/overtime split **driven by
   classification**, unpaid break deductions, exception badges, estimated pay, client
   billing and margin, every individual punch, and **CSV export for payroll**.
@@ -252,6 +256,10 @@ Defined once in `packages/shared/src/theme.js`, mirrored as CSS custom propertie
 | `USC_ALLOWED_ORIGINS` | server | all | Comma-separated list; set this in production. |
 | `USC_MAPS_API_KEY` | server | unset | Google geocoding key. Without it, address lookup uses OpenStreetMap. |
 | `USC_PUSH_DISABLED` | server | unset | Set to `1` to switch push delivery off (used by the test suite). |
+| `USC_EMAIL_API_KEY` | server | unset | A [Resend](https://resend.com) API key. Without it nothing is sent; messages are still composed and recorded in the outbox. |
+| `USC_EMAIL_FROM` | server | Resend's test sender | e.g. `USA Security Connect <billing@usasecuritygroup.com>`. The domain must be verified with your provider. |
+| `USC_EMAIL_DISABLED` | server | unset | Set to `1` to switch email off even when a key is present (used by the test suite). |
+| `USC_PUBLIC_URL` | server | unset | Your deployed URL, used for the portal link inside messages. |
 | `VITE_API_URL` | web | `/api` (proxied) | |
 | `EXPO_PUBLIC_API_URL` | mobile | `10.0.2.2` / `localhost` | Point at your real API for device builds. |
 
@@ -324,6 +332,8 @@ the server is running corrupts the data directory.
   and that no pay or personnel field appears in any response.
 - **`test/invoices.mjs`** — the billing arithmetic, recomputed from the hours rather
   than trusted; status transitions; and that cost and margin never reach the portal.
+- **`test/email.mjs`** — what gets composed, who it is addressed to, and above all that
+  no generated password appears in any message.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.

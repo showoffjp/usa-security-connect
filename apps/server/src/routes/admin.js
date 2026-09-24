@@ -16,6 +16,7 @@ import {
   minutesBetween,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
+import { emailKind } from '../services/email.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -1287,5 +1288,55 @@ adminRouter.get(
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="usc-timesheets-${from.toISOString().slice(0, 10)}.csv"`);
     res.send(lines.join('\n'));
+  })
+);
+
+/* ================================================================== email === */
+
+/**
+ * The outbox.
+ *
+ * Every message the system decided to send is recorded whether or not a
+ * provider was configured to carry it, so "was the client told?" has an
+ * answer. With no API key set, rows read 'skipped' and this screen is the
+ * list of what somebody needs to send by hand.
+ */
+adminRouter.get(
+  '/emails',
+  wrap(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    const rows = (await db
+      .prepare(
+        `SELECT id, to_email, to_name, subject, kind, entity, entity_id,
+                status, error, created_at, sent_at
+         FROM emails ORDER BY created_at DESC, id DESC LIMIT ?`
+      )
+      .all(limit));
+
+    const counts = (await db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN status = 'sent'    THEN 1 ELSE 0 END) AS sent,
+           SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+           SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) AS failed
+         FROM emails`
+      )
+      .get());
+
+    res.json({
+      emails: rows.map((r) => isoFields(r, ['created_at', 'sent_at'])),
+      counts,
+      delivery: emailKind,
+    });
+  })
+);
+
+/** One message in full, for when an admin has to send it by hand. */
+adminRouter.get(
+  '/emails/:id',
+  wrap(async (req, res) => {
+    const row = (await db.prepare(`SELECT * FROM emails WHERE id = ?`).get(req.params.id));
+    if (!row) throw new HttpError(404, 'Message not found.');
+    res.json({ email: isoFields(row, ['created_at', 'sent_at']) });
   })
 );

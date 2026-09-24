@@ -29,6 +29,7 @@ import {
   toHours,
 } from '../shared.js';
 import { toSql } from '../services/compliance.js';
+import { notifyInvoiceIssued, emailKind } from '../services/email.js';
 
 export const invoicesRouter = Router();
 invoicesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -385,6 +386,8 @@ invoicesRouter.patch(
       req.body
     );
 
+    let notified = null;
+
     if (body.status && body.status !== invoice.status) {
       if (!canTransitionInvoice(invoice.status, body.status)) {
         throw new HttpError(
@@ -403,6 +406,17 @@ invoicesRouter.patch(
         )
         .run(body.status, invoice.id);
       await audit(req.user.id, `invoice.${body.status}`, 'invoice', invoice.id, { number: invoice.number }, req.ip);
+
+      // Issuing an invoice is the moment the client needs telling. Awaited so
+      // the response can report how many contacts were notified, but it never
+      // throws - a mail failure must not undo an issued invoice.
+      if (body.status === 'sent') {
+        const { invoice: issued } = await loadInvoice(invoice.id);
+        notified = await notifyInvoiceIssued(issued).catch((err) => {
+          console.error('[usc] invoice notification failed:', err.message);
+          return 0;
+        });
+      }
     }
 
     if (body.notes !== undefined) {
@@ -418,6 +432,8 @@ invoicesRouter.patch(
     res.json({
       invoice: { ...isoFields(updated, TIMES), overdue_days: daysOverdue(updated.due_on, updated.status) },
       lines,
+      notified,
+      emailConfigured: emailKind === 'resend',
     });
   })
 );

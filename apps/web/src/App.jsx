@@ -34,6 +34,7 @@ import DarPage from './pages/admin/DarPage.jsx';
 import ShiftRequestsPage from './pages/admin/ShiftRequestsPage.jsx';
 import ClientsPage from './pages/admin/ClientsPage.jsx';
 import InvoicesPage from './pages/admin/InvoicesPage.jsx';
+import EmailsPage from './pages/admin/EmailsPage.jsx';
 
 /** Supervisors and admins only; officers get a plain explanation, not a crash. */
 function RequireSupervisor({ children }) {
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="sites" element={<SitesPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
+        <Route path="emails" element={<EmailsPage />} />
         <Route path="tours" element={<AdminToursPage />} />
         <Route path="broadcasts" element={<BroadcastsPage />} />
         <Route path="training" element={<AdminTrainingPage />} />
