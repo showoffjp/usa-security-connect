@@ -28,6 +28,9 @@ import { shiftRequestsRouter } from './routes/shiftRequests.js';
 import { clientRouter } from './routes/client.js';
 import { clientAdminRouter } from './routes/clientAdmin.js';
 import { invoicesRouter } from './routes/invoices.js';
+import { liveRouter, punchesRouter } from './routes/operations.js';
+import { payRatesRouter } from './routes/payRates.js';
+import { adminReportsRouter } from './routes/adminReports.js';
 
 export const app = express();
 
@@ -119,8 +122,12 @@ app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/client', clientRouter);
 app.use('/api/invoices', invoicesRouter);
-// Mounted ahead of adminRouter so /api/admin/clients reaches this router.
+// Mounted ahead of adminRouter so these prefixes reach their own routers.
 app.use('/api/admin/clients', clientAdminRouter);
+app.use('/api/admin/live', liveRouter);
+app.use('/api/admin/punches', punchesRouter);
+app.use('/api/admin/pay-rates', payRatesRouter);
+app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

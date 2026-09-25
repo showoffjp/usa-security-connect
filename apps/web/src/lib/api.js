@@ -113,3 +113,19 @@ export const api = makeApi(tokenStore);
 
 /** The same client, pointed at the portal's own token. */
 export const clientApi = makeApi(clientTokenStore);
+
+/**
+ * Save a file that sits behind staff auth. A plain link cannot carry the
+ * bearer token, so the bytes are fetched and handed over as a blob.
+ */
+export async function downloadFile(path, filename) {
+  const blob = await request(path, { raw: true });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}

@@ -140,11 +140,22 @@ export default function EmployeeDetailPage() {
             )}
           </div>
         </div>
-        {isAdmin && (
-          <button className="btn btn-ghost" onClick={resetPin}>
-            <Icon name="shield" size={16} /> Reset PIN
-          </button>
-        )}
+        <div className="row wrap">
+          <Link className="btn btn-ghost btn-sm" to={`/admin/live?filter=all&track=${e.id}`}>
+            <Icon name="gps" size={15} /> GPS track
+          </Link>
+          <Link className="btn btn-ghost btn-sm" to={`/admin/punches?userId=${e.id}`}>
+            <Icon name="list" size={15} /> Punches
+          </Link>
+          <Link className="btn btn-ghost btn-sm" to={`/admin/reports?report=officer-site&userId=${e.id}`}>
+            <Icon name="chart" size={15} /> Hours by site
+          </Link>
+          {isAdmin && (
+            <button className="btn btn-ghost btn-sm" onClick={resetPin}>
+              <Icon name="shield" size={15} /> Reset PIN
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-4">

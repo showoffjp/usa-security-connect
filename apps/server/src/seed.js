@@ -16,6 +16,7 @@ import { toDateString } from './lib/http.js';
 import { invoiceTotals } from './shared.js';
 import { TRAININGS, BROADCASTS, THREADS, CLIPS } from './seed-content.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
+import { seedExpansion } from './seed-expansion.js';
 
 const RESET = process.argv.includes('--reset');
 
@@ -33,6 +34,7 @@ if (RESET) {
     'panic_alerts', 'breaks', 'status_checks', 'time_entries', 'shifts',
     'time_off_requests', 'availability', 'certifications', 'device_tokens',
     'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
+    'location_pings', 'pay_rate_history',
     'users', 'posts', 'sites',
   ];
   await db.exec(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
@@ -1084,6 +1086,16 @@ await db.prepare(
   'Pressed in a pocket while the officer was moving a barrier. Confirmed safe by phone within three minutes. No action needed - a false alarm costs us nothing and hesitating costs everything.'
 );
 
+/* ------------------------------------------------ the regional operation -- */
+
+// Six more client sites and thirty-five more staff around the original four.
+// Kept in its own module so the fixtures the test suites rely on stay above,
+// untouched and easy to read.
+const expansion = await seedExpansion({
+  db, at, toSql, hashPin, hashPassword, raiseFlag, buildTour, buildLines, nextNumber,
+  invoiceTotals, toDateString, users, year,
+});
+
 // Derive flags from everything above.
 await sweep();
 
@@ -1099,6 +1111,10 @@ USA Security Connect - demo data loaded
   ${flagCount} compliance flags
 
   ${(await db.prepare(`SELECT COUNT(*) AS n FROM certifications`).get()).n} certifications, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_off_requests`).get()).n} time-off requests
+  ${(await db.prepare(`SELECT COUNT(*) AS n FROM location_pings`).get()).n} GPS points, ${(await db.prepare(`SELECT COUNT(*) AS n FROM status_checks`).get()).n} status check-ins, ${(await db.prepare(`SELECT COUNT(*) AS n FROM invoices`).get()).n} invoices
+
+On duty right now (new sites):
+${expansion.live.map((l) => `  ${l}`).join('\n') || '  nobody - every roster slot is between shifts'}
 
 Sign-in codes (demo PINs):
   1001 / 2468   Vince Ortega      Administrator      W-2 salary, exempt
@@ -1110,10 +1126,16 @@ Sign-in codes (demo PINs):
   1007 / 8140   Kevin Osei        Officer            W-2, must change PIN
   1008 / 9351   Renee Okafor      Officer            1099 contractor, per shift
 
+Regional staff (code / PIN):
+${expansion.staff
+  .map((s) => `  ${s.code} / ${s.pin}   ${s.name.padEnd(20)} ${s.role === 'supervisor' ? 'Supervisor' : 'Officer   '}  ${s.type === '1099' ? '1099' : 'W-2 '}${s.armed ? '  armed' : ''}`)
+  .join('\n')}
+
 Client portal logins (/portal):
   dana.whitfield@riverfrontholdings.com / riverfront-portal-01   Riverfront Commerce Center
   marcus.reyes@palmettoridgehoa.org     / palmetto-portal-02     Palmetto Ridge Residences
   alicia.grant@gulfportfreight.com      / gulfport-portal-03     Gulfport Logistics Yard
+${expansion.clientLogins.map((c) => `  ${c.email.padEnd(37)} / ${c.password.padEnd(22)} ${c.site}`).join('\n')}
 `);
 
 db.close();

@@ -48,6 +48,12 @@ const STAFF_PAGES = [
   ['Training', '/admin/training'],
   ['Audit log', '/admin/audit'],
   ['Safety & map', '/admin/safety'],
+  ['Live tracking', '/admin/live'],
+  ['Punch log', '/admin/punches'],
+  ['Pay rates', '/admin/pay-rates'],
+  ['Reports', '/admin/reports'],
+  ['Report: payroll register', '/admin/reports?report=payroll'],
+  ['Report: daily hours', '/admin/reports?report=daily'],
 ];
 
 const PORTAL_PAGES = [
@@ -69,6 +75,9 @@ const log = (ok, label, extra = '') => {
 /** Whichever Chromium-based browser this machine already has. */
 async function launch() {
   const attempts = [
+    // An explicit browser, for a machine whose Chromium is not where
+    // Playwright expects its own (a CI image, a pinned container).
+    ...(process.env.USC_CHROMIUM_PATH ? [{ executablePath: process.env.USC_CHROMIUM_PATH }] : []),
     { channel: 'chrome' },
     { channel: 'msedge' },
     {}, // Playwright's own download, if someone has run `playwright install`

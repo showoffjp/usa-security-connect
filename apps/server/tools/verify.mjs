@@ -17,7 +17,22 @@ const serverRoot = path.resolve(here, '..');
 const PORT = process.env.PORT || 4000;
 const BASE = `http://localhost:${PORT}/api`;
 
-const env = { ...process.env, USC_PUSH_DISABLED: '1', USC_EMAIL_DISABLED: '1', PORT: String(PORT) };
+// The API under test and the suites must share a cron secret, or the signed
+// sweep check cannot run. A throwaway one is fine: this server is local.
+const env = {
+  ...process.env,
+  USC_PUSH_DISABLED: '1',
+  USC_EMAIL_DISABLED: '1',
+  PORT: String(PORT),
+  CRON_SECRET: process.env.CRON_SECRET || 'verify-only-cron-secret',
+  // Location reports closer together than this are thinned; two seconds lets
+  // the tracking suite prove it without sitting through the real twenty.
+  USC_MIN_PING_GAP_SECONDS: '2',
+  // Every suite signs the same demo accounts in; together they pass the
+  // production login allowance inside its five-minute window.
+  USC_LOGIN_LIMIT_PER_IP: '400',
+  USC_LOGIN_LIMIT_PER_CODE: '60',
+};
 
 function run(script, args = []) {
   return new Promise((resolve) => {
@@ -56,20 +71,20 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/11  SQL dialect translation\n');
+console.log('1/12  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
   process.exit(1);
 }
 
-console.log('\n2/11  Seeding\n');
+console.log('\n2/12  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n3/11  Starting the API');
+console.log('\n3/12  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -98,33 +113,36 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('4/11  Core suite\n');
+console.log('4/12  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n5/11  Feature suite\n');
+console.log('\n5/12  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n6/11  Shift request suite\n');
+console.log('\n6/12  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n7/11  Client portal suite\n');
+console.log('\n7/12  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n8/11  Invoicing suite\n');
+console.log('\n8/12  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
-console.log('\n9/11  Email suite\n');
+console.log('\n9/12  Email suite\n');
 const email = await run('test/email.mjs');
 
-console.log('\n10/11  Security suite\n');
+console.log('\n10/12  Security suite\n');
 const security = await run('test/security.mjs');
 
-console.log('\n11/11  Role permission suite\n');
+console.log('\n11/12  Role permission suite\n');
 const roles = await run('test/roles.mjs');
+
+console.log('\n12/12  Tracking, pay rates and reports suite\n');
+const tracking = await run('test/tracking.mjs');
 
 stop();
 
-const failed = dialect !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0;
+const failed = dialect !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

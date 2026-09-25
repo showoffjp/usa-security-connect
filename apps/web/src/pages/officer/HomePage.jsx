@@ -9,6 +9,7 @@ import {
   LoadingPage, useToast, Empty,
 } from '../../components/ui.jsx';
 import { formatDuration, toHours } from '@shared/domain.js';
+import GpsPanel from '../../components/GpsPanel.jsx';
 
 /* ----------------------------------------------------- check-in prompt -- */
 
@@ -339,6 +340,8 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      <GpsPanel status={status} />
 
       {/* ------------------------------------------------ quick actions -- */}
       <div className="grid grid-2">

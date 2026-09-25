@@ -35,6 +35,10 @@ import ShiftRequestsPage from './pages/admin/ShiftRequestsPage.jsx';
 import ClientsPage from './pages/admin/ClientsPage.jsx';
 import InvoicesPage from './pages/admin/InvoicesPage.jsx';
 import EmailsPage from './pages/admin/EmailsPage.jsx';
+import LivePage from './pages/admin/LivePage.jsx';
+import PunchesPage from './pages/admin/PunchesPage.jsx';
+import PayRatesPage from './pages/admin/PayRatesPage.jsx';
+import ReportsPage from './pages/admin/ReportsPage.jsx';
 
 /** Supervisors and admins only; officers get a plain explanation, not a crash. */
 function RequireSupervisor({ children }) {
@@ -84,6 +88,10 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="live" element={<LivePage />} />
+        <Route path="punches" element={<PunchesPage />} />
+        <Route path="pay-rates" element={<PayRatesPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/:id" element={<EmployeeDetailPage />} />
         <Route path="schedule" element={<AdminSchedulePage />} />

@@ -38,6 +38,13 @@ function loadLeaflet() {
   return leafletPromise;
 }
 
+/**
+ * Names, addresses and notes are typed by people, and Leaflet popups are HTML.
+ * Everything interpolated into one goes through here.
+ */
+export const esc = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 /** Directions link that works on desktop and both phone platforms. */
 export const googleMapsLink = (lat, lng, label) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${label ? `&query_place_id=${encodeURIComponent(label)}` : ''}`;
@@ -380,9 +387,9 @@ export function OpsMap({ posts = [], onDuty = [], alerts = [], height = 460, onS
       })
         .addTo(layer)
         .bindPopup(
-          `<strong>${post.name}</strong><br/>${post.site_name}<br/>` +
+          `<strong>${esc(post.name)}</strong><br/>${esc(post.site_name)}<br/>` +
             (staffed.length
-              ? `<span style="color:#1E8E4E">On post: ${staffed.map((s) => s.officer).join(', ')}</span>`
+              ? `<span style="color:#1E8E4E">On post: ${esc(staffed.map((s) => s.officer).join(', '))}</span>`
               : '<span style="color:#7E7E7E">Unstaffed</span>') +
             `<br/><a href="${directionsLink(post.latitude, post.longitude)}" target="_blank" rel="noreferrer">Directions</a>`
         );
@@ -399,10 +406,10 @@ export function OpsMap({ posts = [], onDuty = [], alerts = [], height = 460, onS
       })
         .addTo(layer)
         .bindPopup(
-          `<strong>${officer.officer}</strong><br/>${officer.post_name}<br/>` +
+          `<strong>${esc(officer.officer)}</strong><br/>${esc(officer.post_name)}<br/>` +
             `Clocked in ${new Date(officer.clock_in_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` +
             (outside ? `<br/><span style="color:#B26A00">Clocked in ${officer.clock_in_distance_m}m away</span>` : '') +
-            (officer.phone ? `<br/><a href="tel:${officer.phone}">${officer.phone}</a>` : '')
+            (officer.phone ? `<br/><a href="tel:${esc(officer.phone)}">${esc(officer.phone)}</a>` : '')
         )
         .on('click', () => onSelect?.(officer));
     }
@@ -422,8 +429,8 @@ export function OpsMap({ posts = [], onDuty = [], alerts = [], height = 460, onS
       L.marker([alert.latitude, alert.longitude], { icon: pin('#C0392B', '!'), zIndexOffset: 1000 })
         .addTo(layer)
         .bindPopup(
-          `<strong style="color:#C0392B">DURESS ALERT</strong><br/>${alert.officer}<br/>` +
-            (alert.phone ? `<a href="tel:${alert.phone}">${alert.phone}</a><br/>` : '') +
+          `<strong style="color:#C0392B">DURESS ALERT</strong><br/>${esc(alert.officer)}<br/>` +
+            (alert.phone ? `<a href="tel:${esc(alert.phone)}">${esc(alert.phone)}</a><br/>` : '') +
             `<a href="${directionsLink(alert.latitude, alert.longitude)}" target="_blank" rel="noreferrer">Directions</a>`
         )
         .openPopup();
@@ -464,7 +471,7 @@ export function MiniMap({ latitude, longitude, label, radius, height = 200 }) {
     zoom: 16,
     onReady: (map, L) => {
       if (latitude == null) return;
-      L.marker([latitude, longitude]).addTo(map).bindPopup(label || 'Location');
+      L.marker([latitude, longitude]).addTo(map).bindPopup(esc(label || 'Location'));
       if (radius) {
         L.circle([latitude, longitude], {
           radius,
@@ -489,6 +496,318 @@ export function MiniMap({ latitude, longitude, label, radius, height = 200 }) {
       <a className="small" href={directionsLink(latitude, longitude)} target="_blank" rel="noreferrer">
         Directions in Google Maps
       </a>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ live map -- */
+
+/** Status colours for officer pins. Paired with a letter, so never colour alone. */
+export const LIVE_PIN = {
+  duress: ['#C0392B', '!'],
+  off_post: ['#B3261E', 'X'],
+  on_break: ['#145D9E', 'B'],
+  on_post: ['#1E7A45', 'O'],
+  no_show: ['#7A1F14', '?'],
+  late: ['#8A5200', 'L'],
+  upcoming: ['#4A5A6A', 'S'],
+  off_duty: ['#7E7E7E', '-'],
+};
+
+function pinIcon(L, color, glyph, size = 26) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;
+           transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35);
+           display:grid;place-items:center">
+           <span style="transform:rotate(45deg);color:#fff;font-size:12px;font-weight:700">${esc(glyph)}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+  });
+}
+
+/**
+ * Every officer at the position their phone last reported, every post with its
+ * geofence, and - for anyone outside it - a dashed line back to where they
+ * should be standing. That line is the whole point: "where you are" against
+ * "where you are meant to be".
+ */
+export function LiveMap({ officers = [], posts = [], height = 480, focusId = null, onSelect }) {
+  const containerRef = useRef(null);
+  const layerRef = useRef(null);
+  const mapRef = useRef(null);
+  const leafletRef = useRef(null);
+  const fittedRef = useRef(false);
+
+  const { ready, error } = useMap(containerRef, {
+    onReady: (map, L) => {
+      mapRef.current = map;
+      leafletRef.current = L;
+      layerRef.current = L.layerGroup().addTo(map);
+    },
+  });
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!ready || !L || !map || !layer) return;
+    layer.clearLayers();
+    const bounds = [];
+
+    for (const post of posts) {
+      if (post.latitude == null) continue;
+      bounds.push([post.latitude, post.longitude]);
+      L.circle([post.latitude, post.longitude], {
+        radius: post.geofence_radius_m || 150,
+        color: '#0C3F72',
+        fillColor: '#0C3F72',
+        fillOpacity: 0.06,
+        weight: 1,
+      })
+        .addTo(layer)
+        .bindPopup(
+          `<strong>${esc(post.name)}</strong> ${post.armed ? '(armed)' : ''}<br/>${esc(post.site_name)}<br/>` +
+            `${esc([post.address, post.city].filter(Boolean).join(', '))}<br/>` +
+            `<a href="${directionsLink(post.latitude, post.longitude)}" target="_blank" rel="noreferrer">Directions</a>`
+        );
+    }
+
+    let focus = null;
+    for (const o of officers) {
+      const loc = o.location;
+      if (!loc || loc.latitude == null) continue;
+      bounds.push([loc.latitude, loc.longitude]);
+      const [color, glyph] = LIVE_PIN[o.status] || LIVE_PIN.off_duty;
+
+      if (o.job && o.job.latitude != null && loc.geofence === 'outside') {
+        L.polyline(
+          [
+            [loc.latitude, loc.longitude],
+            [o.job.latitude, o.job.longitude],
+          ],
+          { color: '#B3261E', weight: 2, dashArray: '6 6' }
+        ).addTo(layer);
+      }
+      if (loc.accuracy) {
+        L.circle([loc.latitude, loc.longitude], {
+          radius: loc.accuracy,
+          color,
+          weight: 0,
+          fillOpacity: 0.12,
+          interactive: false,
+        }).addTo(layer);
+      }
+
+      const marker = L.marker([loc.latitude, loc.longitude], {
+        icon: pinIcon(L, color, glyph, o.user_id === focusId ? 32 : 26),
+        zIndexOffset: o.status === 'off_post' || o.status === 'duress' ? 1000 : 0,
+        title: `${o.name} - ${o.status_label}`,
+      })
+        .addTo(layer)
+        .bindPopup(
+          `<strong>${esc(o.name)}</strong> (${esc(o.employee_code)})<br/>${esc(o.status_label)}<br/>` +
+            (o.job ? `${esc(o.job.post_name)} - ${esc(o.job.site_name)}<br/>` : '') +
+            (loc.distance_m != null ? `${loc.distance_m} m from post (${esc(loc.geofence)})<br/>` : '') +
+            `Last GPS ${loc.minutes_ago != null ? `${loc.minutes_ago} min ago` : ''}` +
+            (o.phone ? `<br/><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a>` : '')
+        )
+        .on('click', () => onSelect?.(o));
+      if (o.user_id === focusId) focus = marker;
+    }
+
+    if (focus) {
+      map.setView(focus.getLatLng(), 16);
+      focus.openPopup();
+    } else if (bounds.length && !fittedRef.current) {
+      // Fit once; after that the supervisor's own pan and zoom are respected
+      // across the auto-refresh.
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      fittedRef.current = true;
+    }
+  }, [ready, officers, posts, focusId, onSelect]);
+
+  return (
+    <div>
+      <div
+        ref={containerRef}
+        role="img"
+        aria-label="Map of officer positions and posts. The same information is in the table below."
+        style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
+      />
+      {error && <div className="small" style={{ color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- track map -- */
+
+/**
+ * One officer's day: the trail they walked, each post's geofence, and every
+ * reading outside it in red.
+ */
+export function TrackMap({ pings = [], entries = [], height = 380 }) {
+  const containerRef = useRef(null);
+  const layerRef = useRef(null);
+  const mapRef = useRef(null);
+  const leafletRef = useRef(null);
+
+  const { ready, error } = useMap(containerRef, {
+    onReady: (map, L) => {
+      mapRef.current = map;
+      leafletRef.current = L;
+      layerRef.current = L.layerGroup().addTo(map);
+    },
+  });
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!ready || !L || !map || !layer) return;
+    layer.clearLayers();
+    const bounds = [];
+
+    for (const e of entries) {
+      if (e.post_lat == null) continue;
+      bounds.push([e.post_lat, e.post_lng]);
+      L.circle([e.post_lat, e.post_lng], {
+        radius: e.geofence_radius_m || 150,
+        color: '#0C3F72',
+        fillColor: '#0C3F72',
+        fillOpacity: 0.08,
+        weight: 1,
+      })
+        .addTo(layer)
+        .bindPopup(`<strong>${esc(e.post_name)}</strong><br/>${esc(e.site_name)}`);
+    }
+
+    const byEntry = new Map();
+    for (const p of pings) {
+      if (!byEntry.has(p.time_entry_id)) byEntry.set(p.time_entry_id, []);
+      byEntry.get(p.time_entry_id).push(p);
+    }
+    for (const list of byEntry.values()) {
+      const line = list.map((p) => [p.latitude, p.longitude]);
+      bounds.push(...line);
+      L.polyline(line, { color: '#2A6BB3', weight: 2, opacity: 0.85 }).addTo(layer);
+      for (const p of list) {
+        const outside = p.geofence === 'outside';
+        L.circleMarker([p.latitude, p.longitude], {
+          radius: outside ? 5 : 3,
+          color: '#fff',
+          weight: outside ? 2 : 1,
+          fillColor: outside ? '#B3261E' : '#2A6BB3',
+          fillOpacity: 1,
+        })
+          .addTo(layer)
+          .bindTooltip(
+            `${new Date(p.recorded_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` +
+              ` - ${p.distance_m ?? '?'} m from post${outside ? ' (outside)' : ''}` +
+              (p.source !== 'watch' ? ` - ${String(p.source).replace('_', ' ')}` : '')
+          );
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      L.marker([first.latitude, first.longitude], { icon: pinIcon(L, '#1E7A45', 'S', 22) })
+        .addTo(layer)
+        .bindTooltip('Start');
+      L.marker([last.latitude, last.longitude], { icon: pinIcon(L, '#062E58', 'E', 22) })
+        .addTo(layer)
+        .bindTooltip('Latest / end');
+    }
+
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
+  }, [ready, pings, entries]);
+
+  return (
+    <div>
+      <div
+        ref={containerRef}
+        role="img"
+        aria-label="Map of the officer's GPS trail. The same readings are listed beside it."
+        style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
+      />
+      {error && <div className="small" style={{ color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------- position map -- */
+
+/** You, your post, its geofence, and the straight line between you and it. */
+export function PositionMap({ me, post, height = 240 }) {
+  const containerRef = useRef(null);
+  const layerRef = useRef(null);
+  const mapRef = useRef(null);
+  const leafletRef = useRef(null);
+
+  const { ready, error } = useMap(containerRef, {
+    onReady: (map, L) => {
+      mapRef.current = map;
+      leafletRef.current = L;
+      layerRef.current = L.layerGroup().addTo(map);
+    },
+  });
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!ready || !L || !map || !layer) return;
+    layer.clearLayers();
+    const bounds = [];
+
+    if (post?.latitude != null) {
+      bounds.push([post.latitude, post.longitude]);
+      L.circle([post.latitude, post.longitude], {
+        radius: post.radius_m || 150,
+        color: '#0C3F72',
+        fillColor: '#0C3F72',
+        fillOpacity: 0.1,
+        weight: 1.5,
+      }).addTo(layer);
+      L.marker([post.latitude, post.longitude], { icon: pinIcon(L, '#062E58', 'P') })
+        .addTo(layer)
+        .bindTooltip(esc(post.post_name || 'Your post'));
+    }
+    if (me?.latitude != null) {
+      bounds.push([me.latitude, me.longitude]);
+      if (me.accuracy) {
+        L.circle([me.latitude, me.longitude], { radius: me.accuracy, weight: 0, color: '#2A6BB3', fillOpacity: 0.15, interactive: false }).addTo(layer);
+      }
+      L.circleMarker([me.latitude, me.longitude], {
+        radius: 8,
+        color: '#fff',
+        weight: 3,
+        fillColor: '#2A6BB3',
+        fillOpacity: 1,
+      })
+        .addTo(layer)
+        .bindTooltip('You are here');
+      if (post?.latitude != null) {
+        L.polyline(
+          [
+            [me.latitude, me.longitude],
+            [post.latitude, post.longitude],
+          ],
+          { color: '#4A4A4A', weight: 2, dashArray: '5 6' }
+        ).addTo(layer);
+      }
+    }
+    if (bounds.length === 1) map.setView(bounds[0], 16);
+    else if (bounds.length) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 17 });
+  }, [ready, me?.latitude, me?.longitude, me?.accuracy, post?.latitude, post?.longitude, post?.radius_m, post?.post_name]);
+
+  return (
+    <div>
+      <div
+        ref={containerRef}
+        role="img"
+        aria-label="Map showing your position and your assigned post. The distance is also written above."
+        style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
+      />
+      {error && <div className="tiny" style={{ color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
     </div>
   );
 }

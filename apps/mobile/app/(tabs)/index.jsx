@@ -10,6 +10,7 @@ import {
   Sheet, Field, Input, Toast, useToastState,
 } from '../../src/ui.jsx';
 import { PanicButton, BreakControl } from '../../src/SafetyBar.jsx';
+import { LocationCard } from '../../src/LocationCard.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -254,6 +255,8 @@ export default function HomeScreen() {
             )}
           </View>
         </Card>
+
+        <LocationCard status={status} />
 
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Pressable style={[S.card, S.grow]} onPress={() => router.push('/incident-new')}>

@@ -64,6 +64,14 @@ const iconPaths = {
   download: 'M12 4v11m0 0 4-4m-4 4-4-4M4 20h16',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
   book: 'M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2V5Zm2 13h13',
+  gps: 'M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm0-4a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 2v3M12 19v3M2 12h3M19 12h3',
+  dollar: 'M12 3v18M16.5 7.5c0-1.9-2-3-4.5-3s-4.5 1.2-4.5 3.2c0 4.3 9 2.3 9 6.8 0 2-2 3.3-4.5 3.3S7.5 16.6 7.5 14.6',
+  map: 'M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Zm0 0v13m6-10.5v13',
+  refresh: 'M20 11a8 8 0 0 0-14.8-3.5M4 4v4h4M4 13a8 8 0 0 0 14.8 3.5M20 20v-4h-4',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  print: 'M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z',
+  list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
 };
 
 export function Icon({ name, size = 20, stroke = 1.8, filled = false, ...rest }) {
@@ -328,6 +336,13 @@ export function StatusChip({ value }) {
     void: ['', 'Void'],
     warning: ['warn', 'Warning'],
     info: ['info', 'Info'],
+    on_post: ['ok', 'On post'],
+    off_post: ['danger', 'Off post'],
+    on_break: ['info', 'On break'],
+    no_show: ['danger', 'No show'],
+    upcoming: ['navy', 'Starting soon'],
+    off_duty: ['', 'Off duty'],
+    duress: ['danger', 'Duress alert'],
   };
   const [kind, label] = map[value] || ['', value || '--'];
   return <Chip kind={kind}>{label}</Chip>;

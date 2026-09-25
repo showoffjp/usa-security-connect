@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, sqlToIso } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay } from '../lib/http.js';
 import { requireAuth, requireRole, hashPin, generatePin, generateEmployeeCode, publicUser } from '../lib/auth.js';
 import {
   ROLES,
+  RULES,
   EMPLOYEE_STATUS,
   EMPLOYMENT_TYPES,
   PAY_TYPES,
@@ -17,6 +18,7 @@ import {
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
+import { recordPayHistory } from '../services/payHistory.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -146,6 +148,27 @@ adminRouter.get(
         )
         .get()).n;
 
+    // Officers on the clock whose latest position is outside their post, and
+    // shifts under way that nobody has clocked into yet.
+    const offPost = Number((await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM (
+           SELECT DISTINCT ON (lp.user_id) lp.geofence
+           FROM location_pings lp
+           JOIN time_entries te ON te.id = lp.time_entry_id AND te.clock_out_at IS NULL
+           ORDER BY lp.user_id, lp.recorded_at DESC
+         ) latest WHERE latest.geofence = 'outside'`
+      )
+      .get()).n);
+    const lateNow = Number((await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM shifts sh
+         WHERE sh.user_id IS NOT NULL AND sh.status IN ('scheduled','missed')
+           AND sh.starts_at < ? AND sh.ends_at > now()
+           AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.shift_id = sh.id)`
+      )
+      .get(toSql(new Date(Date.now() - RULES.lateGraceMinutes * 60000)))).n);
+
     const openAlerts = (await db
       .prepare(
         `SELECT p.*, u.first_name || ' ' || u.last_name AS officer, u.phone,
@@ -167,6 +190,9 @@ adminRouter.get(
         openShiftRequests,
         overdueInvoices,
         expiringCredentials,
+        offPost,
+        lateNow,
+        lateOrOff: offPost + lateNow,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -292,7 +318,7 @@ const employeeFields = z
  * alone would let `{ status: 'active' }` slip past on a contractor whose W-9
  * was never filed, which is exactly the case the rule exists for.
  */
-function classificationProblem(record) {
+export function classificationProblem(record) {
   if (record.employmentType === '1099' && record.status === 'active' && !record.w9OnFile) {
     return { field: 'w9OnFile', message: 'A 1099 contractor cannot be made active until their W-9 is on file.' };
   }
@@ -376,6 +402,11 @@ adminRouter.post(
       )
       .run(...Object.values(values)));
 
+    await recordPayHistory(Number(info.lastInsertRowid), {
+      changedBy: req.user.id,
+      reason: 'Starting rate',
+      effectiveOn: body.hireDate || null,
+    });
     await audit(req.user.id, 'employee.created', 'user', Number(info.lastInsertRowid), { code, role: body.role }, req.ip);
 
     res.status(201).json({
@@ -576,6 +607,7 @@ adminRouter.patch(
     sets.push(`updated_at = datetime('now')`);
     params.push(user.id);
     (await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params));
+    await recordPayHistory(user.id, { changedBy: req.user.id, reason: 'Changed on the employee record' });
 
     await audit(req.user.id, 'employee.updated', 'user', user.id, Object.keys(body), req.ip);
     res.json({ employee: publicUser((await db.prepare(`SELECT * FROM users WHERE id = ?`).get(user.id))) });
@@ -770,6 +802,98 @@ adminRouter.post(
 
     await audit(req.user.id, 'shift.bulk_created', 'shift', null, { count: created.length }, req.ip);
     res.status(201).json({ created: created.length, skipped });
+  })
+);
+
+/**
+ * Roll a week's roster forward. Each shift lands on the same weekday and wall
+ * clock time in the target week; an officer who is already booked then keeps
+ * the shift open rather than being double-booked.
+ */
+const copyWeekSchema = z.object({
+  fromWeekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.'),
+  toWeekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.'),
+  siteId: z.number().int().positive().nullable().optional(),
+  keepOfficers: z.boolean().default(true),
+});
+
+adminRouter.post(
+  '/shifts/copy-week',
+  wrap(async (req, res) => {
+    const body = parse(copyWeekSchema, req.body);
+    const from = parseDay(body.fromWeekStart);
+    const to = parseDay(body.toWeekStart);
+    if (!from || !to) throw new HttpError(422, 'Use dates like 2026-09-28.');
+    const dayShift = Math.round((to - from) / 86400000);
+    if (dayShift === 0) throw new HttpError(422, 'Pick a different week to copy into.');
+    const fromEnd = new Date(from);
+    fromEnd.setDate(fromEnd.getDate() + 7);
+
+    const source = await db
+      .prepare(
+        `SELECT sh.*, p.site_id FROM shifts sh JOIN posts p ON p.id = sh.post_id
+         WHERE sh.starts_at >= ? AND sh.starts_at < ? AND sh.status != 'cancelled'
+         ${body.siteId ? 'AND p.site_id = ?' : ''}
+         ORDER BY sh.starts_at`
+      )
+      .all(toSql(from), toSql(fromEnd), ...(body.siteId ? [body.siteId] : []));
+
+    const moved = (value) => {
+      // setDate keeps the wall-clock time across a daylight saving change.
+      const d = new Date(sqlToIso(value));
+      d.setDate(d.getDate() + dayShift);
+      return d;
+    };
+
+    // What the target week already has, per post and start time. A post can
+    // legitimately carry two officers at once, so this is a count: copying
+    // tops each slot up to the source's number and never past it, which also
+    // makes running the same copy twice a no-op.
+    const toEnd = new Date(to);
+    toEnd.setDate(toEnd.getDate() + 7);
+    const existing = new Map();
+    for (const t of await db
+      .prepare(`SELECT post_id, starts_at FROM shifts WHERE starts_at >= ? AND starts_at < ? AND status != 'cancelled'`)
+      .all(toSql(to), toSql(toEnd))) {
+      const key = `${t.post_id}|${new Date(sqlToIso(t.starts_at)).getTime()}`;
+      existing.set(key, (existing.get(key) || 0) + 1);
+    }
+
+    let created = 0;
+    let opened = 0;
+    const skipped = [];
+    for (const s of source) {
+      const startsAt = moved(s.starts_at);
+      const endsAt = moved(s.ends_at);
+
+      const key = `${s.post_id}|${startsAt.getTime()}`;
+      if ((existing.get(key) || 0) > 0) {
+        existing.set(key, existing.get(key) - 1);
+        skipped.push({ shiftId: s.id, reason: 'That post is already scheduled at that time.' });
+        continue;
+      }
+
+      let userId = body.keepOfficers ? s.user_id : null;
+      if (userId) {
+        try {
+          await assertNoOverlap({ userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+        } catch {
+          userId = null;
+          opened += 1;
+        }
+      }
+
+      await db
+        .prepare(
+          `INSERT INTO shifts (user_id, post_id, starts_at, ends_at, notes, bill_rate_cents, is_open, created_by)
+           VALUES (?,?,?,?,?,?,?,?)`
+        )
+        .run(userId, s.post_id, toSql(startsAt), toSql(endsAt), s.notes, s.bill_rate_cents, !userId, req.user.id);
+      created += 1;
+    }
+
+    await audit(req.user.id, 'shift.week_copied', 'shift', null, { ...body, created, opened }, req.ip);
+    res.status(201).json({ created, opened, skipped });
   })
 );
 

@@ -7,8 +7,10 @@ import {
   RULES,
   FLAG_TYPES,
   evaluateGeofence,
+  locationOffset,
   minutesBetween,
 } from '../shared.js';
+import { recordPing } from '../services/tracking.js';
 import {
   toSql,
   raiseFlag,
@@ -82,7 +84,8 @@ timeclockRouter.get(
 
     const nextShift = (await db
       .prepare(
-        `SELECT sh.*, p.name AS post_name, s.name AS site_name, s.address
+        `SELECT sh.*, p.name AS post_name, p.post_code, s.name AS site_name, s.address, s.city, s.state,
+                p.latitude AS post_lat, p.longitude AS post_lng, p.geofence_radius_m
          FROM shifts sh
          JOIN posts p ON p.id = sh.post_id
          JOIN sites s ON s.id = p.site_id
@@ -160,6 +163,7 @@ timeclockRouter.get(
       rules: {
         earlyClockInMinutes: RULES.earlyClockInMinutes,
         lateGraceMinutes: RULES.lateGraceMinutes,
+        locationPingSeconds: RULES.locationPingSeconds,
       },
     });
   })
@@ -304,6 +308,16 @@ timeclockRouter.post(
     }
 
     await scheduleNextCheckIn(entry, post);
+    await recordPing({
+      userId: req.user.id,
+      entry,
+      post,
+      latitude: body.latitude ?? null,
+      longitude: body.longitude ?? null,
+      accuracy: body.accuracy ?? null,
+      source: 'clock_in',
+      at: now,
+    });
     await audit(req.user.id, 'timeclock.in', 'time_entry', entry.id, { post: post.name, fence: fence.status }, req.ip);
 
     res.status(201).json({
@@ -339,6 +353,17 @@ timeclockRouter.post(
     });
 
     const minutes = Math.max(0, minutesBetween(sqlToIso(entry.clock_in_at), now.toISOString()));
+
+    await recordPing({
+      userId: req.user.id,
+      entry,
+      post,
+      latitude: body.latitude ?? null,
+      longitude: body.longitude ?? null,
+      accuracy: body.accuracy ?? null,
+      source: 'clock_out',
+      at: now,
+    });
 
     (await db.prepare(
       `UPDATE time_entries
@@ -428,11 +453,142 @@ timeclockRouter.post(
     await audit(req.user.id, 'checkin.answered', 'status_check', body.checkId, { status: result.status }, req.ip);
 
     const entry = await openEntryFor(req.user.id);
+    if (entry) {
+      await recordPing({
+        userId: req.user.id,
+        entry,
+        latitude: body.latitude ?? null,
+        longitude: body.longitude ?? null,
+        source: 'check_in',
+      });
+    }
     res.json({
       status: result.status,
       respondedAt: result.responded_at,
       next: entry ? await currentCheckIn(entry.id) : null,
     });
+  })
+);
+
+/* -------------------------------------------------------------- location --- */
+
+const locationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().nonnegative().nullable().optional(),
+  speed: z.number().nullable().optional(),
+  heading: z.number().nullable().optional(),
+});
+
+/**
+ * Where the officer is, compared with where they should be.
+ *
+ * On duty, the position is stored and judged against the post being worked.
+ * Off duty nothing is stored - the answer is still useful ("your next post is
+ * 4 km north-east") but the company has no business keeping where somebody
+ * is when they are not being paid.
+ */
+timeclockRouter.post(
+  '/location',
+  wrap(async (req, res) => {
+    const body = parse(locationSchema, req.body);
+    const entry = await openEntryFor(req.user.id);
+
+    if (entry) {
+      const result = await recordPing({
+        userId: req.user.id,
+        entry,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        accuracy: body.accuracy ?? null,
+        speed: body.speed ?? null,
+        heading: body.heading ?? null,
+        source: 'watch',
+      });
+      return res.json({
+        onDuty: true,
+        recorded: Boolean(result?.stored),
+        target: {
+          kind: 'current',
+          post_id: entry.post_id,
+          post_name: entry.post_name,
+          post_code: entry.post_code,
+          site_name: entry.site_name,
+          address: entry.address,
+          city: entry.city,
+          state: entry.state,
+          latitude: entry.post_lat,
+          longitude: entry.post_lng,
+          radius_m: entry.geofence_radius_m,
+        },
+        offset: result?.offset ?? null,
+        nextPingSeconds: RULES.locationPingSeconds,
+      });
+    }
+
+    const shift =
+      (await currentShiftFor(req.user.id)) ||
+      (await db
+        .prepare(
+          `SELECT sh.*, p.name AS post_name, p.post_code, p.latitude AS post_lat, p.longitude AS post_lng,
+                  p.geofence_radius_m, s.name AS site_name, s.address, s.city, s.state
+           FROM shifts sh
+           JOIN posts p ON p.id = sh.post_id
+           JOIN sites s ON s.id = p.site_id
+           WHERE sh.user_id = ? AND sh.starts_at > ? AND sh.status = 'scheduled'
+           ORDER BY sh.starts_at LIMIT 1`
+        )
+        .get(req.user.id, toSql(new Date())));
+
+    const offset = shift
+      ? locationOffset({
+          lat: body.latitude,
+          lng: body.longitude,
+          accuracy: body.accuracy ?? null,
+          post: { latitude: shift.post_lat, longitude: shift.post_lng, geofence_radius_m: shift.geofence_radius_m },
+        })
+      : null;
+
+    res.json({
+      onDuty: false,
+      recorded: false,
+      target: shift
+        ? {
+            kind: 'next',
+            shift_id: shift.id,
+            starts_at: sqlToIso(shift.starts_at),
+            ends_at: sqlToIso(shift.ends_at),
+            post_id: shift.post_id,
+            post_name: shift.post_name,
+            post_code: shift.post_code,
+            site_name: shift.site_name,
+            address: shift.address,
+            city: shift.city,
+            state: shift.state,
+            latitude: shift.post_lat,
+            longitude: shift.post_lng,
+            radius_m: shift.geofence_radius_m,
+          }
+        : null,
+      offset,
+      nextPingSeconds: null,
+    });
+  })
+);
+
+/** The officer's own trail for the shift they are working. */
+timeclockRouter.get(
+  '/location/trail',
+  wrap(async (req, res) => {
+    const entry = await openEntryFor(req.user.id);
+    if (!entry) return res.json({ pings: [] });
+    const pings = await db
+      .prepare(
+        `SELECT recorded_at, latitude, longitude, accuracy, geofence, distance_m, source
+         FROM location_pings WHERE time_entry_id = ? ORDER BY recorded_at`
+      )
+      .all(entry.id);
+    res.json({ pings: pings.map((p) => isoFields(p, ['recorded_at'])) });
   })
 );
 

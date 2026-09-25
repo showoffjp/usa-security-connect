@@ -278,6 +278,14 @@ export async function sweep(now = new Date()) {
     console.error('[usc] rate limit prune failed', err.message);
   }
 
+  // Imported lazily: tracking.js imports this module for raiseFlag.
+  try {
+    const { pruneLocationPings } = await import('./tracking.js');
+    result.locationPingsPruned = await pruneLocationPings(now);
+  } catch (err) {
+    console.error('[usc] location retention sweep failed', err.message);
+  }
+
   return result;
 }
 

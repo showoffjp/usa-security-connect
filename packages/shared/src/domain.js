@@ -200,6 +200,7 @@ export const FLAG_TYPES = {
   EARLY_DEPARTURE: 'early_departure',
   NO_SHOW: 'no_show',
   UNSCHEDULED_SHIFT: 'unscheduled_shift',
+  OFF_POST: 'off_post',
 };
 
 export const FLAG_LABEL = {
@@ -210,6 +211,7 @@ export const FLAG_LABEL = {
   early_departure: 'Left post early',
   no_show: 'No show',
   unscheduled_shift: 'Unscheduled shift',
+  off_post: 'Left the post geofence',
 };
 
 export const FLAG_SEVERITY = {
@@ -220,6 +222,7 @@ export const FLAG_SEVERITY = {
   early_departure: 'warning',
   no_show: 'critical',
   unscheduled_shift: 'info',
+  off_post: 'warning',
 };
 
 /** Compliance thresholds. Overridable per-post in the posts table. */
@@ -247,6 +250,14 @@ export const RULES = {
   lockoutMinutes: 15,
   /** Hours past this in a week count as overtime. */
   overtimeWeeklyHours: 40,
+  /** How often an on-duty device reports its position. */
+  locationPingSeconds: 60,
+  /** Pings closer together than this are acknowledged but not stored. */
+  minPingGapSeconds: 20,
+  /** An on-duty officer with no position for this long shows as GPS stale. */
+  gpsStaleMinutes: 15,
+  /** Location history older than this is deleted by the sweep. */
+  locationRetentionDays: 90,
 };
 
 export const BROADCAST_PRIORITY = ['normal', 'important', 'urgent'];
@@ -280,6 +291,133 @@ export function evaluateGeofence({ lat, lng, accuracy, post }) {
     return { status: 'unverified', distance, radius, accuracy };
   }
   return { status: distance <= radius ? 'inside' : 'outside', distance, radius, accuracy };
+}
+
+/** Initial compass bearing from point 1 to point 2, in whole degrees (0 = north). */
+export function bearingDegrees(lat1, lon1, lat2, lon2) {
+  if ([lat1, lon1, lat2, lon2].some((v) => typeof v !== 'number' || Number.isNaN(v))) return null;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  return Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
+}
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+export const compassPoint = (degrees) =>
+  degrees == null ? null : COMPASS[Math.round(degrees / 45) % 8];
+
+/** "1.2 km" or "340 m" - how far, in the unit a person would say out loud. */
+export function formatDistance(meters) {
+  if (meters == null) return '--';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km`;
+}
+
+/**
+ * Where a person is relative to where they should be.
+ *
+ * `from` is the officer's actual fix and `to` the assigned post. The bearing
+ * is the direction the officer must walk to get back, so the officer app can
+ * say "340 m, head NE" rather than just "outside".
+ */
+export function locationOffset({ lat, lng, accuracy = null, post }) {
+  const fence = evaluateGeofence({ lat, lng, accuracy, post });
+  if (fence.distance == null) return { ...fence, bearing: null, heading: null };
+  const bearing = bearingDegrees(lat, lng, post.latitude, post.longitude);
+  return { ...fence, bearing, heading: compassPoint(bearing) };
+}
+
+/**
+ * The one-word state of an officer on the live board, in priority order: an
+ * active duress alert outranks everything, being off post outranks a break,
+ * and so on. Kept here so the API and any client agree on the vocabulary.
+ */
+export const LIVE_STATUS = ['duress', 'off_post', 'no_show', 'late', 'on_break', 'on_post', 'upcoming', 'off_duty'];
+
+export const LIVE_STATUS_LABEL = {
+  duress: 'Duress alert',
+  off_post: 'Off post',
+  no_show: 'No show',
+  late: 'Late - not clocked in',
+  on_break: 'On break',
+  on_post: 'On post',
+  upcoming: 'Starting soon',
+  off_duty: 'Off duty',
+};
+
+export function liveStatus({
+  duress = false,
+  onDuty = false,
+  onBreak = false,
+  lastFence = null,
+  shiftStartsAt = null,
+  now = new Date(),
+}) {
+  if (duress) return 'duress';
+  if (onDuty) {
+    if (lastFence === 'outside') return 'off_post';
+    return onBreak ? 'on_break' : 'on_post';
+  }
+  if (shiftStartsAt) {
+    const late = minutesBetween(shiftStartsAt, now);
+    if (late > RULES.noShowMinutes) return 'no_show';
+    if (late > RULES.lateGraceMinutes) return 'late';
+    return 'upcoming';
+  }
+  return 'off_duty';
+}
+
+/**
+ * The Monday that starts the payroll week containing `date`, as YYYY-MM-DD in
+ * local time. Overtime is decided per payroll week, never across a range.
+ */
+export function payrollWeekOf(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Pay for a period made of whole payroll weeks.
+ *
+ * `weeks` is the paid minutes in each payroll week. Overtime is worked out
+ * week by week - forty hours in each of two weeks is eighty hours of straight
+ * time, not forty hours of overtime - which is the mistake a range total makes.
+ */
+export function computePeriodPay({ weeks = [], shifts = 0, ...person }) {
+  const minutes = weeks.reduce((n, m) => n + m, 0);
+  if (person.payType === 'salary' || person.payType === 'per_shift') {
+    return computePay({ ...person, minutes, shifts });
+  }
+  let regularMinutes = 0;
+  let overtimeMinutes = 0;
+  let payCents = person.payRateCents == null ? null : 0;
+  let earnsOvertime = false;
+  for (const weekMinutes of weeks) {
+    const p = computePay({ ...person, minutes: weekMinutes, shifts: 0 });
+    regularMinutes += p.regularMinutes;
+    overtimeMinutes += p.overtimeMinutes;
+    earnsOvertime = p.earnsOvertime;
+    if (payCents != null) payCents += p.payCents ?? 0;
+  }
+  const billCents =
+    person.billRateCents != null ? Math.round((minutes / 60) * person.billRateCents) : null;
+  return {
+    minutes,
+    regularMinutes,
+    overtimeMinutes,
+    earnsOvertime,
+    payCents,
+    billCents,
+    marginCents: billCents != null && payCents != null ? billCents - payCents : null,
+    marginPercent:
+      billCents && payCents != null && billCents > 0
+        ? Math.round(((billCents - payCents) / billCents) * 1000) / 10
+        : null,
+  };
 }
 
 /** Minutes between two ISO timestamps (b - a). */
