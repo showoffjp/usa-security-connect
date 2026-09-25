@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-498 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+507 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -155,7 +155,7 @@ bundle for both platforms.
 | `email.mjs` | 32 | what is composed and addressed, and that no password is in it |
 | `security.mjs` | 24 | set-password links, and the shared rate limiter |
 | `roles.mjs` | 51 | what each staff tier can and cannot reach |
-| `tracking.mjs` | 105 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, Timesheets / reports / invoice cost agreeing to the cent, copying a week |
+| `tracking.mjs` | 114 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, Timesheets / reports / invoice cost agreeing to the cent, ranking who can cover a shift, copying a week |
 
 `verify.mjs` gives the API under test a cron secret, a two-second ping-thinning
 gap and a larger login allowance. Each is an environment variable with a
