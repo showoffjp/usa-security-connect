@@ -35,6 +35,22 @@ Open <http://localhost:5173> and sign in with a demo code + PIN:
 | `1007` | `8140` | Kevin Osei | New hire — forced to change PIN at first sign-in |
 | `1008` | `9351` | Renee Okafor | **1099 contractor**, paid per shift |
 
+Around those eight, the seed builds a regional operation: **ten client sites** from
+Pensacola to Miami, **43 staff** (27 W-2, 8 1099 contractors, 4 armed), a month of
+rosters, 6,000+ GPS points, and a live "right now" whatever hour you seed it - officers
+on post, one who has walked off it, one on a meal break, one whose phone has gone
+quiet, one running late and one who never turned up. A few of the regional accounts:
+
+| Code | PIN | Who | Notes |
+|------|-----|-----|-------|
+| `1009` | `8271` | Terrence Boyd | Supervisor, South Florida |
+| `1010` | `7190` | Megan Hollis | Supervisor, North Florida, armed |
+| `1014` | `2866` | Keisha Turner | Officer, 12-hour nights at Harborview (overtime) |
+| `1020` | `5380` | Raymond Hayes | **1099**, armed garage post in Tallahassee |
+| `1028` | `5732` | Victor Morales | **1099**, armed warehouse post in Pensacola |
+
+`npm run seed` prints every code and PIN, and who is on duty at that moment.
+
 > These fixed PINs exist only in the demo seed. Real accounts get a random PIN
 > generated in the admin console and shown exactly once.
 
@@ -46,9 +62,9 @@ merely see more or less of the same screen — they get different applications.
 | | Officer `1003` | Supervisor `1002` | Administrator `1001` |
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
-| **Navigation** | 5 tabs | 19 destinations | 20 destinations |
-| **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: review flags and incidents, approve time off and swaps, read timesheets and pay, the daily report and the live map | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
-| **Money** | — | Reads invoices and margin | Raises, issues and voids invoices; manages client portal logins |
+| **Navigation** | 5 tabs | 23 destinations | 24 destinations |
+| **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
+| **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes |
 
 A supervisor is a working officer too — they still have their own time clock.
@@ -67,6 +83,9 @@ The client portal is at <http://localhost:5173/portal>, with its own sign-in:
 | `dana.whitfield@riverfrontholdings.com` | `riverfront-portal-01` | Riverfront Commerce Center |
 | `marcus.reyes@palmettoridgehoa.org` | `palmetto-portal-02` | Palmetto Ridge Residences |
 | `alicia.grant@gulfportfreight.com` | `gulfport-portal-03` | Gulfport Logistics Yard |
+| `carla.mendez@harborviewhealth.org` | `harborview-portal-04` | Harborview Medical Center |
+| `rpike@emeraldcoastlogistics.com` | `pensacola-portal-05` | Pensacola Distribution Center |
+| `dfaulkner@capitalplazart.com` | `capital-portal-06` | Capital Plaza Office Tower |
 
 Sign in as two different contacts to see the scoping: neither can reach the other's
 property, and neither sees a pay rate.
@@ -94,6 +113,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Clock in / out** behind a deliberate slide gesture, with GPS verification against
   the post's geofence. Too far away and the officer must give a reason, which is
   attached to the record and raised with a supervisor.
+- **Where you are vs where you should be** — the home screen watches the device's
+  position and compares it with the assigned post: "Inside the geofence, 12 m from the
+  post", or "340 m from your post - head NE", with a map, the line back, and
+  directions. While clocked in the position is shared with dispatch about once a
+  minute; off the clock it is compared with the next post **on the device only** and
+  nothing is sent. Walking out of the geofence mid-shift raises one flag on the way out.
 - **Status check-ins** on a per-post cadence. Miss the window and it is flagged
   automatically; the next prompt is still queued so the cadence continues.
 - **Incident reports** — category, severity, what happened, how it was resolved,
@@ -121,7 +146,32 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 ### Admin console (web)
 
 - **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
-  officers outside their geofence, unfilled shifts.
+  officers outside their geofence, unfilled shifts, and a strip counting who is off
+  post or has not clocked in for a shift that has started.
+- **Live tracking** — every officer's actual position against their assigned post, on a
+  map and in a table: status (on post, off post, on break, late, no-show, starting
+  soon), the job and its address, the shift window, clock-in time and lateness, distance
+  from the post with GPS accuracy and how long ago it was seen, missed check-ins, and
+  hours today and this week with an overtime marker. Anyone outside the fence gets a
+  dashed line back to where they should be. Filters by attention, site and search;
+  refreshes every 20 seconds. Each officer's **GPS track** for any day replays the trail
+  they walked, time inside the fence, walk-offs and distance covered.
+- **Punch log** — every clock-in, clock-out, break start and end, answered and missed
+  check-in, with the position, geofence verdict, distance from the post, method and
+  device. Filter by date range, officer, site, punch type or "outside the geofence only";
+  print or export CSV.
+- **Pay rates** — every officer's classification (W-2 or 1099), pay basis, rate,
+  overtime rate, bill rate and margin in one table, with 28-day hours and pay. Change a
+  rate with an **effective date and a reason**; raise a whole group at once (W-2 or 1099,
+  armed or unarmed, by percent or dollars) with a preview first. Every change - from
+  this screen, a bulk raise or the employee record - lands in the rate history.
+  Supervisors can read rates; only administrators can change them.
+- **Reports** — eight reports over any period, site, officer or classification, each
+  with summary figures, a chart, a sortable table with totals, print and CSV export:
+  hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
+  1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
+  where officers worked, daily hours, attendance &amp; punctuality, and GPS &amp; geofence
+  compliance.
 - **Safety &amp; live map** — open duress alerts with one-tap call and directions, plus a
   map of every post, its geofence, and where each officer actually clocked in.
   Refreshes every 15 seconds.
@@ -134,8 +184,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   agreement and certificate-of-insurance expiry.
 - **Pay &amp; billing** — hourly, salary or per-shift; pay rate, client bill rate, and
   overtime multiplier. A live preview shows a worked example before you save.
-- **Schedule** — week grid, conflict detection, and a recurring roster builder that
-  handles overnight shifts.
+- **Schedule** — a roster grid by officer (weekly hours per person, overtime flagged,
+  click any empty day to add a shift) or by day, conflict detection, **copy a week's
+  roster forward** (clashes are left open rather than double-booked), a recurring roster
+  builder that handles overnight shifts, and print.
 - **Shift requests** — open shifts officers can claim, swaps they can offer each other,
   and drop requests, all landing in one supervisor queue. Eligibility is checked at
   every step, so an officer without a current Class G licence cannot end up on an armed
@@ -228,7 +280,7 @@ geofence radius, overtime line — so changing a rule changes it everywhere at o
 - **Postgres, two drivers, one data layer.** Production uses Neon over HTTP;
   development and CI use **PGlite** — Postgres compiled to WebAssembly — so there is no
   database server to install and no Docker. Both are real Postgres running the same
-  `schema.sql`, and `apps/server/src/lib/db.js` is the only file that knows which is in
+  schema (`apps/server/src/lib/schema.js`), and `apps/server/src/lib/db.js` is the only file that knows which is in
   use. Money is stored in integer cents, calendar fields as `date`, events as
   `timestamptz`.
 - **One Express app, two front doors.** `src/index.js` listens on a port; `api/index.js`
@@ -278,6 +330,8 @@ Defined once in `packages/shared/src/theme.js`, mirrored as CSS custom propertie
 | `USC_ALLOWED_ORIGINS` | server | all | Comma-separated list; set this in production. |
 | `USC_MAPS_API_KEY` | server | unset | Google geocoding key. Without it, address lookup uses OpenStreetMap. |
 | `USC_PUSH_DISABLED` | server | unset | Set to `1` to switch push delivery off (used by the test suite). |
+| `USC_MIN_PING_GAP_SECONDS` | server | `20` | Location reports closer together than this are acknowledged but not stored. The test run shortens it. |
+| `USC_LOGIN_LIMIT_PER_IP` / `USC_LOGIN_LIMIT_PER_CODE` | server | `60` / `10` | Staff sign-ins allowed per five minutes. Raised only for the local test run; leave unset in production. |
 | `USC_EMAIL_API_KEY` | server | unset | A [Resend](https://resend.com) API key. Without it nothing is sent; messages are still composed and recorded in the outbox. |
 | `USC_EMAIL_FROM` | server | Resend's test sender | e.g. `USA Security Connect <billing@usasecuritygroup.com>`. The domain must be verified with your provider. |
 | `USC_EMAIL_DISABLED` | server | unset | Set to `1` to switch email off even when a key is present (used by the test suite). |
@@ -356,6 +410,15 @@ the server is running corrupts the data directory.
   than trusted; status transitions; and that cost and margin never reach the portal.
 - **`test/email.mjs`** — what gets composed, who it is addressed to, and above all that
   no generated password appears in any message.
+- **`test/tracking.mjs`** — location reports (thinned, judged, never stored off duty),
+  one walk-off flag however long an officer stays out, the live board, GPS tracks, the
+  punch log and its filters, pay-rate changes and history, bulk raises that touch
+  exactly who they should, every report - with W-2 overtime recomputed week by week
+  from the raw punches rather than trusted - and copying a week's roster.
+
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 41 screens
+through axe-core. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
+expects it.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.

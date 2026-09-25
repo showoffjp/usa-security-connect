@@ -63,6 +63,37 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* ---------------------------------------------- field status -- */}
+      <div className={`card card-pad row-between wrap${counts.lateOrOff > 0 ? ' attention' : ''}`}>
+        <div className="row wrap" style={{ gap: 18 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Icon name="gps" size={20} style={{ color: counts.offPost ? 'var(--danger)' : 'var(--ok)' }} />
+            <div>
+              <div className="strong">{counts.offPost ?? 0} off post</div>
+              <div className="tiny muted">Outside their geofence right now</div>
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <Icon name="clock" size={20} style={{ color: counts.lateNow ? 'var(--warn)' : 'var(--ok)' }} />
+            <div>
+              <div className="strong">{counts.lateNow ?? 0} not clocked in</div>
+              <div className="tiny muted">Shift started, nobody on post</div>
+            </div>
+          </div>
+        </div>
+        <div className="row wrap">
+          <Link className="btn btn-navy btn-sm" to="/admin/live?filter=attention">
+            <Icon name="gps" size={14} /> Live tracking
+          </Link>
+          <Link className="btn btn-ghost btn-sm" to="/admin/punches">
+            <Icon name="list" size={14} /> Punch log
+          </Link>
+          <Link className="btn btn-ghost btn-sm" to="/admin/reports">
+            <Icon name="chart" size={14} /> Reports
+          </Link>
+        </div>
+      </div>
+
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)' }}>
         {/* ------------------------------------------------- on post -- */}
         <div className="card">

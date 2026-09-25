@@ -19,6 +19,10 @@ and the API, web app and mobile app all follow.
 | `maxTrustedAccuracyM` | 100 | Worse GPS accuracy than this is reported as *unverified*, not a violation. |
 | `maxPinAttempts` / `lockoutMinutes` | 5 / 15 | Failed PIN attempts before lockout, and for how long. |
 | `overtimeWeeklyHours` | 40 | Federal FLSA weekly line used for the overtime split. |
+| `locationPingSeconds` | 60 | How often an on-duty device reports its position. |
+| `minPingGapSeconds` | 20 | Reports closer together than this are acknowledged but not stored. Clock events are always kept. |
+| `gpsStaleMinutes` | 15 | An officer on the clock with no position for this long shows as *GPS gone quiet*. |
+| `locationRetentionDays` | 90 | Location history older than this is deleted by the sweep. |
 
 ## Flags
 
@@ -35,6 +39,7 @@ which is kept on the officer's record.
 | `early_departure` | warning | Clocked out more than 10 minutes early. |
 | `no_show` | critical | Scheduled shift with no clock-in 30 minutes after start. |
 | `unscheduled_shift` | info | Clocked in at a post with no matching shift. Not a fault — it tells dispatch coverage happened off-roster. |
+| `off_post` | warning | A position reported mid-shift is outside the post's geofence. Raised once, on the way out — staying out does not raise another, walking back in and out again does. |
 
 ### Deliberate design choices
 
@@ -50,6 +55,75 @@ which is kept on the officer's record.
   clocked into would destroy payroll evidence.
 - **Corrections are additive.** Editing a punch preserves the original clock-in and
   clock-out alongside the reason and who made the change.
+
+## Live tracking
+
+While an officer is clocked in, the app reports the device's position about once a
+minute. Each report is stored with the verdict against the post being worked -
+inside, outside or unverified, and the distance - so a shift's trail reads the same
+even if the post's geofence is moved later.
+
+The live board gives every officer one status, in this order of priority:
+
+| Status | Meaning |
+|--------|---------|
+| Duress alert | An open duress alert, whatever else is true. |
+| Off post | On the clock, latest position outside the geofence. |
+| No show | A shift started more than `noShowMinutes` ago and nobody clocked in. |
+| Late - not clocked in | A shift started more than `lateGraceMinutes` ago, not yet a no-show. |
+| On break | On the clock with a break open. |
+| On post | On the clock, inside the fence (or no worse than unverified). |
+| Starting soon | A shift starts within the next 12 hours. |
+| Off duty | None of the above. |
+
+*GPS gone quiet* is shown alongside, not instead: an officer can be on post with a
+phone that has stopped reporting, and a supervisor needs to see both.
+
+**Off the clock, nothing is sent.** The officer app still shows how far they are from
+their next post, but it works that out on the device. What an employer may record
+about where an off-duty worker is, is not a question this app should answer for you.
+
+The mobile app tracks in the foreground only - while the app is open. Tracking with
+the phone in a pocket needs background location permission, which both app stores
+review closely and which is a policy decision to take deliberately.
+
+## Pay rates
+
+Rates live on the employee record, where timesheets, invoices and reports read them.
+The pay rates screen is the fast way to set them, and **every change is recorded in
+the rate history** with who made it, why, and the date it takes effect - whether it
+came from that screen, a bulk adjustment, or the employee record. Saving without
+changing anything does not add a line.
+
+- A change needs a reason and an effective date. **Reports price each hour at the rate
+  in effect on the day it was worked**, so a raise dated tomorrow leaves last month's
+  figures alone and a back-dated correction reprices only the hours after its date.
+  The older Timesheets screen and invoice cost still use the rate on the record now;
+  use the payroll register for anything that spans a rate change.
+- Moving somebody to 1099 on this screen clears *exempt* and is still refused without
+  a W-9 on file.
+- A bulk adjustment targets W-2, 1099 or both, armed, unarmed or both, by percent or
+  by dollars, and always previews who it will touch before it is applied.
+- Supervisors can read rates, because they staff shifts against margin. Only an
+  administrator can change them.
+
+## Reports
+
+Every report is built from the same rows as the timesheet and invoice, so the numbers
+agree. Things worth knowing when reading them:
+
+- **Overtime is decided per payroll week (Monday to Sunday)**, never across a range.
+  Forty hours in each of two weeks is eighty hours of straight time. A range that
+  starts or ends mid-week counts only the hours inside it.
+- **Labor cost by site is base pay.** The overtime premium belongs to the officer's
+  week, not to any one site, so it appears in the payroll and overtime reports.
+- **Billing** uses the shift's own rate if one was agreed, then the post's standing
+  rate, then the officer's.
+- **Each hour is paid at the rate in effect that day.** When a rate changes mid-week,
+  the overtime premium is worked out on the week's weighted-average rate - the FLSA
+  "regular rate" - which is how a payroll provider prices it.
+- Unpaid meal breaks come off both pay and billing. Shifts still in progress are not
+  counted until the officer clocks out.
 
 ## Employment classification and pay
 
@@ -136,7 +210,10 @@ and those notes are visible to the reporting officer.
 ## Data retention
 
 The audit log, time entries and incidents are designed to be kept indefinitely —
-they are the evidence trail for payroll disputes and client billing. GPS traces on
-individual check-ins are a different matter and worth a deliberate retention policy;
-they are stored per check-in and per clock event and can be pruned without affecting
-hours or compliance history.
+they are the evidence trail for payroll disputes and client billing.
+
+Continuous location history is different, and it has a retention window: the sweep
+deletes location reports older than `locationRetentionDays` (90). Hours, punches and
+flags are unaffected - the clock-in and clock-out positions live on the time entry
+itself. Ninety days is a starting point, not advice; confirm the right period with
+counsel before relying on it.

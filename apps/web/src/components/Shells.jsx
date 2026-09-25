@@ -189,6 +189,7 @@ export function AdminShell() {
       title: 'Operations',
       items: [
         { to: '/admin', icon: 'chart', label: 'Dashboard', end: true },
+        { to: '/admin/live', icon: 'gps', label: 'Live tracking', count: counts.lateOrOff, urgent: true },
         { to: '/admin/safety', icon: 'shield', label: 'Safety & map', count: counts.activeAlerts, urgent: true },
         { to: '/admin/flags', icon: 'flag', label: 'Flags', count: counts.openFlags },
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
@@ -201,7 +202,9 @@ export function AdminShell() {
         { to: '/admin/employees', icon: 'users', label: 'Employees' },
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
         { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
+        { to: '/admin/punches', icon: 'list', label: 'Punch log' },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay' },
+        { to: '/admin/pay-rates', icon: 'dollar', label: 'Pay rates' },
         { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
         { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },
       ],
@@ -217,6 +220,7 @@ export function AdminShell() {
     {
       title: 'Reporting',
       items: [
+        { to: '/admin/reports', icon: 'chart', label: 'Reports' },
         { to: '/admin/dar', icon: 'clipboard', label: 'Daily report' },
         { to: '/admin/broadcasts', icon: 'megaphone', label: 'Broadcasts' },
         { to: '/admin/training', icon: 'book', label: 'Training' },

@@ -1,0 +1,941 @@
+/**
+ * The report centre.
+ *
+ * Every report here is built from the same rows the officer app writes -
+ * time entries, shifts, check-ins, pings and flags - so a number in a report
+ * is the same number the timesheet, the invoice and the live board show.
+ *
+ * Each report returns typed columns, rows and totals rather than a bespoke
+ * shape, so the web app renders, sorts, totals and exports all of them with
+ * one component, and CSV export is the same code as the screen.
+ */
+
+import { Router } from 'express';
+import { db } from '../lib/db.js';
+import { HttpError, wrap, parseDay, toDateString, sqlToIso } from '../lib/http.js';
+import { requireAuth, requireRole } from '../lib/auth.js';
+import {
+  ROLES,
+  EMPLOYMENT_TYPES,
+  computePeriodPay,
+  effectiveBillRate,
+  billableMinutes,
+  amountForMinutes,
+  payrollWeekOf,
+  toHours,
+  RULES,
+} from '../shared.js';
+import { toSql } from '../services/compliance.js';
+
+export const adminReportsRouter = Router();
+adminReportsRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
+
+export const REPORTS = [
+  {
+    id: 'hours-by-officer',
+    title: 'Hours & pay by officer',
+    description: 'Hours worked, regular and overtime, gross pay, billing and margin for every officer.',
+    group: 'Payroll',
+  },
+  {
+    id: 'payroll',
+    title: 'Payroll register (W-2 & 1099)',
+    description: 'One line per person per payroll week: overtime decided week by week, contractors listed with their paperwork.',
+    group: 'Payroll',
+  },
+  {
+    id: 'overtime',
+    title: 'Overtime watch',
+    description: 'Every payroll week where a W-2 officer went past forty hours, or is close to it, and what the premium cost.',
+    group: 'Payroll',
+  },
+  {
+    id: 'hours-by-site',
+    title: 'Hours & margin by site',
+    description: 'Hours delivered at every site and post, what they bill, what they cost, and the margin left.',
+    group: 'Clients',
+  },
+  {
+    id: 'officer-site',
+    title: 'Where officers worked',
+    description: 'Every officer and every site they worked at, with shifts, hours and the first and last day there.',
+    group: 'Clients',
+  },
+  {
+    id: 'daily',
+    title: 'Daily hours',
+    description: 'Hours, shifts, officers and billing for each day in the range.',
+    group: 'Clients',
+  },
+  {
+    id: 'attendance',
+    title: 'Attendance & punctuality',
+    description: 'Scheduled against worked, no-shows, late arrivals, early departures and missed check-ins per officer.',
+    group: 'Compliance',
+  },
+  {
+    id: 'gps',
+    title: 'GPS & geofence compliance',
+    description: 'How much of each shift was spent inside the post geofence, clock-ins from outside, and walk-offs.',
+    group: 'Compliance',
+  },
+];
+
+const C = (key, label, type = 'text', extra = {}) => ({ key, label, type, ...extra });
+const dollars = (cents) => (cents == null ? null : Math.round(cents) / 100);
+const pct = (num, den) => (den ? Math.round((num / den) * 1000) / 10 : null);
+const classLabel = (t) => (t === '1099' ? '1099' : 'W-2');
+
+/* --------------------------------------------------------------- filters -- */
+
+function readFilters(query) {
+  const now = new Date();
+  const defaultFrom = new Date(now);
+  defaultFrom.setDate(defaultFrom.getDate() - 13);
+
+  const from = parseDay(query.from || toDateString(defaultFrom));
+  const toDay = parseDay(query.to);
+  if (!from || !toDay) throw new HttpError(422, 'Use dates like 2026-09-25.');
+  const to = new Date(toDay);
+  to.setDate(to.getDate() + 1);
+  if (to <= from) throw new HttpError(422, 'The end date is before the start date.');
+  if ((to - from) / 86400000 > 370) throw new HttpError(422, 'Pick at most a year at a time.');
+
+  const int = (v, what) => {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n <= 0) throw new HttpError(422, `Unknown ${what}.`);
+    return n;
+  };
+  const employmentType = query.employmentType || null;
+  if (employmentType && !EMPLOYMENT_TYPES.includes(employmentType)) {
+    throw new HttpError(422, 'Classification must be w2 or 1099.');
+  }
+
+  return {
+    from,
+    to,
+    toDay,
+    siteId: int(query.siteId, 'site'),
+    userId: int(query.userId, 'officer'),
+    employmentType,
+  };
+}
+
+/** WHERE fragments and their parameters, for queries joined to u (users) and s (sites). */
+function scope(f, userCol = 'u.id') {
+  const where = [];
+  const params = [];
+  if (f.siteId) {
+    where.push('s.id = ?');
+    params.push(f.siteId);
+  }
+  if (f.userId) {
+    where.push(`${userCol} = ?`);
+    params.push(f.userId);
+  }
+  if (f.employmentType) {
+    where.push('u.employment_type = ?');
+    params.push(f.employmentType);
+  }
+  return { sql: where.length ? `AND ${where.join(' AND ')}` : '', params };
+}
+
+/** Completed time entries in range, with everything pay and billing need. */
+async function loadEntries(f) {
+  const sc = scope(f);
+  const rows = await db
+    .prepare(
+      `SELECT te.id, te.user_id, te.shift_id, te.clock_in_at, te.clock_out_at, te.minutes_worked,
+              te.unpaid_break_minutes, te.late_minutes, te.clock_in_geofence, te.clock_in_distance_m,
+              te.auto_closed,
+              u.employee_code, u.first_name || ' ' || u.last_name AS officer, u.role,
+              u.employment_type, u.pay_type, u.exempt, u.pay_rate_cents, u.salary_cents,
+              u.bill_rate_cents AS officer_bill_cents, u.overtime_multiplier,
+              u.business_name, u.tax_id_last4, u.w9_on_file,
+              p.id AS post_id, p.name AS post_name, p.post_code, p.bill_rate_cents AS post_bill_cents,
+              s.id AS site_id, s.name AS site_name, s.client_name, s.city,
+              sh.bill_rate_cents AS shift_bill_cents
+       FROM time_entries te
+       JOIN users u ON u.id = te.user_id
+       JOIN posts p ON p.id = te.post_id
+       JOIN sites s ON s.id = p.site_id
+       LEFT JOIN shifts sh ON sh.id = te.shift_id
+       WHERE te.clock_out_at IS NOT NULL AND te.clock_in_at >= ? AND te.clock_in_at < ?
+       ${sc.sql}
+       ORDER BY te.clock_in_at`
+    )
+    .all(toSql(f.from), toSql(f.to), ...sc.params);
+
+  // The rate that applied on the day, from the rate history, so a raise
+  // today does not rewrite what last month cost.
+  const history = await db
+    .prepare(
+      `SELECT user_id, effective_on, pay_type, pay_rate_cents, overtime_multiplier
+       FROM pay_rate_history ORDER BY user_id, effective_on, id`
+    )
+    .all();
+  const book = new Map();
+  for (const h of history) {
+    if (!book.has(h.user_id)) book.set(h.user_id, []);
+    book.get(h.user_id).push(h);
+  }
+  const rateOn = (r, day) => {
+    let found = null;
+    for (const h of book.get(r.user_id) || []) {
+      if (String(h.effective_on) <= day) found = h;
+      else break;
+    }
+    // A change of pay basis is not something a rate lookup can reconcile;
+    // it falls back to the record as it stands.
+    return found && found.pay_type === r.pay_type && found.pay_rate_cents != null
+      ? { rate: found.pay_rate_cents, multiplier: found.overtime_multiplier ?? r.overtime_multiplier }
+      : { rate: r.pay_rate_cents, multiplier: r.overtime_multiplier };
+  };
+
+  return rows.map((r) => {
+    const day = toDateString(new Date(sqlToIso(r.clock_in_at)));
+    const applied = rateOn(r, day);
+    r = { ...r, pay_rate_cents: applied.rate, overtime_multiplier: applied.multiplier || 1.5 };
+    const paid = billableMinutes(r.minutes_worked, r.unpaid_break_minutes);
+    const billRate = effectiveBillRate({
+      shiftRateCents: r.shift_bill_cents,
+      postRateCents: r.post_bill_cents,
+      officerRateCents: r.officer_bill_cents,
+    });
+    // Base cost of this entry. Overtime premium belongs to the officer's week,
+    // not to any one site, so it is reported against the officer instead.
+    const baseCost =
+      r.pay_type === 'per_shift'
+        ? r.pay_rate_cents ?? 0
+        : r.pay_type === 'salary'
+          ? 0
+          : amountForMinutes(paid, r.pay_rate_cents);
+    return {
+      ...r,
+      clock_in_at: sqlToIso(r.clock_in_at),
+      clock_out_at: sqlToIso(r.clock_out_at),
+      paid_minutes: paid,
+      bill_rate_cents: billRate,
+      billed_cents: billRate != null ? amountForMinutes(paid, billRate) : 0,
+      base_cost_cents: baseCost,
+      week: payrollWeekOf(sqlToIso(r.clock_in_at)),
+      day,
+    };
+  });
+}
+
+/**
+ * What one person is owed for a set of entries.
+ *
+ * Hourly pay is worked out payroll week by payroll week. Each hour is paid at
+ * the rate that applied on its day, and the overtime premium is the multiplier
+ * over the week's weighted-average rate - the FLSA "regular rate" - so a raise
+ * mid-week is priced the way a payroll provider would price it. With one rate
+ * all week this is exactly rate x regular + rate x multiplier x overtime.
+ */
+function personPay(list) {
+  const first = list[0];
+  if (first.pay_type === 'hourly') {
+    const earnsOvertime = first.employment_type === 'w2' && !first.exempt;
+    const threshold = RULES.overtimeWeeklyHours * 60;
+    let minutes = 0;
+    let overtimeMinutes = 0;
+    let payCents = list.some((e) => e.pay_rate_cents == null) ? null : 0;
+    for (const week of groupBy(list, 'week').values()) {
+      const weekMinutes = week.reduce((n, e) => n + e.paid_minutes, 0);
+      const straight = week.reduce((n, e) => n + (e.paid_minutes / 60) * (e.pay_rate_cents || 0), 0);
+      const ot = earnsOvertime ? Math.max(0, weekMinutes - threshold) : 0;
+      const regularRate = weekMinutes ? (straight * 60) / weekMinutes : 0;
+      const multiplier = week[week.length - 1].overtime_multiplier || 1.5;
+      if (payCents != null) payCents += Math.round(straight + (ot / 60) * regularRate * (multiplier - 1));
+      minutes += weekMinutes;
+      overtimeMinutes += ot;
+    }
+    return {
+      minutes,
+      regularMinutes: minutes - overtimeMinutes,
+      overtimeMinutes,
+      earnsOvertime,
+      payCents,
+    };
+  }
+
+  const weeks = new Map();
+  for (const e of list) weeks.set(e.week, (weeks.get(e.week) || 0) + e.paid_minutes);
+  return computePeriodPay({
+    weeks: [...weeks.values()],
+    shifts: list.length,
+    employmentType: first.employment_type,
+    payType: first.pay_type,
+    exempt: Boolean(first.exempt),
+    payRateCents: first.pay_rate_cents,
+    billRateCents: null,
+    overtimeMultiplier: first.overtime_multiplier || 1.5,
+    salaryCents: first.salary_cents,
+  });
+}
+
+const groupBy = (list, key) => {
+  const map = new Map();
+  for (const item of list) {
+    const k = typeof key === 'function' ? key(item) : item[key];
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(item);
+  }
+  return map;
+};
+
+function sumColumns(rows, columns) {
+  const totals = {};
+  for (const c of columns) {
+    if (c.sum) totals[c.key] = Math.round(rows.reduce((n, r) => n + (Number(r[c.key]) || 0), 0) * 100) / 100;
+  }
+  return totals;
+}
+
+/* --------------------------------------------------------------- reports -- */
+
+const builders = {
+  async 'hours-by-officer'(f) {
+    const entries = await loadEntries(f);
+    const rows = [];
+    for (const [, list] of groupBy(entries, 'user_id')) {
+      const first = list[0];
+      const pay = personPay(list);
+      const billed = list.reduce((n, e) => n + e.billed_cents, 0);
+      const sites = groupBy(list, 'site_name');
+      const top = [...sites.entries()].sort(
+        (a, b) => b[1].reduce((n, e) => n + e.paid_minutes, 0) - a[1].reduce((n, e) => n + e.paid_minutes, 0)
+      )[0];
+      rows.push({
+        user_id: first.user_id,
+        employee_code: first.employee_code,
+        officer: first.officer,
+        classification: classLabel(first.employment_type),
+        pay_type: first.pay_type,
+        pay_rate: dollars(list[list.length - 1].pay_rate_cents),
+        shifts: list.length,
+        hours: toHours(pay.minutes),
+        regular_hours: toHours(pay.regularMinutes),
+        overtime_hours: toHours(pay.overtimeMinutes),
+        gross_pay: dollars(pay.payCents),
+        billed: dollars(billed),
+        margin: pay.payCents != null ? dollars(billed - pay.payCents) : null,
+        margin_percent: pay.payCents != null ? pct(billed - pay.payCents, billed) : null,
+        sites: sites.size,
+        main_site: top?.[0] ?? null,
+        late_arrivals: list.filter((e) => e.late_minutes > 0).length,
+      });
+    }
+    rows.sort((a, b) => b.hours - a.hours);
+    const columns = [
+      C('employee_code', 'Code'),
+      C('officer', 'Officer', 'text', { link: 'user_id' }),
+      C('classification', 'Class'),
+      C('pay_rate', 'Rate', 'rate'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('hours', 'Hours', 'hours', { sum: true, bar: true }),
+      C('regular_hours', 'Regular', 'hours', { sum: true }),
+      C('overtime_hours', 'Overtime', 'hours', { sum: true, warnAbove: 0 }),
+      C('gross_pay', 'Gross pay', 'money', { sum: true }),
+      C('billed', 'Billed', 'money', { sum: true }),
+      C('margin', 'Margin', 'money', { sum: true }),
+      C('margin_percent', 'Margin %', 'percent'),
+      C('sites', 'Sites', 'int'),
+      C('main_site', 'Main site'),
+      C('late_arrivals', 'Late', 'int', { sum: true, warnAbove: 0 }),
+    ];
+    const totals = sumColumns(rows, columns);
+    totals.margin_percent = pct(totals.margin, totals.billed);
+    const w2 = rows.filter((r) => r.classification === 'W-2');
+    const c1099 = rows.filter((r) => r.classification === '1099');
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Hours worked', value: totals.hours, type: 'hours' },
+        { label: 'Overtime hours', value: totals.overtime_hours, type: 'hours' },
+        { label: 'W-2 gross pay', value: w2.reduce((n, r) => n + (r.gross_pay || 0), 0), type: 'money' },
+        { label: '1099 payments', value: c1099.reduce((n, r) => n + (r.gross_pay || 0), 0), type: 'money' },
+        { label: 'Billed', value: totals.billed, type: 'money' },
+        { label: 'Margin', value: totals.margin_percent, type: 'percent' },
+      ],
+      chart: { label: 'officer', value: 'hours', type: 'hours' },
+      notes: [
+        'Overtime is decided per payroll week (Monday to Sunday). A range that starts or ends mid-week counts only the hours inside it.',
+        'Each hour is paid at the rate in effect on the day it was worked, from the rate history - a raise does not reprice earlier weeks.',
+        '1099 contractors are paid straight time for every hour; W-2 exempt and salaried staff earn no overtime.',
+        'Unpaid meal breaks are deducted before pay and billing. Shifts still in progress are not included until the officer clocks out.',
+      ],
+    };
+  },
+
+  async payroll(f) {
+    const entries = await loadEntries(f);
+    const rows = [];
+    for (const [, list] of groupBy(entries, (e) => `${e.user_id}|${e.week}`)) {
+      const first = list[0];
+      const pay = personPay(list);
+      const w2 = first.employment_type === 'w2';
+      rows.push({
+        week: first.week,
+        user_id: first.user_id,
+        employee_code: first.employee_code,
+        officer: first.officer,
+        classification: classLabel(first.employment_type),
+        pay_type: first.pay_type,
+        shifts: list.length,
+        regular_hours: toHours(pay.regularMinutes),
+        overtime_hours: toHours(pay.overtimeMinutes),
+        pay_rate: dollars(list[list.length - 1].pay_rate_cents),
+        overtime_rate:
+          pay.earnsOvertime && list[list.length - 1].pay_rate_cents != null
+            ? dollars(list[list.length - 1].pay_rate_cents * (list[list.length - 1].overtime_multiplier || 1.5))
+            : null,
+        gross_pay: dollars(pay.payCents),
+        payee: w2 ? null : first.business_name || first.officer,
+        tax_id: w2 ? null : first.tax_id_last4 ? `***-**-${first.tax_id_last4}` : 'missing',
+        w9: w2 ? null : first.w9_on_file ? 'On file' : 'MISSING',
+      });
+    }
+    rows.sort((a, b) => a.week.localeCompare(b.week) || a.classification.localeCompare(b.classification) || a.officer.localeCompare(b.officer));
+    const columns = [
+      C('week', 'Week of', 'date'),
+      C('employee_code', 'Code'),
+      C('officer', 'Name', 'text', { link: 'user_id' }),
+      C('classification', 'Class'),
+      C('pay_type', 'Basis'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('regular_hours', 'Regular hrs', 'hours', { sum: true }),
+      C('overtime_hours', 'OT hrs', 'hours', { sum: true, warnAbove: 0 }),
+      C('pay_rate', 'Rate', 'rate'),
+      C('overtime_rate', 'OT rate', 'rate'),
+      C('gross_pay', 'Gross', 'money', { sum: true }),
+      C('payee', '1099 payee'),
+      C('tax_id', 'TIN'),
+      C('w9', 'W-9'),
+    ];
+    const w2Rows = rows.filter((r) => r.classification === 'W-2');
+    const cRows = rows.filter((r) => r.classification === '1099');
+    const otPremium = w2Rows.reduce(
+      (n, r) => n + (r.overtime_rate != null ? r.overtime_hours * (r.overtime_rate - r.pay_rate) : 0),
+      0
+    );
+    return {
+      columns,
+      rows,
+      totals: sumColumns(rows, columns),
+      summary: [
+        { label: 'W-2 gross', value: w2Rows.reduce((n, r) => n + (r.gross_pay || 0), 0), type: 'money' },
+        { label: 'W-2 people', value: new Set(w2Rows.map((r) => r.user_id)).size, type: 'int' },
+        { label: '1099 payments', value: cRows.reduce((n, r) => n + (r.gross_pay || 0), 0), type: 'money' },
+        { label: '1099 payees', value: new Set(cRows.map((r) => r.user_id)).size, type: 'int' },
+        { label: 'Overtime hours', value: w2Rows.reduce((n, r) => n + r.overtime_hours, 0), type: 'hours' },
+        { label: 'Overtime premium', value: Math.round(otPremium * 100) / 100, type: 'money' },
+      ],
+      notes: [
+        'A planning figure: your payroll provider remains the source of truth for withholding and taxes.',
+        'Contractors are paid against their invoice. A 1099 row with a missing W-9 should not be paid until one is on file.',
+        'Salaried staff show their salary for the period once, not per week.',
+      ],
+    };
+  },
+
+  async overtime(f) {
+    const entries = (await loadEntries(f)).filter((e) => e.employment_type === 'w2');
+    const rows = [];
+    const threshold = RULES.overtimeWeeklyHours * 60;
+    for (const [, list] of groupBy(entries, (e) => `${e.user_id}|${e.week}`)) {
+      const first = list[0];
+      const minutes = list.reduce((n, e) => n + e.paid_minutes, 0);
+      if (minutes < threshold - 4 * 60) continue;
+      const pay = personPay(list);
+      const premium =
+        pay.earnsOvertime && list[list.length - 1].pay_rate_cents != null
+          ? (pay.overtimeMinutes / 60) * list[list.length - 1].pay_rate_cents * ((list[list.length - 1].overtime_multiplier || 1.5) - 1)
+          : 0;
+      rows.push({
+        week: first.week,
+        user_id: first.user_id,
+        officer: first.officer,
+        employee_code: first.employee_code,
+        shifts: list.length,
+        hours: toHours(minutes),
+        overtime_hours: toHours(pay.overtimeMinutes),
+        status: pay.overtimeMinutes > 0 ? (pay.earnsOvertime ? 'Overtime' : 'Over 40 (exempt)') : 'Within 4h of 40',
+        premium: dollars(premium),
+        sites: [...new Set(list.map((e) => e.site_name))].join(', '),
+      });
+    }
+    rows.sort((a, b) => b.overtime_hours - a.overtime_hours || b.hours - a.hours);
+    const columns = [
+      C('week', 'Week of', 'date'),
+      C('officer', 'Officer', 'text', { link: 'user_id' }),
+      C('employee_code', 'Code'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('hours', 'Hours', 'hours', { sum: true, bar: true }),
+      C('overtime_hours', 'Overtime', 'hours', { sum: true, warnAbove: 0 }),
+      C('premium', 'OT premium', 'money', { sum: true }),
+      C('status', 'Status'),
+      C('sites', 'Sites worked'),
+    ];
+    const totals = sumColumns(rows, columns);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Weeks over 40h', value: rows.filter((r) => r.overtime_hours > 0).length, type: 'int' },
+        { label: 'Weeks within 4h', value: rows.filter((r) => r.overtime_hours === 0).length, type: 'int' },
+        { label: 'Overtime hours', value: totals.overtime_hours, type: 'hours' },
+        { label: 'Premium paid', value: totals.premium, type: 'money' },
+      ],
+      notes: [
+        'The premium is only the extra half (or whatever the multiplier is) on overtime hours - the straight-time part is in the payroll register.',
+        '1099 contractors are left out: they are not owed overtime.',
+      ],
+    };
+  },
+
+  async 'hours-by-site'(f) {
+    const entries = await loadEntries(f);
+    const rows = [];
+    for (const [, list] of groupBy(entries, 'post_id')) {
+      const first = list[0];
+      const minutes = list.reduce((n, e) => n + e.paid_minutes, 0);
+      const billed = list.reduce((n, e) => n + e.billed_cents, 0);
+      const cost = list.reduce((n, e) => n + e.base_cost_cents, 0);
+      rows.push({
+        site_id: first.site_id,
+        client: first.client_name,
+        site: first.site_name,
+        post: first.post_name,
+        post_code: first.post_code,
+        shifts: list.length,
+        officers: new Set(list.map((e) => e.user_id)).size,
+        hours: toHours(minutes),
+        bill_rate: dollars(first.post_bill_cents),
+        billed: dollars(billed),
+        labor_cost: dollars(cost),
+        margin: dollars(billed - cost),
+        margin_percent: pct(billed - cost, billed),
+      });
+    }
+    rows.sort((a, b) => a.site.localeCompare(b.site) || b.hours - a.hours);
+    const columns = [
+      C('client', 'Client'),
+      C('site', 'Site'),
+      C('post', 'Post'),
+      C('post_code', 'Code'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('officers', 'Officers', 'int'),
+      C('hours', 'Hours', 'hours', { sum: true, bar: true }),
+      C('bill_rate', 'Bill rate', 'rate'),
+      C('billed', 'Billed', 'money', { sum: true }),
+      C('labor_cost', 'Labor cost', 'money', { sum: true }),
+      C('margin', 'Margin', 'money', { sum: true }),
+      C('margin_percent', 'Margin %', 'percent'),
+    ];
+    const totals = sumColumns(rows, columns);
+    totals.margin_percent = pct(totals.margin, totals.billed);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Sites', value: new Set(rows.map((r) => r.site_id)).size, type: 'int' },
+        { label: 'Hours delivered', value: totals.hours, type: 'hours' },
+        { label: 'Billed', value: totals.billed, type: 'money' },
+        { label: 'Labor cost', value: totals.labor_cost, type: 'money' },
+        { label: 'Margin', value: totals.margin_percent, type: 'percent' },
+      ],
+      chart: { label: 'site', value: 'hours', type: 'hours', aggregate: true },
+      notes: [
+        'Labor cost is base pay only. The overtime premium belongs to the officer’s week rather than to any one site, so it appears in the payroll reports.',
+        'Billing uses the shift’s own rate where one was agreed, then the post’s standing rate, then the officer’s.',
+      ],
+    };
+  },
+
+  async 'officer-site'(f) {
+    const entries = await loadEntries(f);
+    const rows = [];
+    for (const [, list] of groupBy(entries, (e) => `${e.user_id}|${e.post_id}`)) {
+      const first = list[0];
+      rows.push({
+        user_id: first.user_id,
+        officer: first.officer,
+        employee_code: first.employee_code,
+        classification: classLabel(first.employment_type),
+        site: first.site_name,
+        city: first.city,
+        post: first.post_name,
+        shifts: list.length,
+        hours: toHours(list.reduce((n, e) => n + e.paid_minutes, 0)),
+        first_day: list[0].day,
+        last_day: list[list.length - 1].day,
+      });
+    }
+    rows.sort((a, b) => a.officer.localeCompare(b.officer) || b.hours - a.hours);
+    const columns = [
+      C('officer', 'Officer', 'text', { link: 'user_id' }),
+      C('employee_code', 'Code'),
+      C('classification', 'Class'),
+      C('site', 'Site'),
+      C('city', 'City'),
+      C('post', 'Post'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('hours', 'Hours', 'hours', { sum: true, bar: true }),
+      C('first_day', 'First day', 'date'),
+      C('last_day', 'Last day', 'date'),
+    ];
+    return {
+      columns,
+      rows,
+      totals: sumColumns(rows, columns),
+      summary: [
+        { label: 'Officers', value: new Set(rows.map((r) => r.user_id)).size, type: 'int' },
+        { label: 'Sites', value: new Set(rows.map((r) => r.site)).size, type: 'int' },
+        {
+          label: 'Worked 2+ sites',
+          value: [...groupBy(rows, 'user_id').values()].filter((l) => new Set(l.map((r) => r.site)).size > 1).length,
+          type: 'int',
+        },
+        { label: 'Hours', value: rows.reduce((n, r) => n + r.hours, 0), type: 'hours' },
+      ],
+      notes: ['One row per officer per post. Use the officer filter to see a single person’s footprint.'],
+    };
+  },
+
+  async daily(f) {
+    const entries = await loadEntries(f);
+    const byDay = groupBy(entries, 'day');
+    const rows = [];
+    for (let d = new Date(f.from); d < f.to; d.setDate(d.getDate() + 1)) {
+      const key = toDateString(d);
+      const list = byDay.get(key) || [];
+      rows.push({
+        day: key,
+        weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        shifts: list.length,
+        officers: new Set(list.map((e) => e.user_id)).size,
+        sites: new Set(list.map((e) => e.site_id)).size,
+        hours: toHours(list.reduce((n, e) => n + e.paid_minutes, 0)),
+        billed: dollars(list.reduce((n, e) => n + e.billed_cents, 0)),
+        labor_cost: dollars(list.reduce((n, e) => n + e.base_cost_cents, 0)),
+        late: list.filter((e) => e.late_minutes > 0).length,
+      });
+    }
+    const columns = [
+      C('day', 'Date', 'date'),
+      C('weekday', 'Day'),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('officers', 'Officers', 'int'),
+      C('sites', 'Sites', 'int'),
+      C('hours', 'Hours', 'hours', { sum: true, bar: true }),
+      C('billed', 'Billed', 'money', { sum: true }),
+      C('labor_cost', 'Labor cost', 'money', { sum: true }),
+      C('late', 'Late arrivals', 'int', { sum: true, warnAbove: 0 }),
+    ];
+    const totals = sumColumns(rows, columns);
+    const worked = rows.filter((r) => r.shifts > 0);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Hours', value: totals.hours, type: 'hours' },
+        { label: 'Average per day', value: worked.length ? Math.round((totals.hours / worked.length) * 100) / 100 : 0, type: 'hours' },
+        { label: 'Busiest day', value: worked.length ? [...worked].sort((a, b) => b.hours - a.hours)[0].day : '--', type: 'date' },
+        { label: 'Billed', value: totals.billed, type: 'money' },
+      ],
+      chart: { label: 'day', value: 'hours', type: 'hours', series: 'time' },
+      notes: ['A shift is counted on the day it started, so an overnight shift sits on its first day.'],
+    };
+  },
+
+  async attendance(f) {
+    const sc = scope(f);
+    const scheduled = await db
+      .prepare(
+        `SELECT sh.id, sh.user_id, sh.status, sh.starts_at,
+                u.employee_code, u.first_name || ' ' || u.last_name AS officer, u.employment_type
+         FROM shifts sh
+         JOIN users u ON u.id = sh.user_id
+         JOIN posts p ON p.id = sh.post_id
+         JOIN sites s ON s.id = p.site_id
+         WHERE sh.starts_at >= ? AND sh.starts_at < ? AND sh.starts_at < now()
+           AND sh.status != 'cancelled' ${sc.sql}`
+      )
+      .all(toSql(f.from), toSql(f.to), ...sc.params);
+
+    const entries = await loadEntries(f);
+    const flags = await db
+      .prepare(
+        `SELECT f.user_id, f.type, COUNT(*) AS n
+         FROM flags f JOIN users u ON u.id = f.user_id
+         WHERE f.occurred_at >= ? AND f.occurred_at < ?
+           AND f.type IN ('early_departure','off_post','missed_clock_out')
+           ${f.userId ? 'AND f.user_id = ?' : ''} ${f.employmentType ? 'AND u.employment_type = ?' : ''}
+         GROUP BY f.user_id, f.type`
+      )
+      .all(
+        toSql(f.from),
+        toSql(f.to),
+        ...(f.userId ? [f.userId] : []),
+        ...(f.employmentType ? [f.employmentType] : [])
+      );
+    const flagCount = (uid, type) => Number(flags.find((x) => x.user_id === uid && x.type === type)?.n || 0);
+
+    const checks = await db
+      .prepare(
+        `SELECT sc.user_id,
+                SUM(CASE WHEN sc.status = 'missed' THEN 1 ELSE 0 END) AS missed,
+                SUM(CASE WHEN sc.status IN ('ok','late') THEN 1 ELSE 0 END) AS answered
+         FROM status_checks sc
+         JOIN time_entries te ON te.id = sc.time_entry_id
+         JOIN users u ON u.id = te.user_id
+         JOIN posts p ON p.id = te.post_id
+         JOIN sites s ON s.id = p.site_id
+         WHERE sc.due_at >= ? AND sc.due_at < ? ${sc.sql}
+         GROUP BY sc.user_id`
+      )
+      .all(toSql(f.from), toSql(f.to), ...sc.params);
+    const checksBy = new Map(checks.map((c) => [c.user_id, c]));
+
+    const people = new Map();
+    const touch = (r) => {
+      if (!people.has(r.user_id)) {
+        people.set(r.user_id, {
+          user_id: r.user_id,
+          employee_code: r.employee_code,
+          officer: r.officer,
+          classification: classLabel(r.employment_type),
+          scheduled: 0,
+          worked: 0,
+          no_shows: 0,
+          late: 0,
+          late_minutes: 0,
+        });
+      }
+      return people.get(r.user_id);
+    };
+    for (const s of scheduled) {
+      const p = touch(s);
+      p.scheduled += 1;
+      if (s.status === 'missed') p.no_shows += 1;
+    }
+    for (const e of entries) {
+      const p = touch(e);
+      p.worked += 1;
+      if (e.late_minutes > 0) {
+        p.late += 1;
+        p.late_minutes += e.late_minutes;
+      }
+    }
+
+    const rows = [...people.values()].map((p) => {
+      const c = checksBy.get(p.user_id) || { missed: 0, answered: 0 };
+      const missed = Number(c.missed) || 0;
+      const answered = Number(c.answered) || 0;
+      return {
+        ...p,
+        avg_late: p.late ? Math.round(p.late_minutes / p.late) : 0,
+        early_departures: flagCount(p.user_id, 'early_departure'),
+        missed_clock_outs: flagCount(p.user_id, 'missed_clock_out'),
+        off_post: flagCount(p.user_id, 'off_post'),
+        checks_answered: answered,
+        checks_missed: missed,
+        check_rate: pct(answered, answered + missed),
+        punctuality: pct(p.worked - p.late, p.worked),
+        attendance: pct(p.scheduled - p.no_shows, p.scheduled),
+      };
+    });
+    rows.sort((a, b) => (a.punctuality ?? 101) - (b.punctuality ?? 101) || b.no_shows - a.no_shows);
+
+    const columns = [
+      C('employee_code', 'Code'),
+      C('officer', 'Officer', 'text', { link: 'user_id' }),
+      C('classification', 'Class'),
+      C('scheduled', 'Scheduled', 'int', { sum: true }),
+      C('worked', 'Worked', 'int', { sum: true }),
+      C('no_shows', 'No-shows', 'int', { sum: true, warnAbove: 0 }),
+      C('late', 'Late', 'int', { sum: true, warnAbove: 0 }),
+      C('avg_late', 'Avg late (min)', 'int'),
+      C('early_departures', 'Left early', 'int', { sum: true, warnAbove: 0 }),
+      C('missed_clock_outs', 'No clock-out', 'int', { sum: true, warnAbove: 0 }),
+      C('checks_missed', 'Missed checks', 'int', { sum: true, warnAbove: 0 }),
+      C('check_rate', 'Check-in rate', 'percent'),
+      C('punctuality', 'On time', 'percent'),
+      C('attendance', 'Attendance', 'percent'),
+    ];
+    const totals = sumColumns(rows, columns);
+    totals.punctuality = pct(totals.worked - totals.late, totals.worked);
+    totals.attendance = pct(totals.scheduled - totals.no_shows, totals.scheduled);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'On time', value: totals.punctuality, type: 'percent' },
+        { label: 'Attendance', value: totals.attendance, type: 'percent' },
+        { label: 'No-shows', value: totals.no_shows, type: 'int' },
+        { label: 'Late arrivals', value: totals.late, type: 'int' },
+        { label: 'Missed check-ins', value: totals.checks_missed, type: 'int' },
+      ],
+      notes: [
+        `Late means clocked in more than ${RULES.lateGraceMinutes} minutes after the scheduled start. A no-show is a shift with no clock-in ${RULES.noShowMinutes} minutes after it started.`,
+        'Sorted worst first, so the conversations that need having are at the top.',
+      ],
+    };
+  },
+
+  async gps(f) {
+    const sc = scope(f);
+    const pings = await db
+      .prepare(
+        `SELECT lp.user_id, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
+                COUNT(*) AS pings,
+                SUM(CASE WHEN lp.geofence = 'inside' THEN 1 ELSE 0 END) AS inside,
+                SUM(CASE WHEN lp.geofence = 'outside' THEN 1 ELSE 0 END) AS outside,
+                MAX(lp.distance_m) AS max_distance,
+                MAX(lp.recorded_at) AS last_ping
+         FROM location_pings lp
+         JOIN users u ON u.id = lp.user_id
+         LEFT JOIN posts p ON p.id = lp.post_id
+         LEFT JOIN sites s ON s.id = p.site_id
+         WHERE lp.recorded_at >= ? AND lp.recorded_at < ? ${sc.sql}
+         GROUP BY lp.user_id, u.employee_code, u.first_name, u.last_name`
+      )
+      .all(toSql(f.from), toSql(f.to), ...sc.params);
+    const pingsBy = new Map(pings.map((p) => [p.user_id, p]));
+
+    const entries = await loadEntries(f);
+    const offPost = await db
+      .prepare(
+        `SELECT user_id, COUNT(*) AS n FROM flags
+         WHERE type = 'off_post' AND occurred_at >= ? AND occurred_at < ? GROUP BY user_id`
+      )
+      .all(toSql(f.from), toSql(f.to));
+    const offBy = new Map(offPost.map((o) => [o.user_id, Number(o.n)]));
+
+    const ids = new Set([...pingsBy.keys(), ...entries.map((e) => e.user_id)]);
+    const rows = [];
+    for (const uid of ids) {
+      const p = pingsBy.get(uid);
+      const list = entries.filter((e) => e.user_id === uid);
+      const first = list[0] || p;
+      const judged = p ? Number(p.inside) + Number(p.outside) : 0;
+      const measured = list.filter((e) => e.clock_in_distance_m != null);
+      rows.push({
+        user_id: uid,
+        employee_code: first.employee_code,
+        officer: first.officer,
+        shifts: list.length,
+        pings: p ? Number(p.pings) : 0,
+        inside_percent: p ? pct(Number(p.inside), judged) : null,
+        off_post_events: offBy.get(uid) || 0,
+        clock_ins_outside: list.filter((e) => e.clock_in_geofence === 'outside').length,
+        avg_clock_in_distance: measured.length
+          ? Math.round(measured.reduce((n, e) => n + e.clock_in_distance_m, 0) / measured.length)
+          : null,
+        max_distance: p ? Number(p.max_distance) || 0 : null,
+        last_ping: p ? sqlToIso(p.last_ping) : null,
+      });
+    }
+    rows.sort((a, b) => (a.inside_percent ?? 101) - (b.inside_percent ?? 101));
+    const columns = [
+      C('employee_code', 'Code'),
+      C('officer', 'Officer', 'text', { link: 'user_id' }),
+      C('shifts', 'Shifts', 'int', { sum: true }),
+      C('pings', 'GPS points', 'int', { sum: true }),
+      C('inside_percent', 'Inside fence', 'percent'),
+      C('off_post_events', 'Walk-offs', 'int', { sum: true, warnAbove: 0 }),
+      C('clock_ins_outside', 'Clock-ins outside', 'int', { sum: true, warnAbove: 0 }),
+      C('avg_clock_in_distance', 'Avg clock-in distance (m)', 'int'),
+      C('max_distance', 'Furthest (m)', 'int'),
+      C('last_ping', 'Last GPS point', 'datetime'),
+    ];
+    const totals = sumColumns(rows, columns);
+    const allJudged = pings.reduce((n, p) => n + Number(p.inside) + Number(p.outside), 0);
+    totals.inside_percent = pct(pings.reduce((n, p) => n + Number(p.inside), 0), allJudged);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Time inside fence', value: totals.inside_percent, type: 'percent' },
+        { label: 'GPS points', value: totals.pings, type: 'int' },
+        { label: 'Walk-offs', value: totals.off_post_events, type: 'int' },
+        { label: 'Clock-ins outside', value: totals.clock_ins_outside, type: 'int' },
+      ],
+      notes: [
+        'Position is only recorded while an officer is clocked in. Readings with poor accuracy are not counted either way.',
+        'A walk-off is counted once when the officer crosses out of the fence, not for every reading while outside.',
+      ],
+    };
+  },
+};
+
+/* ---------------------------------------------------------------- routes -- */
+
+adminReportsRouter.get('/', (_req, res) => res.json({ reports: REPORTS }));
+
+export async function buildReport(kind, query) {
+  const meta = REPORTS.find((r) => r.id === kind);
+  if (!meta) throw new HttpError(404, 'No such report.');
+  const f = readFilters(query);
+  const result = await builders[kind](f);
+  // Sums of floats drift (38242.130000000005); every summary figure is money,
+  // hours or a percentage, all of which read to two places.
+  result.summary = (result.summary || []).map((x) =>
+    typeof x.value === 'number' ? { ...x, value: Math.round(x.value * 100) / 100 } : x
+  );
+  return {
+    report: meta,
+    filters: {
+      from: toDateString(f.from),
+      to: toDateString(f.toDay),
+      siteId: f.siteId,
+      userId: f.userId,
+      employmentType: f.employmentType,
+    },
+    generated_at: new Date().toISOString(),
+    ...result,
+  };
+}
+
+adminReportsRouter.get(
+  '/:kind',
+  wrap(async (req, res) => {
+    res.json(await buildReport(req.params.kind, req.query));
+  })
+);
+
+const csvCell = (v) => {
+  if (v == null) return '';
+  if (typeof v === 'number') return String(v);
+  const s = String(v);
+  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+
+adminReportsRouter.get(
+  '/:kind/export.csv',
+  wrap(async (req, res) => {
+    const r = await buildReport(req.params.kind, req.query);
+    const lines = [r.columns.map((c) => csvCell(c.label)).join(',')];
+    for (const row of r.rows) lines.push(r.columns.map((c) => csvCell(row[c.key])).join(','));
+    if (Object.keys(r.totals || {}).length) {
+      lines.push(r.columns.map((c, i) => csvCell(i === 0 ? 'TOTAL' : r.totals[c.key] ?? '')).join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${r.report.id}-${r.filters.from}-to-${r.filters.to}.csv"`
+    );
+    res.send(lines.join('\n'));
+  })
+);

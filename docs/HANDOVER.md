@@ -55,7 +55,7 @@ it in.
 **Postgres with two drivers.** Production is Neon over HTTP. Development and
 CI use PGlite — Postgres compiled to WebAssembly — so there is no database
 server to install, no Docker, and CI needs no service container. Both run the
-same `schema.sql`. `apps/server/src/lib/db.js` is the only file that knows
+same schema, `apps/server/src/lib/schema.js`. `apps/server/src/lib/db.js` is the only file that knows
 which is in use.
 
 PGlite is **single-writer**. Seeding while the API is running corrupts the
@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-338 checks across eight suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+495 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -148,15 +148,21 @@ bundle for both platforms.
 |-------|--------|--------|
 | `dialect.mjs` | 9 | SQL translation (no server needed) |
 | `smoke.mjs` | 45 | auth, lockout, geofencing, tours, training, scheduling, payroll export |
-| `features.mjs` | 62 | classification, overtime, margin, certifications, time off, breaks, duress, DAR, maps, photos, push |
+| `features.mjs` | 65 | classification, overtime, margin, certifications, time off, breaks, duress, DAR, maps, photos, push, the cron sweep |
 | `shifts.mjs` | 31 | open shifts, claims, swaps, drops, the armed-post licence rule |
-| `portal.mjs` | 80 | client scoping, token separation, and that no pay data leaks |
+| `portal.mjs` | 81 | client scoping, token separation, and that no pay data leaks |
 | `invoices.mjs` | 55 | billing arithmetic, status transitions, what clients may see |
 | `email.mjs` | 32 | what is composed and addressed, and that no password is in it |
 | `security.mjs` | 24 | set-password links, and the shared rate limiter |
+| `roles.mjs` | 51 | what each staff tier can and cannot reach |
+| `tracking.mjs` | 102 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, copying a week |
+
+`verify.mjs` gives the API under test a cron secret, a two-second ping-thinning
+gap and a larger login allowance. Each is an environment variable with a
+production default; none of them should be set in production.
 
 There is also an accessibility audit, run separately because it needs a
-browser: `npm run test:a11y --workspace @usc/web` drives all 35 screens
+browser: `npm run test:a11y --workspace @usc/web` drives all 41 screens
 through axe-core with the API and web app running.
 
 **The suites are mostly adversarial, deliberately.** `portal.mjs` walks every
@@ -212,8 +218,22 @@ Honest list. None of it blocks going live, but you will want to know.
   Playwright's own, so CI would need `npx playwright install chromium` or a
   runner image with Chrome. It is not wired into CI for that reason - run it
   yourself with `npm run test:a11y --workspace @usc/web`.
-- **Retention is not implemented.** GPS traces on every check-in accumulate
-  forever. Decide a policy with counsel and write the sweep.
+- **Location retention is a default, not a decision.** The sweep deletes location
+  reports older than 90 days (`RULES.locationRetentionDays`). Positions on
+  clock-in, clock-out and check-in rows are kept with the hours they prove.
+  Confirm the period with counsel.
+- **Tracking is foreground-only on mobile.** The phone reports while the app is
+  open. Tracking with the app closed needs background location permission and a
+  store review that asks why; decide whether the company wants that before
+  building it.
+- **The Timesheets screen still prices at today's rate.** The reports use the
+  rate in effect on each day (from `pay_rate_history`); the older Timesheets
+  screen and invoice cost do not. The payroll register is the one to trust
+  across a rate change. Moving Timesheets onto the same pricing is the obvious
+  next step.
+- **A change of pay basis is not effective-dated.** Moving somebody from hourly to
+  salary is recorded in the history, but reports price by the basis on the
+  record now.
 
 ---
 
@@ -221,7 +241,7 @@ Honest list. None of it blocks going live, but you will want to know.
 
 - **Changing a threshold** (grace period, check-in window, overtime line):
   `packages/shared/src/domain.js`, `RULES`. Nowhere else.
-- **Adding a table:** `apps/server/src/lib/schema.sql`, then add it to the
+- **Adding a table:** `apps/server/src/lib/schema.js`, then add it to the
   `tables` array in `seed.js` so `--reset` clears it, and to
   `TABLES_WITHOUT_ID` in `db.js` if it has no `id` column.
 - **Adding a field a client must not see:** add it to the `FORBIDDEN` pattern
@@ -236,10 +256,20 @@ Honest list. None of it blocks going live, but you will want to know.
 ## The demo data
 
 `npm run seed --workspace @usc/server -- --reset` builds a full working
-company: four sites, five posts, eight staff across both employment types,
-101 shifts, 48 time entries, three incidents with photographs, three tours,
-ten compliance flags, three client portal logins and three invoices. Sign-in
-codes are printed at the end of the seed and listed in the README.
+company in about seven seconds: ten client sites from Pensacola to Miami,
+sixteen posts (three armed), 43 staff across both employment types, around
+640 shifts over a month, 320 worked with breaks and check-ins, 6,000+ GPS
+points, 23 incidents, six tours with run history, six client portal logins and
+eight invoices. Sign-in codes are printed at the end of the seed; the README
+lists the useful ones.
+
+The first four sites and eight people come from `seed.js` and are what the
+older suites are written against. Everything else comes from
+`seed-expansion.js`, which is placed relative to the moment the seed runs and
+classified by time rather than by day - so whatever hour it is, the live board
+has officers on post, one walking off, one on a break, one with a silent phone,
+one late, one no-show and one post running with nobody on it. Randomness is
+seeded, so two runs at the same moment give the same company.
 
 It is shaped to exercise the rules, not just to look full: one officer's
 licence is expiring, one is a 1099 contractor on an armed post, one must

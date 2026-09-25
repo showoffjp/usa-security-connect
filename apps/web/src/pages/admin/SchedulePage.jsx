@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { fmtDay, fmtTime, fmtRange, toDateInput, toLocalInput, fmtDate } from '../../lib/format.js';
 import {
-  LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Banner, useToast,
+  LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Banner, Segmented, useToast,
 } from '../../components/ui.jsx';
 import { toHours } from '@shared/domain.js';
 
@@ -18,6 +18,7 @@ const WEEKDAYS = [
 
 function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
   const toast = useToast();
+  // A shift without an id is a prefill from clicking an empty roster cell.
   const editing = Boolean(shift?.id);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState('');
@@ -257,6 +258,193 @@ function BulkDialog({ posts, employees, onClose, onSaved }) {
   );
 }
 
+function CopyWeekDialog({ weekStart, siteFilter, siteName, onClose, onSaved }) {
+  const toast = useToast();
+  const [weeksAhead, setWeeksAhead] = useState(1);
+  const [keepOfficers, setKeepOfficers] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const target = new Date(weekStart);
+  target.setDate(target.getDate() + 7 * weeksAhead);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post('/admin/shifts/copy-week', {
+        fromWeekStart: toDateInput(weekStart),
+        toWeekStart: toDateInput(target),
+        siteId: siteFilter ? Number(siteFilter) : null,
+        keepOfficers,
+      });
+      setResult(res);
+      toast.success(`${res.created} shifts copied.`);
+      onSaved();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Copy this week's roster"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            {result ? 'Done' : 'Cancel'}
+          </button>
+          {!result && (
+            <button className="btn btn-primary" onClick={run} disabled={busy}>
+              {busy ? 'Copying...' : 'Copy shifts'}
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="stack">
+        {result ? (
+          <Banner kind={result.opened || result.skipped.length ? 'warn' : 'ok'} title={`${result.created} shifts created`}>
+            {result.opened > 0 && `${result.opened} were left open because the officer is already booked then. `}
+            {result.skipped.length > 0 && `${result.skipped.length} skipped - that post was already covered at that time.`}
+            {!result.opened && !result.skipped.length && 'Every shift copied with its officer.'}
+          </Banner>
+        ) : (
+          <>
+            <p className="small" style={{ margin: 0 }}>
+              Copies every shift in the week of <strong>{fmtDate(weekStart)}</strong>
+              {siteFilter ? ` at ${siteName}` : ' at every site'} to the same days and times in the target week.
+            </p>
+            <Field label="Copy into">
+              <select value={weeksAhead} onChange={(e) => setWeeksAhead(Number(e.target.value))}>
+                {[1, 2, 3, 4].map((n) => {
+                  const d = new Date(weekStart);
+                  d.setDate(d.getDate() + 7 * n);
+                  return (
+                    <option key={n} value={n}>
+                      Week of {fmtDate(d)}
+                    </option>
+                  );
+                })}
+              </select>
+            </Field>
+            <label className="row small">
+              <input type="checkbox" checked={keepOfficers} onChange={(e) => setKeepOfficers(e.target.checked)} style={{ width: 'auto' }} />
+              Keep the same officers (clashes are left as open shifts)
+            </label>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/** Rows of officers, columns of days: the view a scheduler actually balances hours in. */
+function RosterGrid({ shifts, employees, range, siteFilter, showAll, onOpen, onAdd }) {
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(new Date(range.start.getTime() + i * 86400000));
+
+  const visible = shifts.filter((s) => !siteFilter || String(s.site_id) === siteFilter);
+  const byUser = new Map();
+  for (const s of visible) {
+    const key = s.user_id || 0;
+    if (!byUser.has(key)) byUser.set(key, []);
+    byUser.get(key).push(s);
+  }
+
+  const people = employees
+    .filter((e) => e.status === 'active' && (showAll || byUser.has(e.id)))
+    .sort((a, b) => a.last_name.localeCompare(b.last_name));
+  const rows = [
+    ...(byUser.has(0) ? [{ id: 0, full_name: 'Open shifts', employee_code: '', employment_type: null }] : []),
+    ...people,
+  ];
+
+  const hoursOf = (list) =>
+    Math.round(list.reduce((n, s) => n + (new Date(s.ends_at) - new Date(s.starts_at)) / 3600000, 0) * 10) / 10;
+
+  return (
+    <div className="card">
+      <div className="table-wrap">
+        <table className="data roster">
+          <caption className="sr-only">Roster by officer for the week</caption>
+          <thead>
+            <tr>
+              <th style={{ minWidth: 170 }}>Officer</th>
+              {days.map((d) => (
+                <th key={d.toISOString()} style={d.toDateString() === new Date().toDateString() ? { color: 'var(--brand-600)' } : undefined}>
+                  {fmtDay(d)}
+                  <div className="tiny muted">{d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
+                </th>
+              ))}
+              <th className="num">Hours</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((person) => {
+              const list = byUser.get(person.id) || [];
+              const total = hoursOf(list);
+              const w2 = person.employment_type === 'w2';
+              return (
+                <tr key={person.id}>
+                  <td>
+                    <div className="small strong" style={person.id === 0 ? { color: 'var(--danger)' } : undefined}>
+                      {person.full_name}
+                    </div>
+                    {person.id !== 0 && (
+                      <div className="tiny muted">
+                        {person.employee_code} · {person.employment_type === '1099' ? '1099' : 'W-2'} ·{' '}
+                        <span style={w2 && total > 40 ? { color: 'var(--warn)', fontWeight: 650 } : undefined}>{total}h</span>
+                      </div>
+                    )}
+                  </td>
+                  {days.map((d) => {
+                    const cell = list.filter((s) => new Date(s.starts_at).toDateString() === d.toDateString());
+                    return (
+                      <td key={d.toISOString()} style={{ verticalAlign: 'top', minWidth: 112 }}>
+                        <div className="stack-sm" style={{ gap: 4 }}>
+                          {cell.map((s) => (
+                            <button key={s.id} type="button" className="roster-shift" data-open={!s.user_id} onClick={() => onOpen(s)}>
+                              <span className="tiny strong nowrap">{fmtRange(s.starts_at, s.ends_at)}</span>
+                              <span className="tiny truncate">{s.post_code || s.post_name}</span>
+                              {s.status === 'in_progress' && <span className="tiny" style={{ color: 'var(--ok)' }}>On post</span>}
+                              {s.status === 'missed' && <span className="tiny" style={{ color: 'var(--danger)' }}>No show</span>}
+                            </button>
+                          ))}
+                          {person.id !== 0 && (
+                            <button
+                              type="button"
+                              className="roster-add"
+                              onClick={() => onAdd(person, d)}
+                              aria-label={`Add a shift for ${person.full_name} on ${fmtDay(d)}`}
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td className="num nowrap">
+                    <span className="strong">{total}h</span>
+                    {w2 && total > 40 && (
+                      <div>
+                        <Chip kind="warn">+{Math.round((total - 40) * 10) / 10}h OT</Chip>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminSchedulePage() {
   const toast = useToast();
   const [shifts, setShifts] = useState(null);
@@ -266,6 +454,9 @@ export default function AdminSchedulePage() {
   const [bulk, setBulk] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [siteFilter, setSiteFilter] = useState('');
+  const [view, setView] = useState('officer');
+  const [showAll, setShowAll] = useState(false);
+  const [copying, setCopying] = useState(false);
 
   const range = useMemo(() => {
     const start = new Date();
@@ -330,13 +521,19 @@ export default function AdminSchedulePage() {
   if (!shifts) return <LoadingPage label="Loading schedule" />;
 
   return (
-    <div className="page stack">
+    <div className="page page-wide stack">
       <div className="row-between wrap">
         <div className="page-head" style={{ marginBottom: 0 }}>
           <div className="eyebrow">Workforce</div>
           <h1>Schedule</h1>
         </div>
         <div className="row wrap">
+          <button className="btn btn-ghost" onClick={() => setCopying(true)}>
+            <Icon name="copy" size={16} /> Copy week
+          </button>
+          <button className="btn btn-ghost" onClick={() => window.print()}>
+            <Icon name="print" size={16} /> Print
+          </button>
           <button className="btn btn-ghost" onClick={() => setBulk(true)}>
             <Icon name="calendar" size={16} /> Recurring roster
           </button>
@@ -363,7 +560,22 @@ export default function AdminSchedulePage() {
             </button>
           )}
         </div>
-        <div className="row">
+        <div className="row wrap">
+          <Segmented
+            label="View"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'officer', label: 'By officer' },
+              { value: 'day', label: 'By day' },
+            ]}
+          />
+          {view === 'officer' && (
+            <label className="row small" style={{ gap: 6 }}>
+              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} style={{ width: 'auto' }} />
+              Everyone
+            </label>
+          )}
           <select
             aria-label="Filter by site"
             value={siteFilter}
@@ -384,6 +596,25 @@ export default function AdminSchedulePage() {
         </div>
       </div>
 
+      {view === 'officer' && (
+        <RosterGrid
+          shifts={shifts}
+          employees={employees}
+          range={range}
+          siteFilter={siteFilter}
+          showAll={showAll}
+          onOpen={(s) => setDialog({ shift: s })}
+          onAdd={(person, day) => {
+            const start = new Date(day);
+            start.setHours(8, 0, 0, 0);
+            const end = new Date(day);
+            end.setHours(16, 0, 0, 0);
+            setDialog({ shift: { user_id: person.id, starts_at: start, ends_at: end } });
+          }}
+        />
+      )}
+
+      {view === 'day' && (
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
         {days.map(({ day, list }) => {
           const isToday = day.toDateString() === new Date().toDateString();
@@ -424,6 +655,17 @@ export default function AdminSchedulePage() {
           );
         })}
       </div>
+      )}
+
+      {copying && (
+        <CopyWeekDialog
+          weekStart={range.start}
+          siteFilter={siteFilter}
+          siteName={sites.find(([id]) => String(id) === siteFilter)?.[1]}
+          onClose={() => setCopying(false)}
+          onSaved={load}
+        />
+      )}
 
       {dialog && (
         <ShiftDialog

@@ -19,8 +19,10 @@ authRouter.post(
   // used to lock everyone out, and one code cannot be sprayed from many IPs.
   // A whole guard force can share one office IP at shift change, so the
   // per-address allowance is generous; the meaningful limit is per identity.
-  rateLimit({ windowMs: 5 * 60000, max: 60, key: (req) => `ip:${req.ip}` }),
-  rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `code:${req.body?.employeeCode || 'none'}` }),
+  // The overrides exist for the local test run, where a dozen suites sign the
+  // same demo accounts in within five minutes. Production leaves them unset.
+  rateLimit({ windowMs: 5 * 60000, max: Number(process.env.USC_LOGIN_LIMIT_PER_IP) || 60, key: (req) => `ip:${req.ip}` }),
+  rateLimit({ windowMs: 5 * 60000, max: Number(process.env.USC_LOGIN_LIMIT_PER_CODE) || 10, key: (req) => `code:${req.body?.employeeCode || 'none'}` }),
   wrap(async (req, res) => {
     const { employeeCode, pin, deviceId } = parse(loginSchema, req.body);
     const { user, token } = await authenticate({ employeeCode, pin, ip: req.ip });
