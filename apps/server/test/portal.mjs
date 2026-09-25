@@ -175,12 +175,16 @@ log(crossRun.status === 404, "one client cannot open another's patrol by id");
 
 log(dar.status === 200 && dar.data.site.id === riverfront.id, 'the daily activity report is scoped to the site');
 
-// Today may be quiet depending on the hour, so the content check uses a day
-// the seed always fills.
-const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-const pastDar = await call(`/client/dar?siteId=${riverfront.id}&date=${yesterday}`, { token: dana });
+// Pick a day that actually has finished hours rather than assuming yesterday
+// does. Run this suite just after midnight and "yesterday" holds only the
+// shift somebody is still standing, whose hours are not counted until they
+// clock out - which is correct, and would fail a naive assertion.
+const finished = danaCoverage.data.shifts.find((s) => s.hours_worked > 0);
+log(Boolean(finished), 'the coverage record contains a completed shift to report on');
+const reportDay = String(finished.clock_in_at).slice(0, 10);
+const pastDar = await call(`/client/dar?siteId=${riverfront.id}&date=${reportDay}`, { token: dana });
 log(pastDar.status === 200 && pastDar.data.coverage.length > 0, 'the DAR lists who stood the posts', `${pastDar.data?.coverage?.length} entries`);
-log(pastDar.data.totalHours > 0, 'and totals the hours on site', `${pastDar.data?.totalHours}h`);
+log(pastDar.data.totalHours > 0, 'and totals the hours on site', `${reportDay}: ${pastDar.data?.totalHours}h`);
 log(
   pastDar.data.coverage.every((c) => typeof c.officer_name === 'string' && c.minutes_worked === undefined),
   'DAR coverage names the officer and drops the raw minutes'

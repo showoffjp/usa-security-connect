@@ -14,6 +14,7 @@ import { hashPassword } from './lib/clientAuth.js';
 import { buildLines, nextNumber } from './routes/invoices.js';
 import { toDateString } from './lib/http.js';
 import { invoiceTotals } from './shared.js';
+import { TRAININGS, BROADCASTS, THREADS, CLIPS } from './seed-content.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
 
 const RESET = process.argv.includes('--reset');
@@ -472,7 +473,7 @@ async function buildTour(siteId, name, description, minutes, checkpoints) {
   return tourId;
 }
 
-await buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior sweep of all occupied floors.', 35, [
+const tourRiverfront = await buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior sweep of all occupied floors.', 35, [
   { name: 'Main Lobby', tag: 'USC-NFC-RF-101', lat: 30.3196, lng: -81.6795,
     tasks: ['Confirm visitor log is current', 'Check lobby doors are secure'] },
   { name: 'Level 2 Corridor', tag: 'USC-NFC-RF-102',
@@ -487,7 +488,7 @@ await buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interio
     tasks: ['Roof door secured'] },
 ]);
 
-await buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and trailer row inspection.', 45, [
+const tourGulfport = await buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and trailer row inspection.', 45, [
   { name: 'Gate 1 - Main Entry', tag: 'USC-NFC-GP-201', lat: 27.9589, lng: -82.4298,
     tasks: ['Gate arm operational', 'Visitor log current'] },
   { name: 'Trailer Row A', tag: 'USC-NFC-GP-202',
@@ -499,7 +500,7 @@ await buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line a
     tasks: ['Pumps locked', 'No spills or leaks', 'Extinguisher present and charged'] },
 ]);
 
-await buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of common areas and amenities.', 25, [
+const tourPalmetto = await buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of common areas and amenities.', 25, [
   { name: 'North Gatehouse', tag: 'USC-NFC-PR-301', lat: 28.4515, lng: -81.4720,
     tasks: ['Gate arm down', 'Guest list current'] },
   { name: 'Clubhouse & Pool', tag: 'USC-NFC-PR-302',
@@ -509,61 +510,129 @@ await buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of
     tasks: ['Parcel lockers secured', 'Lighting operational'] },
 ]);
 
-/* ------------------------------------------------- broadcasts & training -- */
+/* --------------------------------------------- notice board & training -- */
 
 const insertBroadcast = db.prepare(
-  `INSERT INTO broadcasts (title, body, priority, requires_ack, audience_role, published_at, created_by)
-   VALUES (?,?,?,?,?,?,?)`
+  `INSERT INTO broadcasts
+   (title, body, priority, requires_ack, audience_role, audience_site_id, published_at, expires_at, created_by)
+   VALUES (?,?,?,?,?,?,?,?,?)`
 );
-(await insertBroadcast.run(
-  'Hurricane season standby procedures',
-  'All posts: review the storm annex in your post orders. If a watch is issued for your county, contact dispatch at the start of every shift to confirm coverage. Do not leave a post unattended during a warning without relief on site.',
-  'urgent', 1, null, toSql(at(-1, 8)), users.admin
-));
-(await insertBroadcast.run(
-  'New incident report fields',
-  'The incident form now includes a cost recovery field. Enter the client-estimated dollar value whenever property is damaged or stolen so we can bill correctly.',
-  'important', 0, null, toSql(at(-4, 9)), users.supervisor
-));
-(await insertBroadcast.run(
-  'Uniform reminder',
-  'Class A shirts are required for all daytime lobby posts. Patrol posts may wear the tactical polo. Boots must be black and polished.',
-  'normal', 0, 'officer', toSql(at(-8, 10)), users.supervisor
-));
+
+const officerIds = [
+  users.marcus, users.janelle, users.dwayne, users.alicia, users.trainee, users.contractor,
+];
+
+for (const b of BROADCASTS) {
+  const publishedAt = at(-b.daysAgo, 8, 30);
+  const id = Number((await insertBroadcast.run(
+    b.title,
+    b.body,
+    b.priority,
+    b.requiresAck ? 1 : 0,
+    b.audienceRole ?? null,
+    b.site ? siteIds[b.site] : null,
+    toSql(publishedAt),
+    b.expiresInDays ? toSql(at(-b.daysAgo + b.expiresInDays, 23, 59)) : null,
+    b.priority === 'normal' ? users.supervisor : users.admin
+  )).lastInsertRowid);
+
+  // Older notices are mostly read; the newest ones are still landing. An
+  // unacknowledged urgent notice is exactly what the supervisor board is for.
+  for (const [i, uid] of officerIds.entries()) {
+    const read = b.daysAgo > 2 ? i < 6 : i < 3;
+    const acked = b.requiresAck && (b.daysAgo > 7 ? i < 5 : i < 2);
+    if (!read) continue;
+    await db.prepare(
+      `INSERT INTO broadcast_receipts (broadcast_id, user_id, read_at, acknowledged_at)
+       VALUES (?,?,?,?)`
+    ).run(
+      id,
+      uid,
+      toSql(at(-b.daysAgo, 9 + (i % 6), 15)),
+      acked ? toSql(at(-b.daysAgo, 9 + (i % 6), 20)) : null
+    );
+  }
+}
 
 const insertTraining = db.prepare(
-  `INSERT INTO trainings (title, description, video_url, duration_seconds, required, due_at, created_by)
-   VALUES (?,?,?,?,?,?,?)`
+  `INSERT INTO trainings
+   (title, description, video_url, duration_seconds, required, due_at, audience_role, created_by)
+   VALUES (?,?,?,?,?,?,?,?)`
 );
-(await insertTraining.run(
-  'Post Orders: Lobby Access Control',
-  'How to verify identification, issue badges and handle refused entry at a lobby console.',
-  null, 420, 1, toSql(at(7, 23, 59)), users.admin
-));
-(await insertTraining.run(
-  'Use of Force Refresher (Class D)',
-  'Annual refresher on Florida statute requirements for non-armed security officers.',
-  null, 900, 1, toSql(at(21, 23, 59)), users.admin
-));
-(await insertTraining.run(
-  'Radio Discipline and Dispatch Codes',
-  'Standard call signs, priority traffic and how to escalate to dispatch.',
-  null, 360, 0, null, users.supervisor
-));
+
+const trainingIds = [];
+for (const t of TRAININGS) {
+  const clip = CLIPS[t.clip % CLIPS.length];
+  trainingIds.push({
+    id: Number((await insertTraining.run(
+      t.title,
+      t.description,
+      clip.url,
+      clip.seconds,
+      t.required ? 1 : 0,
+      t.dueInDays ? toSql(at(t.dueInDays, 23, 59)) : null,
+      t.audienceRole ?? null,
+      users.admin
+    )).lastInsertRowid),
+    seconds: clip.seconds,
+    armedOnly: Boolean(t.armedOnly),
+  });
+}
+
+/**
+ * Spread completion around so the board has something to show: most people
+ * through the older courses, a scatter of part-watched, and the newest
+ * required ones still outstanding.
+ */
+for (const [ti, t] of trainingIds.entries()) {
+  const audience = t.armedOnly ? [users.dwayne, users.supervisor] : officerIds;
+  for (const [ui, uid] of audience.entries()) {
+    const roll = (ti * 7 + ui * 3) % 10;
+    if (roll < 5) {
+      // Watched in full.
+      await db.prepare(
+        `INSERT INTO training_progress (training_id, user_id, seconds_watched, completed_at)
+         VALUES (?,?,?,?) ON CONFLICT (training_id, user_id) DO NOTHING`
+      ).run(t.id, uid, t.seconds, toSql(at(-(roll + ti), 11, 0)));
+    } else if (roll < 7) {
+      // Started, did not finish.
+      await db.prepare(
+        `INSERT INTO training_progress (training_id, user_id, seconds_watched, completed_at)
+         VALUES (?,?,?,NULL) ON CONFLICT (training_id, user_id) DO NOTHING`
+      ).run(t.id, uid, Math.floor(t.seconds * (0.2 + (roll % 3) * 0.2)));
+    }
+    // Anything else is untouched, which is the interesting case.
+  }
+}
 
 /* ------------------------------------------------------------- messaging -- */
 
-const threadId = Number(
-  (await db.prepare(`INSERT INTO threads (subject, created_by, last_message_at) VALUES (?,?,?)`)
-    .run('Riverfront relief coverage', users.supervisor, toSql(at(0, 9, 12)))).lastInsertRowid
-);
-for (const uid of [users.supervisor, users.marcus]) {
-  (await db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`).run(threadId, uid));
+const staffByKey = {
+  admin: users.admin,
+  supervisor: users.supervisor,
+  marcus: users.marcus,
+  janelle: users.janelle,
+  dwayne: users.dwayne,
+  alicia: users.alicia,
+  trainee: users.trainee,
+  contractor: users.contractor,
+};
+
+for (const t of THREADS) {
+  const last = t.messages[t.messages.length - 1];
+  const threadId = Number(
+    (await db.prepare(`INSERT INTO threads (subject, created_by, last_message_at) VALUES (?,?,?)`)
+      .run(t.subject, staffByKey[t.participants[0]], toSql(at(last[1], last[3], 0)))).lastInsertRowid
+  );
+  for (const key of t.participants) {
+    await db.prepare(`INSERT INTO thread_participants (thread_id, user_id) VALUES (?,?)`)
+      .run(threadId, staffByKey[key]);
+  }
+  for (const [who, days, body, hour] of t.messages) {
+    await db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
+      .run(threadId, staffByKey[who], body, toSql(at(days, hour, 0)));
+  }
 }
-(await db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
-  .run(threadId, users.supervisor, 'Marcus - can you stay on until 15:00 tomorrow? Kevin is still finishing his Class D paperwork.', toSql(at(0, 9, 10))));
-(await db.prepare(`INSERT INTO messages (thread_id, sender_id, body, sent_at) VALUES (?,?,?,?)`)
-  .run(threadId, users.marcus, 'Yes, I can cover until 15:00. I will note it on the pass-down log.', toSql(at(0, 9, 12))));
 
 /* ------------------------------------------------- supervisor visit log -- */
 
@@ -756,6 +825,264 @@ for (const spec of [
     );
   }
 }
+
+/* ------------------------------------------------------- patrol history -- */
+
+/**
+ * Three weeks of walked rounds.
+ *
+ * Without these the Tours board and the client's patrol proof are empty, which
+ * is the one thing a client actually asks to see. Most rounds complete; a few
+ * carry a skipped checkpoint with a reason, and one was abandoned partway,
+ * because a history where nothing ever goes wrong teaches nobody how the
+ * screens read when it does.
+ */
+const SKIP_REASONS = [
+  'Contractor working in the area, could not reach the tag.',
+  'Door locked from the far side, reported to building management.',
+  'Standing water from the storm; unsafe to approach.',
+  'Tag not reading - reported for replacement.',
+];
+
+const runTours = [
+  { tourId: tourRiverfront, officer: users.marcus, perDay: 2, startHour: 7, minutes: 35 },
+  { tourId: tourGulfport, officer: users.dwayne, perDay: 1, startHour: 2, minutes: 45 },
+  { tourId: tourPalmetto, officer: users.janelle, perDay: 1, startHour: 19, minutes: 25 },
+];
+
+let runCount = 0;
+let skipCount = 0;
+
+for (const spec of runTours) {
+  const checkpoints = await db
+    .prepare(`SELECT id, required FROM checkpoints WHERE tour_id = ? ORDER BY sequence`)
+    .all(spec.tourId);
+
+  for (let day = 21; day >= 1; day--) {
+    for (let n = 0; n < spec.perDay; n++) {
+      // A round is skipped entirely now and then - sickness, a post left short.
+      if ((day * 3 + n) % 11 === 0) continue;
+
+      const started = at(-day, spec.startHour + n * 6, (day * 7) % 45);
+      const abandoned = day === 9 && n === 0;
+      const finished = abandoned ? null : new Date(started.getTime() + spec.minutes * 60000);
+
+      const runId = Number((await db.prepare(
+        `INSERT INTO tour_runs (tour_id, user_id, started_at, completed_at, status)
+         VALUES (?,?,?,?,?)`
+      ).run(
+        spec.tourId,
+        spec.officer,
+        toSql(started),
+        finished ? toSql(finished) : null,
+        abandoned ? 'abandoned' : 'completed'
+      )).lastInsertRowid);
+      runCount += 1;
+
+      const gap = Math.floor((spec.minutes * 60000) / checkpoints.length);
+      for (const [i, cp] of checkpoints.entries()) {
+        // The abandoned round stops halfway through.
+        if (abandoned && i >= Math.ceil(checkpoints.length / 2)) {
+          await db.prepare(
+            `INSERT INTO tour_run_checkpoints (tour_run_id, checkpoint_id, status) VALUES (?,?,'pending')`
+          ).run(runId, cp.id);
+          continue;
+        }
+
+        const skipped = !cp.required && (day + i) % 9 === 0;
+        if (skipped) skipCount += 1;
+
+        await db.prepare(
+          `INSERT INTO tour_run_checkpoints
+           (tour_run_id, checkpoint_id, status, scanned_at, method, latitude, longitude, skip_reason)
+           VALUES (?,?,?,?,?,?,?,?)`
+        ).run(
+          runId,
+          cp.id,
+          skipped ? 'skipped' : 'done',
+          toSql(new Date(started.getTime() + gap * (i + 1))),
+          skipped ? null : (i % 3 === 0 ? 'nfc' : 'qr'),
+          skipped ? null : 30.3196 + i * 0.0002,
+          skipped ? null : -81.6795 - i * 0.0002,
+          skipped ? SKIP_REASONS[(day + i) % SKIP_REASONS.length] : null
+        );
+      }
+
+      // Mark the tasks on each scanned checkpoint as done.
+      await db.exec(`
+        INSERT INTO tour_run_tasks (tour_run_checkpoint_id, checkpoint_task_id, status, completed_at)
+        SELECT trc.id, ct.id, 'done', trc.scanned_at
+        FROM tour_run_checkpoints trc
+        JOIN checkpoint_tasks ct ON ct.checkpoint_id = trc.checkpoint_id
+        WHERE trc.tour_run_id = ${runId} AND trc.status = 'done'
+      `);
+    }
+  }
+}
+
+/* ------------------------------------------------------- more incidents -- */
+
+/**
+ * A realistic incident mix.
+ *
+ * Spread across sites, categories and severities, with a few still open so
+ * the review queue is not empty, and two carrying a cost-recovery figure so
+ * the client billing conversation has something behind it.
+ */
+const MORE_INCIDENTS = [
+  {
+    officer: users.janelle, site: 'palmetto', post: 'palmettoGate', name: 'Janelle Carter',
+    category: 'Trespass', severity: 'medium', days: -2, hour: 23, at: 'North gate, visitor lane',
+    what: 'Two individuals on foot attempted to follow a resident vehicle through the north gate at 23:14. I stepped out and asked them to stop; both said they were visiting a friend but could not give a unit number and were not on the guest list. I explained they could not enter without a resident authorising them and offered to call the unit if they gave me a name. They declined and left on foot toward Palmetto Ridge Drive.',
+    resolution: 'Both individuals left the property without incident. Description passed to the oncoming shift and to the HOA contact.',
+    notified: 'Renata Diaz (supervisor), Marcus Reyes (HOA)',
+    status: 'closed',
+  },
+  {
+    officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', name: 'Dwayne Foster',
+    category: 'Theft', severity: 'high', days: -5, hour: 3, at: 'Trailer row, bay 12',
+    what: 'On the 03:00 perimeter sweep I found the seal on trailer 4471 cut and hanging. The trailer doors were closed but unlatched. I did not enter the trailer. I secured the area, photographed the seal and the door, and called dispatch immediately.',
+    resolution: 'Tampa PD attended at 03:52 and took a report. Gulfport Freight operations manager notified and attended at 05:10. Inventory shortfall confirmed by the client the following morning.',
+    other: 'Camera coverage on trailer row is limited to the aisle entrance; the trailer itself is not covered.',
+    notified: 'Dispatch, Tampa PD, Alicia Grant (Gulfport Freight)',
+    police: true, policeRef: 'TPD-2026-118842', cost: 1240000,
+    status: 'under_review',
+  },
+  {
+    officer: users.marcus, site: 'riverfront', post: 'riverfrontLobby', name: 'Marcus Bell',
+    category: 'Medical', severity: 'high', days: -8, hour: 14, at: 'Main lobby, seating area',
+    what: 'A visitor waiting in the lobby became unsteady and sat down heavily at about 14:20. He was conscious but pale and sweating, and said he felt faint and had not eaten. I called 911 at 14:22, stayed with him, and kept the seating area clear.',
+    resolution: 'Paramedics arrived 14:31 and assessed him on scene. He declined transport and left with a colleague at 14:55. No further action.',
+    other: 'AED was retrieved but not used.',
+    notified: '911, Renata Diaz (supervisor), Dana Whitfield (building)',
+    status: 'closed',
+  },
+  {
+    officer: users.alicia, site: 'coral', post: 'coralRetail', name: 'Alicia Nunez',
+    category: 'Property Damage', severity: 'low', days: -11, hour: 18, at: 'East entrance, planter bed',
+    what: 'A delivery vehicle reversing at the east entrance struck the concrete planter and cracked it along the north face. The driver stopped and gave his details without being asked.',
+    resolution: 'Driver details and company recorded. Photographs taken. Property manager notified the same evening.',
+    notified: 'Nina Alvarez (Coral Bay Property Group)',
+    cost: 48000,
+    status: 'closed',
+  },
+  {
+    officer: users.marcus, site: 'riverfront', post: 'riverfrontPatrol', name: 'Marcus Bell',
+    category: 'Suspicious Activity', severity: 'medium', days: -13, hour: 1, at: 'Parking deck level 3',
+    what: 'During the 01:00 exterior round I observed a male walking between parked vehicles on deck 3, stopping at several and looking into the windows. When he saw me he walked toward the stairwell at a normal pace. I asked if he needed assistance; he said he had forgotten where he parked, then left the deck on foot.',
+    resolution: 'No damage or entry found on inspection of the vehicles in that row. Description and time passed to dispatch and logged for the following shifts.',
+    other: 'Deck 3 lighting on the north side is poor - two fittings out. Reported separately to building management.',
+    notified: 'Dispatch',
+    status: 'closed',
+  },
+  {
+    officer: users.janelle, site: 'palmetto', post: 'palmettoGate', name: 'Janelle Carter',
+    category: 'Policy Violation', severity: 'low', days: -16, hour: 21, at: 'North gatehouse',
+    what: 'A resident became verbally abusive when asked to pull aside because his transponder did not read and he was not on the guest list for the unit he named. He used obscenities and refused to move for several minutes, blocking the lane.',
+    resolution: 'I remained at the gatehouse, did not engage further, and called the HOA contact. The resident eventually provided his unit number, which checked out, and was admitted. Incident logged at the HOA contact’s request.',
+    other: 'Third recorded incident involving the same resident.',
+    notified: 'Renata Diaz (supervisor), Marcus Reyes (HOA)',
+    status: 'closed',
+  },
+  {
+    officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', name: 'Dwayne Foster',
+    category: 'Alarm / System', severity: 'medium', days: -19, hour: 4, at: 'Yard gate 2 sensor',
+    what: 'Gate 2 sensor alarmed four times between 04:05 and 04:40 with no vehicle present. Physical inspection showed no breach of the fence line or the gate.',
+    resolution: 'Isolated to a faulty sensor. Client maintenance raised a ticket the same morning. Gate monitored visually for the remainder of the shift.',
+    notified: 'Alicia Grant (Gulfport Freight)',
+    status: 'closed',
+  },
+  {
+    officer: users.alicia, site: 'coral', post: 'coralRetail', name: 'Alicia Nunez',
+    category: 'Theft', severity: 'medium', days: -24, hour: 16, at: 'Unit 14, retail floor',
+    what: 'Store manager at unit 14 reported a shoplifting in progress. I attended and observed a female leaving the unit with unpaid items visible. I did not detain. I followed at a distance to the car park and recorded the vehicle plate and direction of travel.',
+    resolution: 'Plate and description provided to the store manager and to Fort Lauderdale PD, who took a report by phone. No contact was made with the individual.',
+    notified: 'Fort Lauderdale PD, store manager unit 14',
+    police: true, policeRef: 'FLPD-2026-55190',
+    cost: 21500,
+    status: 'closed',
+  },
+  {
+    officer: users.marcus, site: 'riverfront', post: 'riverfrontLobby', name: 'Marcus Bell',
+    category: 'Access Control', severity: 'low', days: -1, hour: 9, at: 'Main lobby turnstiles',
+    what: 'An individual attempted to tailgate through the turnstiles behind a badged employee at 09:12. I intercepted politely and asked him to sign in. He was a contractor expected by the level 4 tenant but had not been added to the visitor list.',
+    resolution: 'Verified with the tenant by phone, issued a visitor badge and escorted him to the lift. Tenant reminded to pre-register contractors.',
+    notified: 'Dana Whitfield (building)',
+    status: 'submitted',
+  },
+];
+
+// 0001-0003 are used by the incidents above.
+let incidentSeq = 4;
+
+for (const i of MORE_INCIDENTS) {
+  await insertIncident.run(
+    `USC-${year}-${String(incidentSeq++).padStart(4, '0')}`,
+    i.officer, siteIds[i.site], postIds[i.post], i.name, '(904) 555-0155',
+    i.category, i.severity, toSql(at(i.days, i.hour, (incidentSeq * 7) % 60)),
+    i.at, i.what, i.resolution || null, i.other || null, i.involved || null,
+    i.notified || null, i.police ? 1 : 0, i.cost ?? null, i.status
+  );
+}
+
+/* -------------------------------------------------- more post visits -- */
+
+const VISITS = [
+  { officer: users.marcus, site: 'riverfront', post: 'riverfrontLobby', days: -2, hour: 10, rating: 5,
+    notes: 'Lobby presentable, visitor log current, uniform correct. Marcus raised the camera 6 fault again - chased with building management.' },
+  { officer: users.janelle, site: 'palmetto', post: 'palmettoGate', days: -4, hour: 20, rating: 4,
+    notes: 'Gate log up to date. Reminded Janelle to record contractor plates in full rather than the last three digits.' },
+  { officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', days: -6, hour: 3, rating: 5,
+    notes: 'Weapon check logged correctly at shift start. Seal procedure being followed to the letter since the bulletin.' },
+  { officer: users.alicia, site: 'coral', post: 'coralRetail', days: -9, hour: 15, rating: 4,
+    notes: 'Good rapport with store managers. Radio left in the back office for part of the round - corrected on the spot.' },
+  { officer: users.marcus, site: 'riverfront', post: 'riverfrontPatrol', days: -12, hour: 23, rating: 5,
+    notes: 'Exterior round walked properly, not driven. Deck 3 lighting fault noted and reported.' },
+  { officer: users.janelle, site: 'palmetto', post: 'palmettoGate', days: -15, hour: 21, rating: 3,
+    notes: 'Arrived to find the gatehouse door propped for airflow. Explained why it cannot be left open. Otherwise post in order.' },
+  { officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', days: -18, hour: 2, rating: 5,
+    notes: 'Full perimeter walked in poor weather without prompting. Post orders reviewed together.' },
+  { officer: users.alicia, site: 'coral', post: 'coralRetail', days: -23, hour: 17, rating: 4,
+    notes: 'Handled a difficult customer interaction well while I was present. Uniform shirt needs replacing - ordered.' },
+];
+
+for (const v of VISITS) {
+  await db.prepare(
+    `INSERT INTO supervisor_visits
+     (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok, post_orders_reviewed,
+      equipment_ok, site_secure, rating, notes, latitude, longitude)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(
+    users.supervisor, v.officer, siteIds[v.site], postIds[v.post], toSql(at(v.days, v.hour, 20)),
+    v.rating >= 4 ? 1 : 0, 1, v.rating >= 4 ? 1 : 0, 1, v.rating, v.notes, null, null
+  );
+}
+
+/* ------------------------------------------------------- more duress -- */
+
+await db.prepare(
+  `INSERT INTO panic_alerts
+   (user_id, post_id, triggered_at, latitude, longitude, accuracy, status,
+    acknowledged_by, acknowledged_at, resolved_at, resolution_note)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+).run(
+  users.janelle, postIds.palmettoGate, toSql(at(-16, 21, 34)),
+  28.4515, -81.4720, 9, 'resolved',
+  users.supervisor, toSql(at(-16, 21, 35)), toSql(at(-16, 21, 58)),
+  'Triggered during the gate confrontation logged in the incident report. Supervisor reached her within a minute; no physical contact occurred and no injury. Reviewed afterwards and confirmed the right call to press it.'
+);
+
+await db.prepare(
+  `INSERT INTO panic_alerts
+   (user_id, post_id, triggered_at, latitude, longitude, accuracy, status,
+    acknowledged_by, acknowledged_at, resolved_at, resolution_note)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+).run(
+  users.alicia, postIds.coralRetail, toSql(at(-21, 16, 5)),
+  26.1224, -80.1373, 22, 'false_alarm',
+  users.supervisor, toSql(at(-21, 16, 6)), toSql(at(-21, 16, 9)),
+  'Pressed in a pocket while the officer was moving a barrier. Confirmed safe by phone within three minutes. No action needed - a false alarm costs us nothing and hesitating costs everything.'
+);
 
 // Derive flags from everything above.
 await sweep();

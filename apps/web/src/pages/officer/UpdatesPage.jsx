@@ -128,24 +128,32 @@ function BroadcastList() {
 /* ----------------------------------------------------------- training -- */
 
 /**
- * Required videos must be watched through. There is no real media file in the
- * demo, so a timed player stands in for one: it advances in real time, cannot
- * be scrubbed forward, and only then unlocks completion - the same rule the
- * server enforces independently.
+ * Required training must be watched through.
+ *
+ * A course with a video plays it; one without falls back to a timed stand-in,
+ * so a course can be published before its footage exists. Either way the
+ * counter only advances in real time and cannot be scrubbed forward, and the
+ * server enforces the same rule independently - the player is a convenience,
+ * not the control.
  */
 function TrainingPlayer({ training, onClose, onDone }) {
   const toast = useToast();
   const [seconds, setSeconds] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
   const startedFrom = useRef(training.seconds_watched || 0);
+  const video = useRef(null);
+
+  const hasVideo = Boolean(training.video_url) && !videoFailed;
 
   useEffect(() => {
     setSeconds(startedFrom.current);
   }, []);
 
+  // With a real video the element is the clock; otherwise a timer stands in.
   useEffect(() => {
-    if (!playing) return;
+    if (hasVideo || !playing) return;
     const t = setInterval(() => {
       setSeconds((s) => {
         const next = s + 1;
@@ -157,7 +165,27 @@ function TrainingPlayer({ training, onClose, onDone }) {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [playing, training.duration_seconds]);
+  }, [hasVideo, playing, training.duration_seconds]);
+
+  // Resume where they left off, once the file knows how long it is.
+  const onLoaded = () => {
+    const el = video.current;
+    if (el && startedFrom.current > 0 && startedFrom.current < el.duration) {
+      el.currentTime = startedFrom.current;
+    }
+  };
+
+  /**
+   * Count watched time, not position.
+   *
+   * Taking currentTime directly would let someone drag the scrubber to the end
+   * and be credited with the whole course.
+   */
+  const onTimeUpdate = () => {
+    const el = video.current;
+    if (!el) return;
+    setSeconds((s) => Math.max(s, Math.min(Math.floor(el.currentTime), training.duration_seconds)));
+  };
 
   const watchedEnough = seconds >= Math.floor(training.duration_seconds * 0.95);
 
@@ -192,9 +220,11 @@ function TrainingPlayer({ training, onClose, onDone }) {
       }}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={() => setPlaying((p) => !p)}>
-            <Icon name="play" size={16} /> {playing ? 'Pause' : 'Resume'}
-          </button>
+          {!hasVideo && (
+            <button className="btn btn-ghost" onClick={() => setPlaying((p) => !p)}>
+              <Icon name="play" size={16} /> {playing ? 'Pause' : 'Resume'}
+            </button>
+          )}
           <button className="btn btn-primary" onClick={complete} disabled={!watchedEnough || saving}>
             {watchedEnough ? 'Mark complete' : 'Watch in full to continue'}
           </button>
@@ -209,18 +239,45 @@ function TrainingPlayer({ training, onClose, onDone }) {
         )}
         <div
           style={{
-            aspectRatio: '16/9', borderRadius: 'var(--r-md)',
+            aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden',
             background: 'linear-gradient(140deg, var(--navy-900), var(--navy-700))',
             display: 'grid', placeItems: 'center', color: '#fff', position: 'relative',
           }}
         >
-          <div className="center">
-            <Icon name={playing ? 'play' : 'book'} size={44} />
-            <div className="small" style={{ marginTop: 8, opacity: 0.8 }}>
-              {playing ? 'Playing' : 'Paused'}
+          {hasVideo ? (
+            <video
+              ref={video}
+              src={training.video_url}
+              poster={training.poster_url || undefined}
+              controls
+              controlsList="nodownload noplaybackrate"
+              disablePictureInPicture
+              playsInline
+              onLoadedMetadata={onLoaded}
+              onTimeUpdate={onTimeUpdate}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onEnded={() => setSeconds(training.duration_seconds)}
+              onError={() => setVideoFailed(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+            />
+          ) : (
+            <div className="center">
+              <Icon name={playing ? 'play' : 'book'} size={44} />
+              <div className="small" style={{ marginTop: 8, opacity: 0.8 }}>
+                {training.video_url ? 'Video unavailable - timed instead' : playing ? 'Playing' : 'Paused'}
+              </div>
             </div>
-          </div>
-          <div style={{ position: 'absolute', left: 12, right: 12, bottom: 10 }}>
+          )}
+          <div
+            style={{
+              position: 'absolute', left: 12, right: 12, bottom: 10,
+              pointerEvents: 'none',
+              ...(hasVideo
+                ? { bottom: 'auto', top: 10, background: 'rgba(0,21,43,0.72)', padding: '6px 10px', borderRadius: 8 }
+                : null),
+            }}
+          >
             <Progress label="How much you have watched" value={seconds} max={training.duration_seconds} ok={watchedEnough} />
             <div className="row-between tiny" style={{ marginTop: 5, opacity: 0.85 }}>
               <span>{mmss(seconds)}</span>
