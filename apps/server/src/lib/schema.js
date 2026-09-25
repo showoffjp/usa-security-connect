@@ -1,3 +1,18 @@
+/**
+ * The database schema, as one idempotent script.
+ *
+ * This used to be schema.sql, read at runtime with fs.readFileSync. That works
+ * on a long-running host and fails on a serverless one: the bundler traces
+ * imports, not computed file paths, so the .sql file was never shipped and
+ * every request died on ENOENT before it reached a single route. Inlining it
+ * makes the schema a module like any other - traced, bundled, and identical on
+ * both surfaces, which is the whole point of sharing app.js between them.
+ *
+ * The inline sql marker before the literal is what editors and Prettier look
+ * for to syntax highlight and format it.
+ */
+
+export const SCHEMA_SQL = /* sql */ `
 -- USA Security Connect - Postgres schema.
 --
 -- Runs identically on Neon (production) and PGlite (local dev, tests, CI),
@@ -509,7 +524,7 @@ CREATE TABLE IF NOT EXISTS client_users (
   password_salt   text,
   -- Bumped whenever the password changes. A token carries the version it was
   -- issued against, so a reset ends every session the contact had open
-  -- elsewhere. A counter rather than a timestamp, because JWT `iat` is whole
+  -- elsewhere. A counter rather than a timestamp, because JWT 'iat' is whole
   -- seconds and a reset moments after a sign-in would not be caught.
   token_version   integer NOT NULL DEFAULT 0,
   status          text NOT NULL DEFAULT 'active',
@@ -610,3 +625,4 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
   sequence        integer NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_invoice_lines ON invoice_lines(invoice_id, sequence);
+`;

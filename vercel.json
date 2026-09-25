@@ -3,7 +3,7 @@
   "buildCommand": "npm run build --workspace @usc/web",
   "outputDirectory": "apps/web/dist",
   "functions": {
-    "api/index.js": {
+    "api/index.mjs": {
       "maxDuration": 30,
       "memory": 1024
     }

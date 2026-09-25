@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCHEMA_SQL } from './schema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -354,8 +355,7 @@ let migrated = null;
 export function migrate() {
   if (migrated) return migrated;
   migrated = (async () => {
-    const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-    await db.exec(schema);
+    await db.exec(SCHEMA_SQL);
   })();
   return migrated;
 }
