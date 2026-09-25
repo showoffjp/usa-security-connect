@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-495 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+498 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -155,7 +155,7 @@ bundle for both platforms.
 | `email.mjs` | 32 | what is composed and addressed, and that no password is in it |
 | `security.mjs` | 24 | set-password links, and the shared rate limiter |
 | `roles.mjs` | 51 | what each staff tier can and cannot reach |
-| `tracking.mjs` | 102 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, copying a week |
+| `tracking.mjs` | 105 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, Timesheets / reports / invoice cost agreeing to the cent, copying a week |
 
 `verify.mjs` gives the API under test a cron secret, a two-second ping-thinning
 gap and a larger login allowance. Each is an environment variable with a
@@ -226,11 +226,6 @@ Honest list. None of it blocks going live, but you will want to know.
   open. Tracking with the app closed needs background location permission and a
   store review that asks why; decide whether the company wants that before
   building it.
-- **The Timesheets screen still prices at today's rate.** The reports use the
-  rate in effect on each day (from `pay_rate_history`); the older Timesheets
-  screen and invoice cost do not. The payroll register is the one to trust
-  across a rate change. Moving Timesheets onto the same pricing is the obvious
-  next step.
 - **A change of pay basis is not effective-dated.** Moving somebody from hourly to
   salary is recorded in the history, but reports price by the basis on the
   record now.
@@ -239,6 +234,9 @@ Honest list. None of it blocks going live, but you will want to know.
 
 ## If you change one thing, know this
 
+- **Changing how hours are priced:** `apps/server/src/services/payroll.js`.
+  Reports, Timesheets and invoice cost all go through it, and
+  `test/tracking.mjs` checks the three agree to the cent.
 - **Changing a threshold** (grace period, check-in window, overtime line):
   `packages/shared/src/domain.js`, `RULES`. Nowhere else.
 - **Adding a table:** `apps/server/src/lib/schema.js`, then add it to the

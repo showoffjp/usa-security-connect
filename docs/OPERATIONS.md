@@ -95,11 +95,10 @@ the rate history** with who made it, why, and the date it takes effect - whether
 came from that screen, a bulk adjustment, or the employee record. Saving without
 changing anything does not add a line.
 
-- A change needs a reason and an effective date. **Reports price each hour at the rate
-  in effect on the day it was worked**, so a raise dated tomorrow leaves last month's
-  figures alone and a back-dated correction reprices only the hours after its date.
-  The older Timesheets screen and invoice cost still use the rate on the record now;
-  use the payroll register for anything that spans a rate change.
+- A change needs a reason and an effective date. **Every screen prices each hour at
+  the rate in effect on the day it was worked** - reports, Timesheets and invoice
+  cost alike - so a raise dated tomorrow leaves last month's figures alone and a
+  back-dated correction reprices only the hours after its date.
 - Moving somebody to 1099 on this screen clears *exempt* and is still refused without
   a W-9 on file.
 - A bulk adjustment targets W-2, 1099 or both, armed, unarmed or both, by percent or
@@ -128,8 +127,9 @@ agree. Things worth knowing when reading them:
 ## Employment classification and pay
 
 Classification is a field on the employee record, not a note, because it changes the
-arithmetic. `computePay()` in `packages/shared/src/domain.js` is the single place it
-happens, and the API, admin console and timesheet export all call it.
+arithmetic. The rules live in `packages/shared/src/domain.js`, and pricing a set of
+worked hours happens in one place, `apps/server/src/services/payroll.js`, which the
+reports, the Timesheets screen and invoice cost all call - so they cannot disagree.
 
 | | W-2 employee | 1099 contractor |
 |---|---|---|

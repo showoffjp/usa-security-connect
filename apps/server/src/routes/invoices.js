@@ -30,6 +30,7 @@ import {
 } from '../shared.js';
 import { toSql } from '../services/compliance.js';
 import { notifyInvoiceIssued, emailKind } from '../services/email.js';
+import { loadRateBook, rateOn, dayOf } from '../services/payroll.js';
 
 export const invoicesRouter = Router();
 invoicesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -49,10 +50,10 @@ const TIMES = ['issued_at', 'paid_at', 'created_at'];
 export async function buildLines({ siteId, start, end }) {
   const rows = await db
     .prepare(
-      `SELECT te.id, te.minutes_worked, te.unpaid_break_minutes,
+      `SELECT te.id, te.user_id, te.clock_in_at, te.minutes_worked, te.unpaid_break_minutes,
               p.id AS post_id, p.name AS post_name, p.bill_rate_cents AS post_rate,
               sh.bill_rate_cents AS shift_rate,
-              u.bill_rate_cents AS officer_rate, u.pay_rate_cents
+              u.bill_rate_cents AS officer_rate, u.pay_rate_cents, u.pay_type, u.overtime_multiplier
        FROM time_entries te
        JOIN posts p ON p.id = te.post_id
        JOIN users u ON u.id = te.user_id
@@ -64,6 +65,8 @@ export async function buildLines({ siteId, start, end }) {
     )
     .all(siteId, toSql(start), toSql(end));
 
+  // Cost at the pay rate in effect on the day, as the reports price it.
+  const book = await loadRateBook();
   const groups = new Map();
   const unpriced = [];
 
@@ -95,7 +98,7 @@ export async function buildLines({ siteId, start, end }) {
     };
     group.minutes += minutes;
     group.entries += 1;
-    group.cost_cents += amountForMinutes(minutes, r.pay_rate_cents || 0);
+    group.cost_cents += amountForMinutes(minutes, rateOn(book, r, dayOf(r.clock_in_at)).rate || 0);
     groups.set(key, group);
   }
 
