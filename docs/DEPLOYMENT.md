@@ -9,7 +9,7 @@ photos go to Vercel Blob.
   API                      ──►  Vercel  (api/index.js, one function)
   Database                 ──►  Neon    (serverless Postgres)
   Photos                   ──►  Vercel Blob
-  Compliance sweep         ──►  Vercel Cron, every 5 minutes
+  Compliance sweep         ──►  Vercel Cron (daily on Hobby; see §3)
   Mobile apps              ──►  EAS Build (see apps/mobile/BUILDING.md)
 ```
 
@@ -121,9 +121,27 @@ from whoever set the account up.
 
 ### The cron job
 
-`vercel.json` already registers `/api/cron/sweep` every five minutes. That is what raises
-late, missed-check-in and no-show flags, and auto-closes abandoned shifts. It is
-authenticated with `CRON_SECRET`, so set that variable or the endpoint returns 503.
+`vercel.json` registers `/api/cron/sweep`. That is what raises late, missed-check-in and
+no-show flags, and auto-closes abandoned shifts. It is authenticated with `CRON_SECRET`,
+so set that variable or the endpoint returns 503. Vercel Cron issues GET and sends the
+secret as a bearer token; the endpoint also accepts POST for triggering a sweep by hand.
+
+**The committed schedule is `0 7 * * *` - once a day - because Vercel's Hobby plan
+refuses any cron that runs more often, and the deployment is rejected outright, not
+merely throttled.** A daily sweep catches no-shows and abandoned shifts the next morning.
+It does not give you missed-check-in alerts while an officer is still on post, which is
+the point of the feature. Two ways to get the five-minute sweep back:
+
+- **Upgrade to Pro**, then set the schedule to `*/5 * * * *` in `vercel.json`.
+- **Point any external scheduler at it** (cron-job.org, UptimeRobot, a box you own):
+
+  ```
+  curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/sweep
+  ```
+
+  The endpoint is idempotent, so calling it more often than needed is harmless.
+
+On a long-running host none of this applies: an internal timer drives the sweep.
 
 Confirm it after the first deploy: **Project → Cron Jobs** should list one job with a
 recent successful run. If flags never appear, this is the first thing to check.
