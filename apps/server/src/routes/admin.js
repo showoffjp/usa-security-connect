@@ -228,7 +228,15 @@ adminRouter.get(
   })
 );
 
-const employeeSchema = z
+/**
+ * The employee fields, without the cross-field rules.
+ *
+ * Kept separate because `.refine()` produces a ZodEffects, and a ZodEffects
+ * has no `.partial()` - so a PATCH cannot be built from the refined schema.
+ * The rules are applied to the whole record instead, by classificationProblem
+ * below.
+ */
+const employeeFields = z
   .object({
     firstName: z.string().trim().min(1, 'First name is required.').max(80),
     lastName: z.string().trim().min(1, 'Last name is required.').max(80),
@@ -270,17 +278,34 @@ const employeeSchema = z
     state: z.string().trim().max(2).optional(),
     postalCode: z.string().trim().max(12).optional(),
     uniformSize: z.string().trim().max(6).optional(),
-  })
-  // A contractor with no paperwork on file is the classic audit finding, so the
-  // API refuses to record one as active without at least a W-9.
-  .refine((d) => d.employmentType !== '1099' || d.status !== 'active' || d.w9OnFile, {
-    message: 'A 1099 contractor cannot be made active until their W-9 is on file.',
-    path: ['w9OnFile'],
-  })
-  .refine((d) => d.employmentType !== '1099' || !d.exempt, {
-    message: 'Exempt status applies to W-2 employees only.',
-    path: ['exempt'],
   });
+
+/**
+ * The classification rules, as a plain check over a whole employee record.
+ *
+ * A contractor with no paperwork on file is the classic audit finding, so a
+ * 1099 cannot be recorded as active without at least a W-9, and "exempt" is a
+ * W-2 concept.
+ *
+ * This runs against the *merged* record on a PATCH - the row as it will be
+ * after the change, not just the fields being changed. Checking the patch
+ * alone would let `{ status: 'active' }` slip past on a contractor whose W-9
+ * was never filed, which is exactly the case the rule exists for.
+ */
+function classificationProblem(record) {
+  if (record.employmentType === '1099' && record.status === 'active' && !record.w9OnFile) {
+    return { field: 'w9OnFile', message: 'A 1099 contractor cannot be made active until their W-9 is on file.' };
+  }
+  if (record.employmentType === '1099' && record.exempt) {
+    return { field: 'exempt', message: 'Exempt status applies to W-2 employees only.' };
+  }
+  return null;
+}
+
+const employeeSchema = employeeFields.superRefine((d, ctx) => {
+  const problem = classificationProblem(d);
+  if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [problem.field], message: problem.message });
+});
 
 adminRouter.post(
   '/employees',
@@ -457,9 +482,21 @@ adminRouter.patch(
   '/employees/:id',
   onlyAdmin,
   wrap(async (req, res) => {
-    const body = parse(employeeSchema.partial(), req.body);
+    const body = parse(employeeFields.partial(), req.body);
     const user = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id));
     if (!user) throw new HttpError(404, 'Employee not found.');
+
+    // The classification rules apply to the record as it will be, so they are
+    // checked against the existing row with the patch laid over it.
+    const problem = classificationProblem({
+      employmentType: body.employmentType ?? user.employment_type,
+      status: body.status ?? user.status,
+      exempt: body.exempt ?? user.exempt,
+      w9OnFile: body.w9OnFile ?? user.w9_on_file,
+    });
+    if (problem) {
+      throw new HttpError(422, 'Please correct the highlighted fields.', [problem]);
+    }
 
     // Never let the last administrator demote or disable themselves out of the system.
     const losingAdmin =

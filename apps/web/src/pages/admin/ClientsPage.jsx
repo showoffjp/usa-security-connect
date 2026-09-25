@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { fmtRelative, fmtDateTime } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, StatusChip, useToast,
@@ -194,6 +195,8 @@ function ContactDialog({ contact, sites, onClose, onSaved, onCredential }) {
 
 export default function ClientsPage() {
   const toast = useToast();
+  // Creating logins and resetting passwords is administrator work.
+  const { isAdmin } = useAuth();
   const [clients, setClients] = useState(null);
   const [sites, setSites] = useState([]);
   const [error, setError] = useState('');
@@ -260,9 +263,11 @@ export default function ClientsPage() {
             properties only.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setEditing('new')}>
-          <Icon name="plus" size={16} /> New login
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>
+            <Icon name="plus" size={16} /> New login
+          </button>
+        )}
       </div>
 
       {error && <Banner kind="danger">{error}</Banner>}
@@ -273,9 +278,11 @@ export default function ClientsPage() {
             icon="building"
             title="No client logins yet"
             action={
-              <button className="btn btn-primary" onClick={() => setEditing('new')}>
-                Create the first one
-              </button>
+              isAdmin ? (
+                <button className="btn btn-primary" onClick={() => setEditing('new')}>
+                  Create the first one
+                </button>
+              ) : null
             }
           >
             Give a site contact their own read-only view of the service you provide.

@@ -15,3 +15,6 @@ data/
 apps/server/data/
 .ci-android/
 .ci-ios/
+
+# Role walkthrough screenshots, regenerated on demand
+apps/web/screenshots/

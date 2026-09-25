@@ -38,6 +38,28 @@ Open <http://localhost:5173> and sign in with a demo code + PIN:
 > These fixed PINs exist only in the demo seed. Real accounts get a random PIN
 > generated in the admin console and shown exactly once.
 
+### The three staff tiers
+
+The three accounts at the top of that table are one of each kind. They do not
+merely see more or less of the same screen — they get different applications.
+
+| | Officer `1003` | Supervisor `1002` | Administrator `1001` |
+|---|---|---|---|
+| **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
+| **Navigation** | 5 tabs | 19 destinations | 20 destinations |
+| **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: review flags and incidents, approve time off and swaps, read timesheets and pay, the daily report and the live map | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
+| **Money** | — | Reads invoices and margin | Raises, issues and voids invoices; manages client portal logins |
+| **Audit log** | — | — | Yes |
+
+A supervisor is a working officer too — they still have their own time clock.
+
+The boundaries are enforced in the API, not just hidden in the UI:
+`apps/server/test/roles.mjs` checks each one from both sides, so a control that
+gets hidden but not gated will fail the suite.
+
+A **client contact** is not a staff account at all. Separate sign-in, separate
+token, 6 destinations, and no path to any of the above.
+
 The client portal is at <http://localhost:5173/portal>, with its own sign-in:
 
 | Email | Password | Property |

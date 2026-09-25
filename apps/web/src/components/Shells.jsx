@@ -159,6 +159,7 @@ export function OfficerShell() {
 /* ---------------------------------------------------------- admin shell -- */
 
 export function AdminShell() {
+  const { isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState({});
   const location = useLocation();
@@ -225,7 +226,9 @@ export function AdminShell() {
       title: 'Configuration',
       items: [
         { to: '/admin/sites', icon: 'building', label: 'Sites & posts' },
-        { to: '/admin/audit', icon: 'clipboard', label: 'Audit log' },
+        // The audit endpoint is administrators only, so a supervisor would
+        // only find an error page behind this link.
+        ...(isAdmin ? [{ to: '/admin/audit', icon: 'clipboard', label: 'Audit log' }] : []),
       ],
     },
   ];

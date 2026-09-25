@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, tokenStore } from '../../lib/api.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtMoney, fmtHours, toDateInput } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, Spinner, StatusChip, Stat, useToast,
@@ -213,6 +214,8 @@ function RaiseDialog({ sites, onClose, onCreated }) {
 
 function InvoiceDialog({ id, onClose, onChanged }) {
   const toast = useToast();
+  // Raising, issuing and voiding are administrator work. A supervisor reads.
+  const { isAdmin } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -297,7 +300,7 @@ function InvoiceDialog({ id, onClose, onChanged }) {
             <button className="btn btn-ghost" onClick={downloadCsv}>
               <Icon name="download" size={16} /> CSV
             </button>
-            {invoice.status === 'draft' && (
+            {isAdmin && invoice.status === 'draft' && (
               <>
                 <button className="btn btn-danger" onClick={remove}>
                   Delete
@@ -310,7 +313,7 @@ function InvoiceDialog({ id, onClose, onChanged }) {
                 </button>
               </>
             )}
-            {invoice.status === 'sent' && (
+            {isAdmin && invoice.status === 'sent' && (
               <>
                 <button className="btn btn-ghost" onClick={() => setStatus('void')} disabled={busy}>
                   Void
@@ -362,6 +365,7 @@ function InvoiceDialog({ id, onClose, onChanged }) {
 /* ---------------------------------------------------------------- page -- */
 
 export default function InvoicesPage() {
+  const { isAdmin } = useAuth();
   const [data, setData] = useState(null);
   const [sites, setSites] = useState([]);
   const [status, setStatus] = useState('all');
@@ -399,9 +403,11 @@ export default function InvoicesPage() {
           <h1>Invoices</h1>
           <p className="muted">Raised from hours already on the clock, at the bill rate that applied.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setRaising(true)} disabled={sites.length === 0}>
-          <Icon name="plus" size={16} /> Raise invoice
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setRaising(true)} disabled={sites.length === 0}>
+            <Icon name="plus" size={16} /> Raise invoice
+          </button>
+        )}
       </div>
 
       {error && <Banner kind="danger">{error}</Banner>}
@@ -438,7 +444,7 @@ export default function InvoicesPage() {
             icon="clipboard"
             title="No invoices here"
             action={
-              status === 'all' ? (
+              status === 'all' && isAdmin ? (
                 <button className="btn btn-primary" onClick={() => setRaising(true)}>
                   Raise the first one
                 </button>
