@@ -315,6 +315,23 @@ section('scheduled sweep');
 const unsignedCron = await call('/cron/sweep', { method: 'POST' });
 log([401, 503].includes(unsignedCron.status), 'cron sweep refuses an unsigned call', unsignedCron.data?.error);
 
+// Vercel Cron only ever issues GET, and carries the secret as a bearer token.
+// The route was POST-only once, so the scheduled sweep silently never ran.
+const unsignedGet = await call('/cron/sweep');
+log([401, 503].includes(unsignedGet.status), 'cron sweep refuses an unsigned GET', unsignedGet.data?.error);
+
+const cronSecret = process.env.CRON_SECRET;
+if (cronSecret) {
+  const signedGet = await call('/cron/sweep', { token: cronSecret });
+  log(signedGet.status === 200 && signedGet.data?.ok === true,
+      'cron sweep runs on a signed GET, the way Vercel calls it', `status ${signedGet.status}`);
+
+  const wrongSecret = await call('/cron/sweep', { token: `${cronSecret}-wrong` });
+  log(wrongSecret.status === 401, 'cron sweep refuses a wrong secret', `status ${wrongSecret.status}`);
+} else {
+  log(false, 'cron sweep signed GET not exercised - set CRON_SECRET on the API under test');
+}
+
 /* ========================================================== devices === */
 section('push registration');
 

@@ -81,21 +81,24 @@ app.get(
  * On a long-running host an internal timer drives this. On Vercel there is no
  * such timer, so Vercel Cron hits this endpoint instead - hence the shared
  * secret, since it must be reachable without a user session.
+ *
+ * Vercel Cron only ever issues GET, and sends the secret as a bearer token.
+ * POST stays for triggering a sweep by hand.
  */
-app.post(
-  '/api/cron/sweep',
-  wrap(async (req, res) => {
-    const secret = process.env.CRON_SECRET;
-    const offered =
-      req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.query.secret || '';
+const sweepHandler = wrap(async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  const offered =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.query.secret || '';
 
-    if (!secret) throw new HttpError(503, 'CRON_SECRET is not configured.');
-    if (offered !== secret) throw new HttpError(401, 'Not authorised.');
+  if (!secret) throw new HttpError(503, 'CRON_SECRET is not configured.');
+  if (offered !== secret) throw new HttpError(401, 'Not authorised.');
 
-    const result = await sweep();
-    res.json({ ok: true, ...result });
-  })
-);
+  const result = await sweep();
+  res.json({ ok: true, ...result });
+});
+
+app.get('/api/cron/sweep', sweepHandler);
+app.post('/api/cron/sweep', sweepHandler);
 
 app.use('/api/auth', authRouter);
 app.use('/api/timeclock', timeclockRouter);

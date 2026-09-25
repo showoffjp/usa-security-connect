@@ -58,6 +58,17 @@ async function connect() {
     return driver;
   }
 
+  // PGlite keeps its database on disk, and a serverless bundle is read-only,
+  // so falling back to it there fails deep inside mkdir with an EROFS trace
+  // that says nothing about the actual mistake. Say the actual mistake.
+  if (process.env.VERCEL) {
+    throw new Error(
+      'DATABASE_URL is not set. A serverless deployment needs a hosted Postgres ' +
+        '(Neon, using its pooled connection string); the local PGlite database ' +
+        'cannot run on a read-only filesystem.'
+    );
+  }
+
   const { PGlite } = await import('@electric-sql/pglite');
   // A path keeps the database between runs, like the old SQLite file did.
   // `USC_PGLITE_MEMORY=1` gives each test run a clean throwaway database.

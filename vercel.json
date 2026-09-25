@@ -15,7 +15,7 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/sweep?secret=$CRON_SECRET",
+      "path": "/api/cron/sweep",
       "schedule": "*/5 * * * *"
     }
   ],
