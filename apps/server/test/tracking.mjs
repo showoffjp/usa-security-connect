@@ -372,6 +372,31 @@ const andreBack = (await call(`/admin/reports/hours-by-officer?from=${from}&to=$
 log(andreBack.gross_pay > andreRow.gross_pay && andreBack.gross_pay < andreRow.gross_pay + andreRow.hours * 6,
   'a back-dated one reprices the hours after its date and no others', `${andreRow.gross_pay} -> ${andreBack.gross_pay}`);
 
+// Timesheets, reports and invoice cost share one pricing, so after that
+// back-dated raise all three must still agree to the cent.
+const sheetFrom = new Date(`${from}T00:00:00`).toISOString();
+const sheetTo = addDays(new Date(`${to}T00:00:00`), 1).toISOString();
+const sheets = (await call(`/admin/timesheets?from=${sheetFrom}&to=${sheetTo}`, { token: admin })).data.rows;
+const reportRows = (await call(`/admin/reports/hours-by-officer?from=${from}&to=${to}`, { token: admin })).data.rows;
+const disagreements = reportRows.filter((r) => {
+  const sheet = sheets.find((x) => x.user_id === r.user_id);
+  return !sheet || Math.abs((sheet.estimated_pay ?? 0) - (r.gross_pay ?? 0)) > 0.01 ||
+    Math.abs(sheet.overtime_hours - r.overtime_hours) > 0.01 || Math.abs((sheet.estimated_bill ?? 0) - (r.billed ?? 0)) > 0.01;
+});
+log(reportRows.length > 30 && disagreements.length === 0,
+  'Timesheets and the reports agree on pay, overtime and billing for every officer',
+  disagreements.map((r) => r.officer).join(', '));
+const andreSheet = sheets.find((x) => x.user_id === andreBack.user_id);
+log(andreSheet?.estimated_pay === andreBack.gross_pay, 'including the officer whose raise was back-dated', `${andreSheet?.estimated_pay}`);
+
+const harborview = ref.data.posts.find((p) => p.post_code === 'HV-01').site_id;
+const invoicePreview = (await call(`/invoices/preview?siteId=${harborview}&periodStart=${from}&periodEnd=${to}`, { token: admin })).data;
+const siteReport = (await call(`/admin/reports/hours-by-site?from=${from}&to=${to}&siteId=${harborview}`, { token: admin })).data;
+const invoiceCost = invoicePreview.lines.reduce((n, l) => n + l.cost_cents, 0);
+log(Math.abs(invoiceCost - Math.round(siteReport.totals.labor_cost * 100)) <= 1,
+  'invoice cost for a site matches the report\'s labor cost, back-dated raise included',
+  `${(invoiceCost / 100).toFixed(2)} vs ${siteReport.totals.labor_cost}`);
+
 /* =========================================================== schedule === */
 section('copying a week');
 

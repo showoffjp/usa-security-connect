@@ -19,6 +19,7 @@ import {
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
+import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -975,45 +976,51 @@ adminRouter.get(
       )
       .all(toSql(from), toSql(to)));
 
-    const weeks = Math.max(1, Math.ceil((to - from) / (7 * 86400000)));
+    // Pay and billing come from the shared pricing, so this screen, the
+    // reports and invoice cost agree: each hour at the rate in effect that
+    // day, overtime decided payroll week by payroll week, and billing at the
+    // shift's rate, else the post's, else the officer's.
+    const priced = groupBy(await loadPricedEntries({ from, to }), 'user_id');
 
-    const priced = rows.map((r) => {
-      // Unpaid meal breaks come off before anybody is paid for the time.
-      const minutes = Math.max(0, r.gross_minutes - r.break_minutes);
-
-      // Overtime is a weekly determination. Across a multi-week range this is
-      // a planning estimate, not a payroll-grade figure.
-      const pay = computePay({
-        minutes,
-        employmentType: r.employment_type,
-        payType: r.pay_type,
-        exempt: Boolean(r.exempt),
-        payRateCents: r.pay_rate_cents,
-        billRateCents: r.bill_rate_cents,
-        overtimeMultiplier: r.overtime_multiplier || 1.5,
-        weeklyThresholdHours: 40 * weeks,
-        salaryCents: r.salary_cents,
-        shifts: r.shifts,
-      });
-
+    const pricedRows = rows.map((r) => {
+      const list = priced.get(r.user_id) || [];
+      if (!list.length) {
+        return {
+          ...r,
+          minutes: 0,
+          hours: 0,
+          break_hours: toHours(r.break_minutes),
+          regular_hours: 0,
+          overtime_hours: 0,
+          earns_overtime: r.employment_type === 'w2' && !r.exempt && r.pay_type === 'hourly',
+          estimated_pay: null,
+          estimated_bill: null,
+          margin: null,
+          margin_percent: null,
+        };
+      }
+      const pay = personPay(list);
+      const billable = list.filter((e) => e.bill_rate_cents != null);
+      const billCents = billable.length ? billable.reduce((n, e) => n + e.billed_cents, 0) : null;
+      const marginCents = billCents != null && pay.payCents != null ? billCents - pay.payCents : null;
       return {
         ...r,
-        minutes,
-        hours: toHours(minutes),
+        minutes: pay.minutes,
+        hours: toHours(pay.minutes),
         break_hours: toHours(r.break_minutes),
         regular_hours: toHours(pay.regularMinutes),
         overtime_hours: toHours(pay.overtimeMinutes),
         earns_overtime: pay.earnsOvertime,
         estimated_pay: pay.payCents != null ? pay.payCents / 100 : null,
-        estimated_bill: pay.billCents != null ? pay.billCents / 100 : null,
-        margin: pay.marginCents != null ? pay.marginCents / 100 : null,
-        margin_percent: pay.marginPercent,
+        estimated_bill: billCents != null ? billCents / 100 : null,
+        margin: marginCents != null ? marginCents / 100 : null,
+        margin_percent: marginCents != null && billCents > 0 ? Math.round((marginCents / billCents) * 1000) / 10 : null,
       };
     });
-
+    pricedRows.sort((a, b) => b.minutes - a.minutes);
     // Totals split by classification, which is what the bookkeeper needs.
     const totalsFor = (type) => {
-      const set = priced.filter((r) => r.employment_type === type);
+      const set = pricedRows.filter((r) => r.employment_type === type);
       return {
         people: set.filter((r) => r.shifts > 0).length,
         hours: Math.round(set.reduce((n, r) => n + r.hours, 0) * 100) / 100,
@@ -1023,12 +1030,12 @@ adminRouter.get(
 
     res.json({
       range: { from: from.toISOString(), to: to.toISOString() },
-      rows: priced,
+      rows: pricedRows,
       totals: {
         w2: totalsFor('w2'),
         contractor: totalsFor('1099'),
-        bill: Math.round(priced.reduce((n, r) => n + (r.estimated_bill || 0), 0) * 100) / 100,
-        margin: Math.round(priced.reduce((n, r) => n + (r.margin || 0), 0) * 100) / 100,
+        bill: Math.round(pricedRows.reduce((n, r) => n + (r.estimated_bill || 0), 0) * 100) / 100,
+        margin: Math.round(pricedRows.reduce((n, r) => n + (r.margin || 0), 0) * 100) / 100,
       },
     });
   })
