@@ -397,6 +397,32 @@ log(Math.abs(invoiceCost - Math.round(siteReport.totals.labor_cost * 100)) <= 1,
   'invoice cost for a site matches the report\'s labor cost, back-dated raise included',
   `${(invoiceCost / 100).toFixed(2)} vs ${siteReport.totals.labor_cost}`);
 
+/* ========================================================= candidates === */
+section('who can cover a shift');
+
+const armedPost = ref.data.posts.find((p) => p.post_code === 'PD-02');
+const candStart = addDays(new Date(), 3);
+candStart.setHours(20, 0, 0, 0);
+const candEnd = new Date(candStart.getTime() + 8 * 3600000);
+const candQs = `postId=${armedPost.id}&startsAt=${candStart.toISOString()}&endsAt=${candEnd.toISOString()}`;
+log((await call(`/admin/shifts/candidates?${candQs}`, { token: officer })).status === 403, 'an officer cannot see who could cover a shift');
+const cand = await call(`/admin/shifts/candidates?${candQs}`, { token: supervisor });
+log(cand.status === 200 && cand.data.candidates.length >= 40, 'every active officer is judged', `${cand.data?.candidates?.length}`);
+const eligibleArmed = cand.data.candidates.filter((c) => c.eligible);
+log(eligibleArmed.length > 0 && eligibleArmed.every((c) => /class g/i.test(c.license_type || '')),
+  'for an armed post, only Class G holders are eligible', eligibleArmed.map((c) => c.name).join(', '));
+log(cand.data.candidates.filter((c) => !/class g/i.test(c.license_type || '')).every((c) => c.reasons.some((r) => r.code === 'no_armed_licence')),
+  'and everyone else is told why not');
+const firstBlocked = cand.data.candidates.findIndex((c) => !c.eligible);
+log(firstBlocked === -1 || cand.data.candidates.slice(firstBlocked).every((c) => !c.eligible), 'eligible officers are listed first');
+log(cand.data.candidates.every((c) => Math.abs(c.week_hours_after - c.week_hours_before - 8) < 0.02), "each projection adds the shift's eight hours");
+const otCases = cand.data.candidates.filter((c) => c.employment_type === 'w2' && c.week_hours_after > 40);
+log(otCases.every((c) => Math.abs(c.overtime_hours - Math.min(8, c.week_hours_after - Math.max(40, c.week_hours_before))) < 0.02),
+  'overtime is projected only for the hours past forty', `${otCases.length} W-2 officers would go over`);
+log(cand.data.candidates.filter((c) => c.employment_type === '1099').every((c) => c.overtime_hours === 0), 'contractors are never projected overtime');
+log((await call(`/admin/shifts/candidates?postId=${armedPost.id}&startsAt=${candEnd.toISOString()}&endsAt=${candStart.toISOString()}`, { token: supervisor })).status === 422,
+  'a shift that ends before it starts is refused');
+
 /* =========================================================== schedule === */
 section('copying a week');
 

@@ -15,6 +15,10 @@ import {
   expiryState,
   toHours,
   minutesBetween,
+  shiftEligibility,
+  blocksAssignment,
+  payrollWeekOf,
+  distanceMeters,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -654,6 +658,162 @@ adminRouter.post(
 );
 
 /* ================================================================ schedule === */
+
+/**
+ * Who could work this shift, best first.
+ *
+ * Every active officer is judged with the same shared rule claims and swaps
+ * use - licence for an armed post, overlaps, approved leave, stated
+ * availability - and then ranked by what a scheduler weighs: eligible before
+ * blocked, no overtime before overtime, people who know the post before
+ * strangers, then whoever has the fewest hours that week. Queries are made
+ * once for everybody, not once per officer.
+ */
+adminRouter.get(
+  '/shifts/candidates',
+  wrap(async (req, res) => {
+    const postId = Number(req.query.postId);
+    const startsAt = new Date(String(req.query.startsAt || ''));
+    const endsAt = new Date(String(req.query.endsAt || ''));
+    const excludeShiftId = Number(req.query.excludeShiftId) || 0;
+    if (!Number.isInteger(postId) || postId <= 0) throw new HttpError(422, 'Choose a post.');
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      throw new HttpError(422, 'Give a start and an end, with the end after the start.');
+    }
+    if (endsAt - startsAt > 24 * 3600000) throw new HttpError(422, 'A shift is at most 24 hours.');
+
+    const post = await db
+      .prepare(`SELECT p.*, s.latitude AS site_lat, s.longitude AS site_lng FROM posts p JOIN sites s ON s.id = p.site_id WHERE p.id = ?`)
+      .get(postId);
+    if (!post) throw new HttpError(404, 'Post not found.');
+
+    const people = await db
+      .prepare(
+        `SELECT u.*, s.name AS home_site, s.latitude AS home_lat, s.longitude AS home_lng
+         FROM users u LEFT JOIN sites s ON s.id = u.default_site_id
+         WHERE u.status = 'active' AND u.role IN ('officer','supervisor')`
+      )
+      .all();
+
+    const byUser = (rows) => groupBy(rows, 'user_id');
+    const certs = byUser(await db.prepare(`SELECT user_id, type, expires_on FROM certifications`).all());
+    const overlaps = byUser(
+      await db
+        .prepare(
+          `SELECT id, user_id FROM shifts
+           WHERE user_id IS NOT NULL AND id != ? AND status != 'cancelled'
+             AND starts_at < ? AND ends_at > ?`
+        )
+        .all(excludeShiftId, toSql(endsAt), toSql(startsAt))
+    );
+    const day = `${startsAt.getFullYear()}-${String(startsAt.getMonth() + 1).padStart(2, '0')}-${String(startsAt.getDate()).padStart(2, '0')}`;
+    const leave = byUser(
+      await db
+        .prepare(
+          `SELECT id, user_id FROM time_off_requests
+           WHERE status = 'approved' AND starts_on <= ? AND ends_on >= ?`
+        )
+        .all(day, day)
+    );
+    const availability = new Map(
+      (await db.prepare(`SELECT * FROM availability WHERE weekday = ?`).all(startsAt.getDay())).map((a) => [a.user_id, a])
+    );
+
+    // Hours already on the roster in this payroll week, to project overtime.
+    const weekStart = parseDay(payrollWeekOf(startsAt));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const rostered = new Map(
+      (
+        await db
+          .prepare(
+            `SELECT user_id, SUM(EXTRACT(EPOCH FROM (ends_at - starts_at)) / 60) AS minutes
+             FROM shifts
+             WHERE user_id IS NOT NULL AND id != ? AND status != 'cancelled'
+               AND starts_at >= ? AND starts_at < ?
+             GROUP BY user_id`
+          )
+          .all(excludeShiftId, toSql(weekStart), toSql(weekEnd))
+      ).map((r) => [r.user_id, Number(r.minutes) || 0])
+    );
+
+    // Who has actually stood this post lately knows the post orders.
+    const familiarity = new Map(
+      (
+        await db
+          .prepare(
+            `SELECT user_id, COUNT(*) AS n FROM time_entries
+             WHERE post_id = ? AND clock_in_at >= ? GROUP BY user_id`
+          )
+          .all(postId, toSql(new Date(Date.now() - 60 * 86400000)))
+      ).map((r) => [r.user_id, Number(r.n)])
+    );
+
+    const shiftMinutes = Math.round((endsAt - startsAt) / 60000);
+    const threshold = RULES.overtimeWeeklyHours * 60;
+
+    const candidates = people.map((u) => {
+      const reasons = shiftEligibility({
+        post,
+        officer: u,
+        certifications: certs.get(u.id) || [],
+        conflicts: overlaps.get(u.id) || [],
+        timeOff: leave.get(u.id) || [],
+        availability: availability.get(u.id) || null,
+      });
+      const before = rostered.get(u.id) || 0;
+      const after = before + shiftMinutes;
+      const earnsOvertime = u.employment_type === 'w2' && !u.exempt && u.pay_type === 'hourly';
+      const overtimeMinutes = earnsOvertime ? Math.max(0, after - Math.max(threshold, before)) : 0;
+      const rate = u.pay_type === 'hourly' ? u.pay_rate_cents : null;
+      const costCents =
+        u.pay_type === 'per_shift'
+          ? u.pay_rate_cents
+          : rate != null
+            ? Math.round((shiftMinutes / 60) * rate + (overtimeMinutes / 60) * rate * ((u.overtime_multiplier || 1.5) - 1))
+            : null;
+      const billCents = post.bill_rate_cents != null ? Math.round((shiftMinutes / 60) * post.bill_rate_cents) : null;
+      const distance =
+        u.home_lat != null && post.latitude != null ? distanceMeters(u.home_lat, u.home_lng, post.latitude, post.longitude) : null;
+      return {
+        user_id: u.id,
+        name: `${u.first_name} ${u.last_name}`,
+        employee_code: u.employee_code,
+        role: u.role,
+        employment_type: u.employment_type,
+        license_type: u.license_type,
+        home_site: u.home_site,
+        home_site_match: u.default_site_id === post.site_id,
+        home_distance_km: distance != null ? Math.round(distance / 100) / 10 : null,
+        eligible: !blocksAssignment(reasons),
+        reasons,
+        week_hours_before: toHours(before),
+        week_hours_after: toHours(after),
+        overtime_hours: toHours(overtimeMinutes),
+        times_at_post: familiarity.get(u.id) || 0,
+        cost: costCents != null ? costCents / 100 : null,
+        margin_percent: billCents && costCents != null ? Math.round(((billCents - costCents) / billCents) * 1000) / 10 : null,
+      };
+    });
+
+    candidates.sort(
+      (a, b) =>
+        Number(b.eligible) - Number(a.eligible) ||
+        Number(a.overtime_hours > 0) - Number(b.overtime_hours > 0) ||
+        a.reasons.length - b.reasons.length ||
+        Number(b.times_at_post > 0) - Number(a.times_at_post > 0) ||
+        Number(b.home_site_match) - Number(a.home_site_match) ||
+        (a.home_distance_km ?? 9999) - (b.home_distance_km ?? 9999) ||
+        a.week_hours_before - b.week_hours_before
+    );
+
+    res.json({
+      post: { id: post.id, name: post.name, armed: Boolean(post.armed), bill_rate: post.bill_rate_cents != null ? post.bill_rate_cents / 100 : null },
+      shift_hours: toHours(shiftMinutes),
+      candidates,
+    });
+  })
+);
 
 adminRouter.get(
   '/shifts',

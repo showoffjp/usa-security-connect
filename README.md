@@ -188,6 +188,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   click any empty day to add a shift) or by day, conflict detection, **copy a week's
   roster forward** (clashes are left open rather than double-booked), a recurring roster
   builder that handles overnight shifts, and print.
+- **Suggested officers** — adding or editing a shift ranks everyone who could cover it:
+  eligible first (current Class G for an armed post, no overlapping shift, no approved
+  leave, within their stated availability), then without overtime, then those who have
+  worked that post before or are based at that site. Each shows their hours that week
+  with the shift added, overtime it would cause, what it would cost and the margin.
+  Picking someone who should not take it shows why before you save.
 - **Shift requests** — open shifts officers can claim, swaps they can offer each other,
   and drop requests, all landing in one supervisor queue. Eligibility is checked at
   every step, so an officer without a current Class G licence cannot end up on an armed

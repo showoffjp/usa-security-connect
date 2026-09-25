@@ -72,6 +72,7 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
     <Modal
       title={editing ? 'Edit shift' : 'Add shift'}
       onClose={onClose}
+      wide
       footer={
         <>
           {editing && (
@@ -90,23 +91,12 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
     >
       <div className="stack">
         {conflict && <Banner kind="danger" title="Scheduling conflict">{conflict}</Banner>}
-        <Field label="Officer" hint="Leave unassigned to post an open shift.">
-          <select value={form.userId} onChange={set('userId')}>
-            <option value="">Unassigned</option>
-            {employees
-              .filter((e) => e.status === 'active')
-              .map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name} ({e.employee_code})
-                </option>
-              ))}
-          </select>
-        </Field>
         <Field label="Post" required>
           <select value={form.postId} onChange={set('postId')}>
             {posts.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.site_name} - {p.name}
+                {p.armed ? ' (armed)' : ''}
               </option>
             ))}
           </select>
@@ -119,11 +109,146 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
             <input type="datetime-local" value={form.endsAt} onChange={set('endsAt')} />
           </Field>
         </div>
+        <Field label="Officer" hint="Leave unassigned to post an open shift, or pick from the suggestions below.">
+          <select value={form.userId} onChange={set('userId')}>
+            <option value="">Unassigned</option>
+            {employees
+              .filter((e) => e.status === 'active')
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name} ({e.employee_code})
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Candidates
+          postId={form.postId}
+          startsAt={form.startsAt}
+          endsAt={form.endsAt}
+          excludeShiftId={shift?.id}
+          selected={form.userId}
+          onPick={(id) => setForm((f) => ({ ...f, userId: String(id) }))}
+        />
         <Field label="Notes">
           <textarea value={form.notes} onChange={set('notes')} rows={2} />
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Who could take this shift, best first, with the reasons anyone cannot.
+ * The same eligibility rule that governs claims and swaps, so a supervisor
+ * sees the armed-licence and leave problems before saving rather than after.
+ */
+function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    if (!postId || !startsAt || !endsAt) return undefined;
+    const from = new Date(startsAt);
+    const to = new Date(endsAt);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
+      setError('The shift must end after it starts.');
+      setData(null);
+      return undefined;
+    }
+    let alive = true;
+    // Typing a time fires a change per keystroke; wait for it to settle.
+    const t = setTimeout(async () => {
+      try {
+        const q = new URLSearchParams({ postId, startsAt: from.toISOString(), endsAt: to.toISOString() });
+        if (excludeShiftId) q.set('excludeShiftId', excludeShiftId);
+        const d = await api.get(`/admin/shifts/candidates?${q}`);
+        if (alive) {
+          setData(d);
+          setError('');
+        }
+      } catch (err) {
+        if (alive) setError(err.message);
+      }
+    }, 350);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [postId, startsAt, endsAt, excludeShiftId]);
+
+  if (error) return <div className="small" style={{ color: 'var(--danger)' }}>{error}</div>;
+  if (!data) return <div className="small muted">Finding who can cover this shift...</div>;
+
+  const chosen = data.candidates.find((c) => String(c.user_id) === String(selected));
+  const eligible = data.candidates.filter((c) => c.eligible);
+  const list = showAll ? data.candidates : eligible.slice(0, 6);
+
+  return (
+    <div className="stack-sm">
+      {chosen && chosen.reasons.length > 0 && (
+        <Banner kind={chosen.eligible ? 'warn' : 'danger'} title={chosen.eligible ? `Check before assigning ${chosen.name}` : `${chosen.name} should not take this shift`}>
+          {chosen.reasons.map((r) => r.message).join(' ')}
+        </Banner>
+      )}
+      {chosen && chosen.overtime_hours > 0 && (
+        <Banner kind="warn" title="This puts them into overtime">
+          {chosen.name} would be on {chosen.week_hours_after}h this week - {chosen.overtime_hours}h of it at the overtime rate.
+        </Banner>
+      )}
+
+      <div className="card">
+        <div className="card-head" style={{ padding: '10px 14px' }}>
+          <h3 style={{ fontSize: '0.88rem' }}>
+            Suggested officers <span className="muted small">({eligible.length} eligible for {data.shift_hours}h{data.post.armed ? ', armed post' : ''})</span>
+          </h3>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? 'Eligible only' : `Everyone (${data.candidates.length})`}
+          </button>
+        </div>
+        {list.length === 0 ? (
+          <div className="small muted" style={{ padding: 14 }}>
+            Nobody is eligible for this post at this time. Try another time, or post it as an open shift.
+          </div>
+        ) : (
+          <div className="list" style={{ maxHeight: 290, overflowY: 'auto' }}>
+            {list.map((c) => (
+              <div key={c.user_id} className="list-item" style={String(c.user_id) === String(selected) ? { background: 'var(--navy-100)' } : undefined}>
+                <div className="grow">
+                  <div className="small strong">
+                    {c.name} <span className="tiny muted">{c.employee_code} · {c.employment_type === '1099' ? '1099' : 'W-2'}</span>
+                  </div>
+                  <div className="row wrap" style={{ gap: 4, marginTop: 3 }}>
+                    {c.eligible ? <Chip kind="ok">Eligible</Chip> : <Chip kind="danger">Blocked</Chip>}
+                    {c.reasons.map((r) => (
+                      <Chip key={r.code} kind={r.advisory ? 'warn' : 'danger'}>{r.message}</Chip>
+                    ))}
+                    {c.times_at_post > 0 && <Chip kind="navy">Worked here {c.times_at_post}x</Chip>}
+                    {c.home_site_match && <Chip kind="navy">Home site</Chip>}
+                    {c.overtime_hours > 0 && <Chip kind="warn">+{c.overtime_hours}h OT</Chip>}
+                  </div>
+                  <div className="tiny muted" style={{ marginTop: 3 }}>
+                    {c.week_hours_before}h this week, {c.week_hours_after}h with this shift
+                    {c.cost != null && ` · costs $${c.cost.toFixed(2)}`}
+                    {c.margin_percent != null && ` · ${c.margin_percent}% margin`}
+                    {c.home_distance_km != null && !c.home_site_match && ` · home site ${c.home_distance_km} km away`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${c.eligible ? 'btn-navy' : 'btn-ghost'}`}
+                  onClick={() => onPick(c.user_id)}
+                  disabled={String(c.user_id) === String(selected)}
+                  aria-label={`Assign ${c.name}`}
+                >
+                  {String(c.user_id) === String(selected) ? 'Chosen' : 'Assign'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
