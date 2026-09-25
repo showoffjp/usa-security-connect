@@ -4,7 +4,6 @@
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/index.js": {
-      "runtime": "nodejs22.x",
       "maxDuration": 30,
       "memory": 1024
     }
