@@ -39,7 +39,11 @@ export async function raiseFlag({ userId, type, occurredAt, refType, refId, deta
       toSql(occurredAt || new Date()),
       refType ?? null,
       refId ?? null,
-      detail ? (typeof detail === 'string' ? detail : JSON.stringify(detail)) : null
+      // detail is a jsonb column, so a bare string has to be encoded too. The
+      // branch that passed one through raw could only ever produce invalid
+      // JSON and fail the insert; it survived because every caller happens to
+      // pass an object, which makes it a trap rather than a live fault.
+      detail === undefined || detail === null ? null : JSON.stringify(detail)
     ));
 }
 
