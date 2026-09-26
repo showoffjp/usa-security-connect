@@ -19,7 +19,7 @@ const REQUEST_TIMES = ['created_at', 'decided_at'];
  * ask the shared rule. Kept in one place so claiming, swapping and a
  * supervisor's manual assignment all answer the same question.
  */
-async function checkEligibility(userId, shift) {
+export async function checkEligibility(userId, shift) {
   const officer = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
   if (!officer) throw new HttpError(404, 'Officer not found.');
 

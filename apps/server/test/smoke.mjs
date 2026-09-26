@@ -203,17 +203,25 @@ const overlap = await call('/admin/shifts', {
 });
 log(overlap.status === 409, 'overlapping shift refused', overlap.data?.error);
 
+const bulkStart = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+const bulkEnd = new Date(Date.now() + 44 * 86400000).toISOString().slice(0, 10);
 const bulk = await call('/admin/shifts/bulk', {
   token: aTok, method: 'POST',
   body: {
     userId: 6, postId: 5,
-    startDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-    endDate: new Date(Date.now() + 44 * 86400000).toISOString().slice(0, 10),
+    startDate: bulkStart,
+    endDate: bulkEnd,
     startTime: '22:00', endTime: '06:00',
     weekdays: [1, 2, 3, 4, 5],
   },
 });
-log(bulk.status === 201 && bulk.data.created === 10, 'bulk roster generated (overnight)', `${bulk.data?.created} shifts`);
+// Fifteen days hold ten or eleven weekdays depending on where they start, so
+// count them the way the server walks the range rather than assuming ten.
+let weekdaysInRange = 0;
+for (let d = new Date(bulkStart); d <= new Date(bulkEnd); d.setDate(d.getDate() + 1)) {
+  if (d.getDay() >= 1 && d.getDay() <= 5) weekdaysInRange += 1;
+}
+log(bulk.status === 201 && bulk.data.created === weekdaysInRange, 'bulk roster generated (overnight)', `${bulk.data?.created} of ${weekdaysInRange} weekdays`);
 
 const csv = await fetch(BASE + '/admin/export/timesheets.csv', { headers: { Authorization: `Bearer ${aTok}` } });
 const csvText = await csv.text();

@@ -24,6 +24,8 @@ import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
+import { checkEligibility } from './shiftRequests.js';
+import { pushAsync } from '../services/push.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -849,14 +851,22 @@ adminRouter.get(
   })
 );
 
-const shiftSchema = z
+// The fields on their own, so an edit can take any subset of them: a zod
+// schema wrapped in refine() has no partial(), which is what broke every
+// shift edit with a 500.
+const shiftFields = z
   .object({
     userId: z.number().int().positive().nullable().optional(),
     postId: z.number().int().positive(),
     startsAt: z.string().min(1),
     endsAt: z.string().min(1),
     notes: z.string().max(1000).optional(),
-  })
+    /** Assign despite a blocking eligibility problem; needs a written reason. */
+    override: z.boolean().optional(),
+    overrideReason: z.string().trim().max(500).optional(),
+  });
+
+const shiftSchema = shiftFields
   .refine((d) => new Date(d.endsAt) > new Date(d.startsAt), {
     message: 'The shift must end after it starts.',
     path: ['endsAt'],
@@ -883,11 +893,65 @@ async function assertNoOverlap({ userId, startsAt, endsAt, excludeShiftId }) {
   }
 }
 
+/**
+ * The same eligibility rule claims and swaps use, applied to a supervisor's
+ * direct assignment. Overlaps are left to assertNoOverlap, which says which
+ * shift clashes. Anything else that blocks - no Class G for an armed post,
+ * approved leave, an expired licence - is refused unless the supervisor
+ * overrides with a reason, which goes on the audit log with the problems.
+ * Advisory reasons (outside stated availability) come back as warnings.
+ */
+async function checkAssignment(req, { userId, postId, startsAt, endsAt, excludeShiftId, override, overrideReason }) {
+  if (!userId) return { warnings: [] };
+  const reasons = (
+    await checkEligibility(userId, {
+      id: excludeShiftId || 0,
+      post_id: postId,
+      starts_at: toSql(new Date(startsAt)),
+      ends_at: toSql(new Date(endsAt)),
+    })
+  ).filter((r) => r.code !== 'conflict');
+  const blocking = reasons.filter((r) => !r.advisory);
+  if (blocking.length) {
+    if (!override) {
+      throw new HttpError(409, blocking.map((r) => r.message).join(' '), { code: 'ineligible', reasons: blocking });
+    }
+    if (!overrideReason || overrideReason.length < 5) {
+      throw new HttpError(422, 'Say why this officer is being assigned anyway.', [
+        { field: 'overrideReason', message: 'Required when overriding.' },
+      ]);
+    }
+    await audit(req.user.id, 'shift.eligibility_overridden', 'user', userId, {
+      reasons: blocking.map((r) => r.code),
+      reason: overrideReason,
+    }, req.ip);
+  }
+  return { warnings: reasons.filter((r) => r.advisory) };
+}
+
+/** Tell an officer their roster changed. Fire and forget. */
+async function notifyShift(userId, kind, shiftLike) {
+  if (!userId) return;
+  const post = await db
+    .prepare(`SELECT p.name, s.name AS site_name FROM posts p JOIN sites s ON s.id = p.site_id WHERE p.id = ?`)
+    .get(shiftLike.post_id);
+  const when = new Date(sqlToIso(shiftLike.starts_at)).toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  const title = { added: 'New shift', changed: 'Shift changed', removed: 'Shift removed' }[kind];
+  pushAsync([userId], {
+    title,
+    body: `${when} - ${post?.name || 'post'}, ${post?.site_name || ''}`.trim(),
+    data: { type: 'schedule', kind },
+  });
+}
+
 adminRouter.post(
   '/shifts',
   wrap(async (req, res) => {
     const body = parse(shiftSchema, req.body);
     await assertNoOverlap(body);
+    const { warnings } = await checkAssignment(req, body);
 
     const info = (await db
       .prepare(
@@ -904,7 +968,9 @@ adminRouter.post(
       ));
 
     await audit(req.user.id, 'shift.created', 'shift', Number(info.lastInsertRowid), null, req.ip);
-    res.status(201).json({ shift: isoFields((await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(info.lastInsertRowid)), ['starts_at', 'ends_at']) });
+    const created = await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(info.lastInsertRowid);
+    await notifyShift(created.user_id, 'added', created);
+    res.status(201).json({ shift: isoFields(created, ['starts_at', 'ends_at']), warnings });
   })
 );
 
@@ -947,6 +1013,7 @@ adminRouter.post(
 
       try {
         await assertNoOverlap({ userId: body.userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+        await checkAssignment(req, { userId: body.userId, postId: body.postId, startsAt, endsAt });
       } catch (err) {
         if (body.skipConflicts) {
           skipped.push({ date: startsAt.toISOString().slice(0, 10), reason: err.message });
@@ -962,6 +1029,13 @@ adminRouter.post(
     }
 
     await audit(req.user.id, 'shift.bulk_created', 'shift', null, { count: created.length }, req.ip);
+    if (body.userId && created.length) {
+      pushAsync([body.userId], {
+        title: 'New shifts',
+        body: `${created.length} shift${created.length === 1 ? '' : 's'} added to your schedule.`,
+        data: { type: 'schedule', kind: 'added' },
+      });
+    }
     res.status(201).json({ created: created.length, skipped });
   })
 );
@@ -1023,6 +1097,7 @@ adminRouter.post(
     let created = 0;
     let opened = 0;
     const skipped = [];
+    const notified = new Map();
     for (const s of source) {
       const startsAt = moved(s.starts_at);
       const endsAt = moved(s.ends_at);
@@ -1036,13 +1111,17 @@ adminRouter.post(
 
       let userId = body.keepOfficers ? s.user_id : null;
       if (userId) {
+        // A clash, approved leave or a lapsed licence leaves the copy open
+        // for someone else rather than booking a person who cannot work it.
         try {
           await assertNoOverlap({ userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+          await checkAssignment(req, { userId, postId: s.post_id, startsAt, endsAt });
         } catch {
           userId = null;
           opened += 1;
         }
       }
+      if (userId) notified.set(userId, (notified.get(userId) || 0) + 1);
 
       await db
         .prepare(
@@ -1054,6 +1133,13 @@ adminRouter.post(
     }
 
     await audit(req.user.id, 'shift.week_copied', 'shift', null, { ...body, created, opened }, req.ip);
+    for (const [userId, count] of notified) {
+      pushAsync([userId], {
+        title: 'Next roster is out',
+        body: `${count} shift${count === 1 ? '' : 's'} added for the week of ${body.toWeekStart}.`,
+        data: { type: 'schedule', kind: 'added' },
+      });
+    }
     res.status(201).json({ created, opened, skipped });
   })
 );
@@ -1061,7 +1147,7 @@ adminRouter.post(
 adminRouter.patch(
   '/shifts/:id',
   wrap(async (req, res) => {
-    const body = parse(shiftSchema.partial(), req.body);
+    const body = parse(shiftFields.partial(), req.body);
     const shift = (await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(req.params.id));
     if (!shift) throw new HttpError(404, 'Shift not found.');
 
@@ -1072,20 +1158,42 @@ adminRouter.patch(
     if (endsAt <= startsAt) throw new HttpError(422, 'The shift must end after it starts.');
     await assertNoOverlap({ userId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), excludeShiftId: shift.id });
 
+    const postId = body.postId ?? shift.post_id;
+    const moved =
+      postId !== shift.post_id ||
+      startsAt.getTime() !== new Date(sqlToIso(shift.starts_at)).getTime() ||
+      endsAt.getTime() !== new Date(sqlToIso(shift.ends_at)).getTime();
+    const reassigned = (userId ?? null) !== (shift.user_id ?? null);
+
+    // Only re-judged when who, where or when changes: editing the notes on a
+    // shift somebody already holds is not a new assignment.
+    const { warnings } =
+      moved || reassigned
+        ? await checkAssignment(req, { ...body, userId, postId, startsAt, endsAt, excludeShiftId: shift.id })
+        : { warnings: [] };
+
     (await db.prepare(
-      `UPDATE shifts SET user_id = ?, post_id = ?, starts_at = ?, ends_at = ?, notes = ?, status = ? WHERE id = ?`
+      `UPDATE shifts SET user_id = ?, post_id = ?, starts_at = ?, ends_at = ?, notes = ?, status = ?, is_open = ? WHERE id = ?`
     ).run(
       userId ?? null,
-      body.postId ?? shift.post_id,
+      postId,
       toSql(startsAt),
       toSql(endsAt),
       body.notes !== undefined ? body.notes : shift.notes,
       req.body.status || shift.status,
+      !userId,
       shift.id
     ));
 
     await audit(req.user.id, 'shift.updated', 'shift', shift.id, null, req.ip);
-    res.json({ shift: isoFields((await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(shift.id)), ['starts_at', 'ends_at']) });
+    const updated = await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(shift.id);
+    if (reassigned) {
+      await notifyShift(shift.user_id, 'removed', shift);
+      await notifyShift(updated.user_id, 'added', updated);
+    } else if (moved) {
+      await notifyShift(updated.user_id, 'changed', updated);
+    }
+    res.json({ shift: isoFields(updated, ['starts_at', 'ends_at']), warnings });
   })
 );
 
@@ -1096,13 +1204,16 @@ adminRouter.delete(
     if (!shift) throw new HttpError(404, 'Shift not found.');
     // Keep any shift that has already been worked; cancel it instead of deleting.
     const worked = (await db.prepare(`SELECT 1 FROM time_entries WHERE shift_id = ?`).get(shift.id));
+    const upcoming = new Date(sqlToIso(shift.ends_at)) > new Date();
     if (worked) {
       (await db.prepare(`UPDATE shifts SET status = 'cancelled' WHERE id = ?`).run(shift.id));
       await audit(req.user.id, 'shift.cancelled', 'shift', shift.id, null, req.ip);
+      if (upcoming) await notifyShift(shift.user_id, 'removed', shift);
       return res.json({ ok: true, cancelled: true });
     }
     (await db.prepare(`DELETE FROM shifts WHERE id = ?`).run(shift.id));
     await audit(req.user.id, 'shift.deleted', 'shift', shift.id, null, req.ip);
+    if (upcoming) await notifyShift(shift.user_id, 'removed', shift);
     res.json({ ok: true, deleted: true });
   })
 );

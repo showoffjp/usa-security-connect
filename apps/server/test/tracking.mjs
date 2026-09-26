@@ -423,6 +423,67 @@ log(cand.data.candidates.filter((c) => c.employment_type === '1099').every((c) =
 log((await call(`/admin/shifts/candidates?postId=${armedPost.id}&startsAt=${candEnd.toISOString()}&endsAt=${candStart.toISOString()}`, { token: supervisor })).status === 422,
   'a shift that ends before it starts is refused');
 
+/* ================================================ assignment is gated === */
+section('assigning a shift someone cannot work');
+
+const staffList = (await call('/admin/employees', { token: admin })).data.employees;
+const classD = staffList.find((e) => e.employee_code === '1042'); // Alexis: Class D, nothing rostered
+const armedStart = addDays(new Date(), 50);
+armedStart.setHours(20, 0, 0, 0);
+const armedBody = {
+  userId: classD.id,
+  postId: armedPost.id,
+  startsAt: armedStart.toISOString(),
+  endsAt: new Date(armedStart.getTime() + 8 * 3600000).toISOString(),
+};
+const refused = await call('/admin/shifts', { token: supervisor, method: 'POST', body: armedBody });
+log(refused.status === 409 && refused.data.details?.code === 'ineligible' &&
+  refused.data.details.reasons.some((r) => r.code === 'no_armed_licence'),
+  'a Class D officer cannot be put on an armed post directly either', refused.data?.error);
+const noReason = await call('/admin/shifts', { token: supervisor, method: 'POST', body: { ...armedBody, override: true } });
+log(noReason.status === 422, 'overriding needs a written reason');
+const overridden = await call('/admin/shifts', {
+  token: supervisor, method: 'POST',
+  body: { ...armedBody, override: true, overrideReason: 'Class G issued yesterday, card in the post' },
+});
+log(overridden.status === 201, 'with a reason, a supervisor can assign anyway');
+const overrideAudit = (await call('/admin/audit?action=shift.eligibility_overridden', { token: admin })).data.entries;
+log(overrideAudit.some((a) => String(a.detail).includes('no_armed_licence') && String(a.detail).includes('Class G issued yesterday')),
+  'and the override, the problem and the reason are on the audit log');
+
+const noteOnly = await call(`/admin/shifts/${overridden.data.shift.id}`, {
+  token: supervisor, method: 'PATCH', body: { notes: 'Bring the range card.' },
+});
+log(noteOnly.status === 200, 'editing the notes on that shift is not re-judged');
+const movedLater = await call(`/admin/shifts/${overridden.data.shift.id}`, {
+  token: supervisor, method: 'PATCH',
+  body: { startsAt: new Date(armedStart.getTime() + 3600000).toISOString(), endsAt: new Date(armedStart.getTime() + 9 * 3600000).toISOString() },
+});
+log(movedLater.status === 409 && movedLater.data.details?.code === 'ineligible', 'moving it is a new assignment and is judged again');
+await call(`/admin/shifts/${overridden.data.shift.id}`, { token: admin, method: 'DELETE' });
+
+// Andre has approved leave from day 30 to 36.
+const andreId = staffList.find((e) => e.employee_code === '1011').id;
+const leaveDay = addDays(new Date(), 32);
+leaveDay.setHours(9, 0, 0, 0);
+const onLeave = await call('/admin/shifts', {
+  token: supervisor, method: 'POST',
+  body: { userId: andreId, postId: post.id, startsAt: leaveDay.toISOString(), endsAt: new Date(leaveDay.getTime() + 8 * 3600000).toISOString() },
+});
+log(onLeave.status === 409 && onLeave.data.details?.reasons?.some((r) => r.code === 'time_off'), 'an officer on approved leave cannot be rostered that day', onLeave.data?.error);
+
+const bulkArmed = await call('/admin/shifts/bulk', {
+  token: supervisor, method: 'POST',
+  body: {
+    userId: classD.id, postId: armedPost.id,
+    startDate: localDate(addDays(new Date(), 60)), endDate: localDate(addDays(new Date(), 66)),
+    startTime: '20:00', endTime: '04:00', weekdays: [0, 1, 2, 3, 4, 5, 6],
+  },
+});
+log(bulkArmed.status === 201 && bulkArmed.data.created === 0 && bulkArmed.data.skipped.length === 7 &&
+  bulkArmed.data.skipped.every((x) => /Class G/.test(x.reason)),
+  'a recurring roster skips every day the officer cannot work, and says why');
+
 /* =========================================================== schedule === */
 section('copying a week');
 

@@ -193,7 +193,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   leave, within their stated availability), then without overtime, then those who have
   worked that post before or are based at that site. Each shows their hours that week
   with the shift added, overtime it would cause, what it would cost and the margin.
-  Picking someone who should not take it shows why before you save.
+  Picking someone who should not take it shows why before you save, and the API
+  refuses the assignment unless the supervisor overrides it with a written reason,
+  which goes on the audit log. Recurring rosters skip days the officer cannot work,
+  and copying a week leaves those shifts open.
+- **Officers are told** — adding, moving, reassigning or removing an upcoming shift
+  sends the officer a push notification, and a recurring roster or copied week sends
+  one summary instead of dozens.
 - **Shift requests** — open shifts officers can claim, swaps they can offer each other,
   and drop requests, all landing in one supervisor queue. Eligibility is checked at
   every step, so an officer without a current Class G licence cannot end up on an armed
