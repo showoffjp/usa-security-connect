@@ -22,6 +22,8 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
   const editing = Boolean(shift?.id);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState('');
+  const [blocked, setBlocked] = useState(null);
+  const [overrideReason, setOverrideReason] = useState('');
   const [form, setForm] = useState({
     userId: shift?.user_id ? String(shift.user_id) : '',
     postId: shift?.post_id ? String(shift.post_id) : posts[0]?.id ? String(posts[0].id) : '',
@@ -30,9 +32,12 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
     notes: shift?.notes || '',
   });
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => {
+    setBlocked(null);
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
 
-  const save = async () => {
+  const save = async (override = false) => {
     setBusy(true);
     setConflict('');
     try {
@@ -42,13 +47,15 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
         startsAt: new Date(form.startsAt).toISOString(),
         endsAt: new Date(form.endsAt).toISOString(),
         notes: form.notes || undefined,
+        ...(override ? { override: true, overrideReason } : {}),
       };
-      if (editing) await api.patch(`/admin/shifts/${shift.id}`, payload);
-      else await api.post('/admin/shifts', payload);
-      toast.success(editing ? 'Shift updated.' : 'Shift added.');
+      const res = editing ? await api.patch(`/admin/shifts/${shift.id}`, payload) : await api.post('/admin/shifts', payload);
+      const note = res?.warnings?.length ? ` Note: ${res.warnings.map((w) => w.message).join(' ')}` : '';
+      toast.success(`${editing ? 'Shift updated.' : 'Shift added.'}${form.userId ? ' The officer has been notified.' : ''}${note}`);
       onSaved();
     } catch (err) {
-      if (err.status === 409) setConflict(err.message);
+      if (err.status === 409 && err.details?.code === 'ineligible') setBlocked(err.details.reasons);
+      else if (err.status === 409) setConflict(err.message);
       else toast.error(err.message);
     } finally {
       setBusy(false);
@@ -83,7 +90,7 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
           <button className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={save} disabled={busy || !form.postId}>
+          <button className="btn btn-primary" onClick={() => save(false)} disabled={busy || !form.postId}>
             Save
           </button>
         </>
@@ -91,6 +98,29 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
     >
       <div className="stack">
         {conflict && <Banner kind="danger" title="Scheduling conflict">{conflict}</Banner>}
+        {blocked && (
+          <div className="card card-pad stack-sm" style={{ borderColor: '#f3c9c3' }}>
+            <Banner kind="danger" title="This officer cannot be assigned">
+              {blocked.map((r) => r.message).join(' ')}
+            </Banner>
+            <Field label="Assign anyway - reason (recorded on the audit log)">
+              <input
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="e.g. Class G renewal confirmed by FDACS, paperwork in the post"
+                maxLength={500}
+              />
+            </Field>
+            <div className="row">
+              <button className="btn btn-danger btn-sm" disabled={busy || overrideReason.trim().length < 5} onClick={() => save(true)}>
+                Assign anyway
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setBlocked(null)}>
+                Choose someone else
+              </button>
+            </div>
+          </div>
+        )}
         <Field label="Post" required>
           <select value={form.postId} onChange={set('postId')}>
             {posts.map((p) => (
@@ -127,7 +157,10 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
           endsAt={form.endsAt}
           excludeShiftId={shift?.id}
           selected={form.userId}
-          onPick={(id) => setForm((f) => ({ ...f, userId: String(id) }))}
+          onPick={(id) => {
+            setBlocked(null);
+            setForm((f) => ({ ...f, userId: String(id) }));
+          }}
         />
         <Field label="Notes">
           <textarea value={form.notes} onChange={set('notes')} rows={2} />
