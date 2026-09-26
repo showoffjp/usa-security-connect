@@ -155,13 +155,20 @@ export function personPay(list) {
     let minutes = 0;
     let overtimeMinutes = 0;
     let payCents = list.some((e) => e.pay_rate_cents == null) ? null : 0;
+    let overtimePayCents = payCents == null ? null : 0;
     for (const week of groupBy(list, 'week').values()) {
       const weekMinutes = week.reduce((n, e) => n + e.paid_minutes, 0);
       const straight = week.reduce((n, e) => n + (e.paid_minutes / 60) * (e.pay_rate_cents || 0), 0);
       const ot = earnsOvertime ? Math.max(0, weekMinutes - threshold) : 0;
       const regularRate = weekMinutes ? (straight * 60) / weekMinutes : 0;
       const multiplier = week[week.length - 1].overtime_multiplier || 1.5;
-      if (payCents != null) payCents += Math.round(straight + (ot / 60) * regularRate * (multiplier - 1));
+      if (payCents != null) {
+        const weekPay = Math.round(straight + (ot / 60) * regularRate * (multiplier - 1));
+        // Overtime hours at the full multiplier, as a pay stub shows them;
+        // regular pay is the rest, so the two always add up to the week.
+        overtimePayCents += Math.min(weekPay, Math.round((ot / 60) * regularRate * multiplier));
+        payCents += weekPay;
+      }
       minutes += weekMinutes;
       overtimeMinutes += ot;
     }
@@ -171,12 +178,14 @@ export function personPay(list) {
       overtimeMinutes,
       earnsOvertime,
       payCents,
+      regularPayCents: payCents == null ? null : payCents - overtimePayCents,
+      overtimePayCents,
     };
   }
 
   const weeks = new Map();
   for (const e of list) weeks.set(e.week, (weeks.get(e.week) || 0) + e.paid_minutes);
-  return computePeriodPay({
+  const pay = computePeriodPay({
     weeks: [...weeks.values()],
     shifts: list.length,
     employmentType: first.employment_type,
@@ -187,6 +196,8 @@ export function personPay(list) {
     overtimeMultiplier: first.overtime_multiplier || 1.5,
     salaryCents: first.salary_cents,
   });
+  // Salary, per-shift and contractor pay carries no overtime premium.
+  return { ...pay, regularPayCents: pay.payCents, overtimePayCents: pay.payCents == null ? null : 0 };
 }
 
 export const groupBy = (list, key) => {

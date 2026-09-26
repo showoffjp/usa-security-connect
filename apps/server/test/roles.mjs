@@ -195,10 +195,15 @@ for (const id of [scratch.id, contractor.id]) {
   await call(`/admin/employees/${id}`, { token: admin, method: 'PATCH', body: { status: 'terminated' } });
 }
 
+// A finished entry from this week: older weeks may sit in a closed pay
+// period, where a correction is refused for every role.
+const weekAgo = new Date(Date.now() - 3 * 86400000).toISOString();
+const adjustable = (await call(`/admin/time-entries?from=${weekAgo}`, { token: admin })).data.entries.find((e) => e.clock_out_at);
+
 await tiers(
   'adjusting a recorded time entry',
   (t) =>
-    call('/admin/time-entries/1', {
+    call(`/admin/time-entries/${adjustable.id}`, {
       token: t,
       method: 'PATCH',
       body: { reason: 'Role boundary check, no change intended.' },

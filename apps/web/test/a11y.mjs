@@ -51,6 +51,10 @@ const STAFF_PAGES = [
   ['Live tracking', '/admin/live'],
   ['Punch log', '/admin/punches'],
   ['Pay rates', '/admin/pay-rates'],
+  ['Payroll', '/admin/payroll'],
+  // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
+  ['Pay period, closed', '/admin/payroll/1'],
+  ['Pay period, to approve', '/admin/payroll/2'],
   ['Reports', '/admin/reports'],
   ['Report: payroll register', '/admin/reports?report=payroll'],
   ['Report: daily hours', '/admin/reports?report=daily'],

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtTime, fmtDay, fmtRelative, fmtRange } from '../../lib/format.js';
-import { LoadingPage, Empty, Icon, Chip, StatusChip, Stat, useToast } from '../../components/ui.jsx';
+import { LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Banner, useToast } from '../../components/ui.jsx';
 import { formatDuration } from '@shared/domain.js';
 
 export default function DashboardPage() {
@@ -63,6 +63,20 @@ export default function DashboardPage() {
         />
       </div>
 
+      {counts.payrollDue > 0 && (
+        <Banner
+          kind="warn"
+          title={`Payroll: ${counts.payrollDue} pay period${counts.payrollDue === 1 ? ' has' : 's have'} ended and ${counts.payrollDue === 1 ? 'is' : 'are'} not closed`}
+          action={
+            <Link className="btn btn-navy btn-sm" to="/admin/payroll">
+              Review payroll
+            </Link>
+          }
+        >
+          <span className="small">Approve each officer's hours and close the period so it can be paid.</span>
+        </Banner>
+      )}
+
       {/* ---------------------------------------------- field status -- */}
       <div className={`card card-pad row-between wrap${counts.lateOrOff > 0 ? ' attention' : ''}`}>
         <div className="row wrap" style={{ gap: 18 }}>
@@ -94,7 +108,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)' }}>
+      <div className="grid dash-split">
         {/* ------------------------------------------------- on post -- */}
         <div className="card">
           <div className="card-head">
@@ -119,7 +133,7 @@ export default function DashboardPage() {
                     >
                       <Icon name="shield" size={18} />
                     </div>
-                    <div className="grow">
+                    <div className="grow" style={{ minWidth: 0 }}>
                       <div className="strong small">{o.officer}</div>
                       <div className="tiny muted">
                         {o.post_name} &middot; {o.site_name}
@@ -128,7 +142,7 @@ export default function DashboardPage() {
                         In at {fmtTime(o.clock_in_at)} &middot; {formatDuration(o.minutes_on_post)} on post
                       </div>
                     </div>
-                    <div className="row wrap" style={{ justifyContent: 'flex-end', maxWidth: 190 }}>
+                    <div className="row wrap" style={{ justifyContent: 'flex-end', maxWidth: 190, minWidth: 0, flexShrink: 1 }}>
                       {o.late_minutes > 0 && <Chip kind="warn">{o.late_minutes}m late</Chip>}
                       {o.clock_in_geofence === 'outside' && <Chip kind="danger">Off site</Chip>}
                       {o.missed_checks > 0 && <Chip kind="danger">{o.missed_checks} missed</Chip>}

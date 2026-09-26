@@ -38,6 +38,8 @@ import EmailsPage from './pages/admin/EmailsPage.jsx';
 import LivePage from './pages/admin/LivePage.jsx';
 import PunchesPage from './pages/admin/PunchesPage.jsx';
 import PayRatesPage from './pages/admin/PayRatesPage.jsx';
+import PayrollPage from './pages/admin/PayrollPage.jsx';
+import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
 import ReportsPage from './pages/admin/ReportsPage.jsx';
 
 /** Supervisors and admins only; officers get a plain explanation, not a crash. */
@@ -91,6 +93,8 @@ export default function App() {
         <Route path="live" element={<LivePage />} />
         <Route path="punches" element={<PunchesPage />} />
         <Route path="pay-rates" element={<PayRatesPage />} />
+        <Route path="payroll" element={<PayrollPage />} />
+        <Route path="payroll/:id" element={<PayrollPeriodPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/:id" element={<EmployeeDetailPage />} />
