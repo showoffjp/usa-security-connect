@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-515 checks across ten suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+584 checks across eleven suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -156,13 +156,14 @@ bundle for both platforms.
 | `security.mjs` | 24 | set-password links, and the shared rate limiter |
 | `roles.mjs` | 51 | what each staff tier can and cannot reach |
 | `tracking.mjs` | 122 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, Timesheets / reports / invoice cost agreeing to the cent, ranking who can cover a shift, eligibility enforced on direct assignment with an audited override, copying a week |
+| `payroll.mjs` | 69 | pay periods in whole payroll weeks, per-officer approval pinned to a fingerprint of the hours and rates, "changed since approved" after a corrected punch, overtime checked against the raw hours and pay against the reports to the cent, closing, every back-door change to a closed period refused (punch corrections, moving an entry in, back-dated and bulk rates), reopening with a reason, the payroll register CSV, the audit trail |
 
 `verify.mjs` gives the API under test a cron secret, a two-second ping-thinning
 gap and a larger login allowance. Each is an environment variable with a
 production default; none of them should be set in production.
 
 There is also an accessibility audit, run separately because it needs a
-browser: `npm run test:a11y --workspace @usc/web` drives all 41 screens
+browser: `npm run test:a11y --workspace @usc/web` drives all 44 screens
 through axe-core with the API and web app running.
 
 **The suites are mostly adversarial, deliberately.** `portal.mjs` walks every
@@ -226,6 +227,9 @@ Honest list. None of it blocks going live, but you will want to know.
   open. Tracking with the app closed needs background location permission and a
   store review that asks why; decide whether the company wants that before
   building it.
+- **Payroll close has no pay date or provider hand-off.** A closed period exports
+  a register CSV for the bookkeeper or payroll provider; nothing is sent to ADP,
+  Gusto or a bank. Deductions, taxes and net pay are the provider's job.
 - **A change of pay basis is not effective-dated.** Moving somebody from hourly to
   salary is recorded in the history, but reports price by the basis on the
   record now.
@@ -237,6 +241,12 @@ Honest list. None of it blocks going live, but you will want to know.
 - **Changing how hours are priced:** `apps/server/src/services/payroll.js`.
   Reports, Timesheets and invoice cost all go through it, and
   `test/tracking.mjs` checks the three agree to the cent.
+- **Closing payroll:** `apps/server/src/services/payPeriods.js`. An approval is
+  pinned to a fingerprint of the officer's entries and rates, so anything that
+  changes their pay makes it read "changed" without anyone invalidating it. If
+  you add something that writes to `time_entries` or `pay_rate_history` for a
+  past date, call `assertHoursOpen` or `assertRateDateOpen` first, as the punch
+  correction and pay-rate routes do.
 - **Changing a threshold** (grace period, check-in window, overtime line):
   `packages/shared/src/domain.js`, `RULES`. Nowhere else.
 - **Adding a table:** `apps/server/src/lib/schema.js`, then add it to the

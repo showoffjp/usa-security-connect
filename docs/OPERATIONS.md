@@ -106,6 +106,41 @@ changing anything does not add a line.
 - Supervisors can read rates, because they staff shifts against margin. Only an
   administrator can change them.
 
+## Payroll
+
+**Workforce -> Payroll** is where a pay period is reviewed, approved and closed.
+
+- A pay period is **whole payroll weeks, Monday to Sunday**, one to four of them, so
+  overtime is never split between two periods. *Open pay period* suggests the next one
+  after the last, the same length. The current week can be opened early to watch hours
+  come in; it can only be closed the day after it ends.
+- Each officer with hours in the period gets a line: hours, regular and overtime pay,
+  gross, the sites they worked, and anything worth a second look - a shift still
+  clocked in, no pay rate, a shift the system closed, a punch an admin corrected, a
+  clock-in outside the geofence, unresolved flags, overtime, a contractor with no W-9.
+  A shift still clocked in or a missing rate **blocks** approval; the rest are for you
+  to judge.
+- **Approve** officers one at a time, by selection, or with *Approve all ready*. An
+  approval is tied to the exact hours and rates it was given against. If a punch is
+  corrected or a rate back-dated afterwards, that officer shows **Changed since
+  approval**, with what was approved beside what is owed now, and must be approved
+  again.
+- **Close period** is available once the period has ended and every officer is
+  approved at their current figures. Closing freezes the figures and **locks the
+  period**: punches in it cannot be corrected, no entry can be moved into it, and no
+  pay rate can take effect on or before its last day. Bill-rate changes are not
+  affected.
+- **Reopen** needs a reason, which is kept on the period and the audit log. Approvals
+  stay in place; anyone whose hours or rate change while it is open must be approved
+  again before it closes.
+- **Payroll register** downloads the period as CSV: W-2 employees then 1099
+  contractors, with hours, regular, overtime and gross pay, and totals by
+  classification. It is the file to hand to a bookkeeper or payroll provider; taxes,
+  deductions and net pay are theirs.
+- The dashboard and the *Payroll* menu item show how many ended periods are still
+  open. Supervisors can read payroll; only administrators can approve, close, reopen
+  or export.
+
 ## Reports
 
 Every report is built from the same rows as the timesheet and invoice, so the numbers

@@ -204,6 +204,7 @@ export function AdminShell() {
         { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
         { to: '/admin/punches', icon: 'list', label: 'Punch log' },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay' },
+        { to: '/admin/payroll', icon: 'dollar', label: 'Payroll', count: counts.payrollDue, urgent: true },
         { to: '/admin/pay-rates', icon: 'dollar', label: 'Pay rates' },
         { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
         { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },

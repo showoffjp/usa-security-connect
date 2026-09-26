@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
 import { requireAuth, requireRole, hashPin, generatePin, generateEmployeeCode, publicUser } from '../lib/auth.js';
 import {
   ROLES,
@@ -24,6 +24,7 @@ import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
+import { assertHoursOpen } from '../services/payPeriods.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 
@@ -176,6 +177,11 @@ adminRouter.get(
       )
       .get(toSql(new Date(Date.now() - RULES.lateGraceMinutes * 60000)))).n);
 
+    // Pay periods that have ended and are still waiting to be closed.
+    const payrollDue = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
+      .get(toDateString(new Date()))).n);
+
     const openAlerts = (await db
       .prepare(
         `SELECT p.*, u.first_name || ' ' || u.last_name AS officer, u.phone,
@@ -200,6 +206,7 @@ adminRouter.get(
         offPost,
         lateNow,
         lateOrOff: offPost + lateNow,
+        payrollDue,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -1364,6 +1371,10 @@ adminRouter.patch(
           : null;
 
     if (clockOut && clockOut <= clockIn) throw new HttpError(422, 'Clock-out must be after clock-in.');
+    // Hours in a closed payroll period are what was paid; moving an entry
+    // into one would be the same change by the back door.
+    await assertHoursOpen(entry.clock_in_at, 'correct a punch');
+    await assertHoursOpen(clockIn, 'correct a punch');
 
     (await db.prepare(
       `UPDATE time_entries

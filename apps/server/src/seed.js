@@ -17,6 +17,7 @@ import { invoiceTotals } from './shared.js';
 import { TRAININGS, BROADCASTS, THREADS, CLIPS } from './seed-content.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
 import { seedExpansion } from './seed-expansion.js';
+import { seedPayroll } from './seed-payroll.js';
 
 const RESET = process.argv.includes('--reset');
 
@@ -34,7 +35,7 @@ if (RESET) {
     'panic_alerts', 'breaks', 'status_checks', 'time_entries', 'shifts',
     'time_off_requests', 'availability', 'certifications', 'device_tokens',
     'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
-    'location_pings', 'pay_rate_history',
+    'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
     'users', 'posts', 'sites',
   ];
   await db.exec(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
@@ -1099,6 +1100,10 @@ const expansion = await seedExpansion({
 // Derive flags from everything above.
 await sweep();
 
+// Pay periods last, once the sweep has closed any shift left open, so the
+// approvals are pinned to the hours as they will stay.
+const payroll = await seedPayroll({ db, users });
+
 const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
 console.log(`
@@ -1109,6 +1114,9 @@ USA Security Connect - demo data loaded
   ${(await db.prepare(`SELECT COUNT(*) AS n FROM shifts`).get()).n} shifts, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_entries`).get()).n} time entries
   ${(await db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get()).n} incidents, ${(await db.prepare(`SELECT COUNT(*) AS n FROM tours`).get()).n} tours
   ${flagCount} compliance flags
+
+  Payroll: week of ${payroll.closed}
+           week of ${payroll.due}
 
   ${(await db.prepare(`SELECT COUNT(*) AS n FROM certifications`).get()).n} certifications, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_off_requests`).get()).n} time-off requests
   ${(await db.prepare(`SELECT COUNT(*) AS n FROM location_pings`).get()).n} GPS points, ${(await db.prepare(`SELECT COUNT(*) AS n FROM status_checks`).get()).n} status check-ins, ${(await db.prepare(`SELECT COUNT(*) AS n FROM invoices`).get()).n} invoices

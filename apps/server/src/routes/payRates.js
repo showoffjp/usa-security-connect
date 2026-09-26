@@ -19,6 +19,7 @@ import { ROLES, EMPLOYMENT_TYPES, PAY_TYPES, computePay, toHours } from '../shar
 import { toSql } from '../services/compliance.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { classificationProblem } from './admin.js';
+import { assertRateDateOpen } from '../services/payPeriods.js';
 
 export const payRatesRouter = Router();
 payRatesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -186,6 +187,11 @@ payRatesRouter.patch(
     const body = parse(rateSchema, req.body);
     const user = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(Number(req.params.userId));
     if (!user) throw new HttpError(404, 'Employee not found.');
+    // Back-dating pay into a closed payroll period would change what was paid.
+    const touchesPay = ['employmentType', 'payType', 'exempt', 'payRate', 'salary', 'overtimeMultiplier'].some(
+      (k) => body[k] !== undefined
+    );
+    if (touchesPay) await assertRateDateOpen(body.effectiveOn);
 
     const next = {
       employment_type: body.employmentType ?? user.employment_type,
@@ -276,6 +282,7 @@ payRatesRouter.post(
   wrap(async (req, res) => {
     const body = parse(bulkSchema, req.body);
     const column = body.field === 'pay' ? 'pay_rate_cents' : 'bill_rate_cents';
+    if (body.field === 'pay') await assertRateDateOpen(body.effectiveOn);
 
     const candidates = await db
       .prepare(

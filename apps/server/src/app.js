@@ -31,6 +31,7 @@ import { invoicesRouter } from './routes/invoices.js';
 import { liveRouter, punchesRouter } from './routes/operations.js';
 import { payRatesRouter } from './routes/payRates.js';
 import { adminReportsRouter } from './routes/adminReports.js';
+import { payrollRouter } from './routes/payroll.js';
 
 export const app = express();
 
@@ -128,6 +129,7 @@ app.use('/api/admin/live', liveRouter);
 app.use('/api/admin/punches', punchesRouter);
 app.use('/api/admin/pay-rates', payRatesRouter);
 app.use('/api/admin/reports', adminReportsRouter);
+app.use('/api/admin/payroll', payrollRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

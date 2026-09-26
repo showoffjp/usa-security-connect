@@ -64,7 +64,7 @@ merely see more or less of the same screen — they get different applications.
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
 | **Navigation** | 5 tabs | 23 destinations | 24 destinations |
 | **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
-| **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); raises, issues and voids invoices; manages client portal logins |
+| **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes |
 
 A supervisor is a working officer too — they still have their own time clock.
@@ -166,6 +166,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   armed or unarmed, by percent or dollars) with a preview first. Every change - from
   this screen, a bulk raise or the employee record - lands in the rate history.
   Supervisors can read rates; only administrators can change them.
+- **Payroll** — weekly (or up to four-week) pay periods, each reviewed officer by
+  officer: hours, regular and overtime pay, gross, sites worked, and what needs a second
+  look (open shifts, corrected punches, off-site clock-ins, unresolved flags, missing
+  W-9s). Approve one, a selection or everyone ready; an approval is pinned to the exact
+  hours and rates, so a later correction shows as **changed since approval**. Closing
+  freezes the figures and locks the period against punch corrections and back-dated
+  rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
+  1099 separately.
 - **Reports** — eight reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
@@ -427,8 +435,11 @@ the server is running corrupts the data directory.
   punch log and its filters, pay-rate changes and history, bulk raises that touch
   exactly who they should, every report - with W-2 overtime recomputed week by week
   from the raw punches rather than trusted - and copying a week's roster.
+- **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
+  after a corrected punch, pay agreeing with the reports to the cent, closing, and every
+  way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 41 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 44 screens
 through axe-core. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
 
