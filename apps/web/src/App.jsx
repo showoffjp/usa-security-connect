@@ -37,6 +37,7 @@ import InvoicesPage from './pages/admin/InvoicesPage.jsx';
 import EmailsPage from './pages/admin/EmailsPage.jsx';
 import LivePage from './pages/admin/LivePage.jsx';
 import PunchesPage from './pages/admin/PunchesPage.jsx';
+import EquipmentPage from './pages/admin/EquipmentPage.jsx';
 import PayRatesPage from './pages/admin/PayRatesPage.jsx';
 import PayrollPage from './pages/admin/PayrollPage.jsx';
 import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
@@ -92,6 +93,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="live" element={<LivePage />} />
         <Route path="punches" element={<PunchesPage />} />
+        <Route path="equipment" element={<EquipmentPage />} />
         <Route path="pay-rates" element={<PayRatesPage />} />
         <Route path="payroll" element={<PayrollPage />} />
         <Route path="payroll/:id" element={<PayrollPeriodPage />} />

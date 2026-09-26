@@ -11,6 +11,13 @@ import { FLAG_LABEL, FLAG_TYPES } from '@shared/domain.js';
 function describe(flag) {
   const d = flag.detail || {};
   switch (flag.type) {
+    case FLAG_TYPES.EQUIPMENT_NOT_RETURNED:
+      return [
+        `Clocked out still holding ${d.label || 'an item'}`,
+        d.identifier ? ` (${d.identifier})` : '',
+        d.site ? ` from ${d.site}` : '',
+        d.issued_at ? `, signed out ${new Date(d.issued_at).toLocaleDateString()}.` : '.',
+      ].join('');
     case FLAG_TYPES.LATE_CLOCK_IN:
       return `Clocked in ${d.late_minutes} minutes past the grace period.`;
     case FLAG_TYPES.MISSED_CHECK_IN:

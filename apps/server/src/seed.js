@@ -36,7 +36,7 @@ if (RESET) {
     'time_off_requests', 'availability', 'certifications', 'device_tokens',
     'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
     'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
-    'post_pay_rates',
+    'post_pay_rates', 'equipment_assignments', 'equipment',
     'users', 'posts', 'sites',
     // The limiter counts live in the database on purpose, so they are shared
     // between processes and survive a restart. That also means they survive a

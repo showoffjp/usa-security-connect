@@ -9,7 +9,7 @@
     "start": "node src/index.js",
     "seed": "node src/seed.js",
     "reset": "node src/seed.js --reset",
-    "test": "node test/dialect.mjs && node test/flags.mjs && node test/smoke.mjs && node test/features.mjs && node test/shifts.mjs && node test/portal.mjs && node test/invoices.mjs && node test/email.mjs && node test/security.mjs && node test/roles.mjs && node test/tracking.mjs && node test/payroll.mjs",
+    "test": "node test/dialect.mjs && node test/flags.mjs && node test/smoke.mjs && node test/features.mjs && node test/shifts.mjs && node test/portal.mjs && node test/invoices.mjs && node test/email.mjs && node test/security.mjs && node test/roles.mjs && node test/tracking.mjs && node test/equipment.mjs && node test/payroll.mjs",
     "test:core": "node test/smoke.mjs",
     "test:features": "node test/features.mjs",
     "verify": "node tools/verify.mjs",
@@ -23,7 +23,8 @@
     "create-admin": "node tools/create-admin.mjs",
     "test:tracking": "node test/tracking.mjs",
     "test:payroll": "node test/payroll.mjs",
-    "test:flags": "node test/flags.mjs"
+    "test:flags": "node test/flags.mjs",
+    "test:equipment": "node test/equipment.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
