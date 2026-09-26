@@ -32,6 +32,11 @@ const env = {
   // production login allowance inside its five-minute window.
   USC_LOGIN_LIMIT_PER_IP: '400',
   USC_LOGIN_LIMIT_PER_CODE: '60',
+  // The portal suites sign the same contacts in from this one address too, and
+  // exhausting that allowance made a second run fail on the limiter instead of
+  // on anything real. The per-email limit is left alone, because that is the
+  // one the security suite is actually measuring.
+  USC_CLIENT_LOGIN_LIMIT_PER_IP: '400',
 };
 
 function run(script, args = []) {
