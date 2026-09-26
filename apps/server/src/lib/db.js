@@ -15,6 +15,7 @@
  */
 
 import fs from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCHEMA_SQL } from './schema.js';
@@ -55,6 +56,16 @@ async function connect() {
       // which accepts a multi-statement script.
       script: (text) => pool.query(text),
       close: () => pool.end(),
+      // A transaction has to stay on one connection; a pool hands each query
+      // to whichever connection is free.
+      acquire: async () => {
+        const client = await pool.connect();
+        return {
+          query: (text, params) => client.query(text, params),
+          script: (text) => client.query(text),
+          release: (err) => client.release(err),
+        };
+      },
     };
     return driver;
   }
@@ -266,8 +277,12 @@ function bindable(params) {
 
 /* ----------------------------------------------------------------- API --- */
 
+/** The connection a transaction in progress is pinned to, if any. */
+const pinned = new AsyncLocalStorage();
+const connFor = async () => pinned.getStore() || connect();
+
 async function run(sql, params) {
-  const conn = await connect();
+  const conn = await connFor();
   const text = toPositional(withReturning(toPostgres(sql)));
   try {
     const res = await conn.query(text, bindable(params));
@@ -284,7 +299,7 @@ async function run(sql, params) {
 }
 
 async function all(sql, params) {
-  const conn = await connect();
+  const conn = await connFor();
   const text = toPositional(toPostgres(sql));
   try {
     const res = await conn.query(text, bindable(params));
@@ -311,7 +326,7 @@ export const db = {
 
   /** Run a multi-statement script, such as the schema file. */
   async exec(sql) {
-    const conn = await connect();
+    const conn = await connFor();
     return conn.script(toPostgres(sql));
   },
 
@@ -323,19 +338,28 @@ export const db = {
    */
   transaction(fn) {
     return async (...args) => {
-      const conn = await connect();
-      await conn.query('BEGIN');
+      // Inside a transaction already: join it.
+      if (pinned.getStore()) return fn(...args);
+      const base = await connect();
+      const conn = base.acquire ? await base.acquire() : base;
+      let failed = null;
       try {
-        const result = await fn(...args);
-        await conn.query('COMMIT');
-        return result;
-      } catch (err) {
+        await conn.query('BEGIN');
         try {
-          await conn.query('ROLLBACK');
-        } catch {
-          /* already rolled back by the server */
+          const result = await pinned.run(conn, () => fn(...args));
+          await conn.query('COMMIT');
+          return result;
+        } catch (err) {
+          failed = err;
+          try {
+            await conn.query('ROLLBACK');
+          } catch {
+            /* already rolled back by the server */
+          }
+          throw err;
         }
-        throw err;
+      } finally {
+        conn.release?.(failed && /connection|terminat/i.test(String(failed.message)) ? failed : undefined);
       }
     };
   },

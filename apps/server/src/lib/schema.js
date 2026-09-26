@@ -671,6 +671,15 @@ CREATE TABLE IF NOT EXISTS pay_rate_history (
 );
 CREATE INDEX IF NOT EXISTS idx_pay_history_user ON pay_rate_history(user_id, effective_on DESC);
 
+-- Small facts about the deployment itself, such as whether the first-run
+-- demo company has finished loading (services/bootstrap.js).
+CREATE TABLE IF NOT EXISTS app_meta (
+  key         text PRIMARY KEY,
+  value       text NOT NULL,
+  detail      text,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
 -- Payroll close. A pay period is whole payroll weeks, Monday to Sunday, so
 -- overtime is never split between two periods. Each officer's hours are
 -- approved against a fingerprint of the entries and rates behind them - any
