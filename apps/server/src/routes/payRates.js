@@ -19,7 +19,7 @@ import { ROLES, EMPLOYMENT_TYPES, PAY_TYPES, computePay, toHours } from '../shar
 import { toSql } from '../services/compliance.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { classificationProblem } from './admin.js';
-import { assertRateDateOpen } from '../services/payPeriods.js';
+import { assertRateDateOpen, dayString } from '../services/payPeriods.js';
 
 export const payRatesRouter = Router();
 payRatesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -427,6 +427,12 @@ payRatesRouter.post(
     }
 
     const effective = body.effectiveOn || toDateString(new Date());
+
+    // A differential changes what hours at this post cost, so back-dating one
+    // into a closed period would restate payroll that has already been paid -
+    // the same reason an ordinary rate change is refused there.
+    await assertRateDateOpen(effective);
+
     const info = await db
       .prepare(
         `INSERT INTO post_pay_rates
@@ -472,6 +478,10 @@ payRatesRouter.delete(
   wrap(async (req, res) => {
     const row = await db.prepare(`SELECT * FROM post_pay_rates WHERE id = ?`).get(Number(req.params.id));
     if (!row) throw new HttpError(404, 'Differential not found.');
+
+    // Withdrawing one reprices every hour it covered, so a differential
+    // reaching into a closed period cannot simply be removed either.
+    await assertRateDateOpen(dayString(row.effective_on));
 
     await db.prepare(`DELETE FROM post_pay_rates WHERE id = ?`).run(row.id);
     await audit(req.user.id, 'pay_rate.post_differential_removed', 'post', row.post_id, {

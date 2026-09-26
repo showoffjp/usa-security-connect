@@ -106,6 +106,29 @@ changing anything does not add a line.
 - Supervisors can read rates, because they staff shifts against margin. Only an
   administrator can change them.
 
+### What a post pays
+
+Some posts pay more than the officer standing them earns anywhere else - an armed
+yard, an overnight desk. That is a property of the **post**, not the person: it is
+paid to whoever is rostered on it, and keeps being paid after that officer moves on.
+Raising the officer instead would pay them the armed rate for unarmed hours at
+another site.
+
+The list at the foot of the pay rates screen is every differential on file.
+
+- A differential **replaces** the officer's own rate for the hours they work at that
+  post, and changes nothing else.
+- Leave the officer blank for the usual case: the post pays this to anybody. Naming
+  one narrows it to them, for a rate somebody has negotiated that the post does not
+  pay everyone.
+- **Most specific wins**: this officer at this post, then whatever the post pays
+  anybody, then the officer's own rate history, then their employee record.
+- Each one is effective-dated like every other rate, so one agreed for next month
+  prices next month and not last. One dated ahead is listed as *not yet*.
+- Withdrawing one stops it applying from that moment. Hours already reported keep
+  the cost they were reported at, because every screen prices an hour from the rates
+  in force on its own day.
+
 ## Payroll
 
 **Workforce -> Payroll** is where a pay period is reviewed, approved and closed.

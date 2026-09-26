@@ -426,7 +426,10 @@ const specific = await call('/admin/pay-rates/posts/differentials', {
     postId: armedPostId,
     userId: anyone.id,
     payRate: armedDiff.pay_rate + 5,
-    effectiveOn: '2026-01-05',
+    // Tomorrow, not a back-date: a differential inside a closed pay period is
+    // refused, because it would restate what that period paid. The payroll
+    // suite covers that refusal; this one is about precedence.
+    effectiveOn: new Date(Date.now() + 86400000).toLocaleDateString('en-CA'),
     reason: 'Negotiated above the post rate',
   },
 });
