@@ -397,6 +397,68 @@ log(Math.abs(invoiceCost - Math.round(siteReport.totals.labor_cost * 100)) <= 1,
   'invoice cost for a site matches the report\'s labor cost, back-dated raise included',
   `${(invoiceCost / 100).toFixed(2)} vs ${siteReport.totals.labor_cost}`);
 
+/* ====================================================== differentials === */
+section('what a post pays over the officer rate');
+
+const diffs = await call('/admin/pay-rates/posts/differentials', { token: admin });
+log(diffs.status === 200 && diffs.data.differentials.length > 0,
+  'armed posts carry a differential', `${diffs.data?.differentials?.length} posts`);
+log(diffs.data.differentials.every((d) => d.user_id == null),
+  'seeded against the post rather than a person, so it survives a roster change');
+
+const armedDiff = diffs.data.differentials[0];
+const armedPostId = armedDiff.post_id;
+
+// The differential must beat the officer's own rate, and only at this post.
+const anyone = list.data.people.find(
+  (p) => p.pay_type === 'hourly' && p.pay_rate != null && p.status === 'active'
+);
+log(armedDiff.pay_rate > anyone.pay_rate,
+  'and it pays more than a standing officer rate',
+  `$${armedDiff.pay_rate} vs $${anyone.pay_rate}`);
+
+// An officer-specific differential is more specific and must win over the
+// one the post pays everybody.
+const specific = await call('/admin/pay-rates/posts/differentials', {
+  token: admin,
+  method: 'POST',
+  body: {
+    postId: armedPostId,
+    userId: anyone.id,
+    payRate: armedDiff.pay_rate + 5,
+    effectiveOn: '2026-01-05',
+    reason: 'Negotiated above the post rate',
+  },
+});
+log(specific.status === 201, 'an officer can be given their own rate at one post');
+
+const withSpecific = await call('/admin/pay-rates/posts/differentials', { token: admin });
+const myDifferential = withSpecific.data.differentials.find(
+  (d) => d.post_id === armedPostId && d.user_id === anyone.id
+);
+log(Boolean(myDifferential) && myDifferential.officer, 'and it is listed against their name', myDifferential?.officer);
+
+log((await call('/admin/pay-rates/posts/differentials', {
+  token: supervisor, method: 'POST',
+  body: { postId: armedPostId, payRate: 99, reason: 'Nice try from a supervisor' },
+})).status === 403, 'a supervisor cannot set one');
+
+log((await call('/admin/pay-rates/posts/differentials', {
+  token: admin, method: 'POST', body: { postId: armedPostId, payRate: 50, reason: 'no' },
+})).status === 422, 'and a reason has to say something');
+
+log((await call('/admin/pay-rates/posts/differentials', {
+  token: admin, method: 'POST',
+  body: { postId: 999999, payRate: 50, reason: 'A post that does not exist' },
+})).status === 404, 'a differential cannot be hung on a post that does not exist');
+
+const removed = await call(`/admin/pay-rates/posts/differentials/${myDifferential.id}`, {
+  token: admin, method: 'DELETE',
+});
+log(removed.status === 200, 'and one entered by mistake can be withdrawn');
+log(!(await call('/admin/pay-rates/posts/differentials', { token: admin })).data.differentials
+  .some((d) => d.id === myDifferential.id), 'after which it is gone');
+
 /* ========================================================= candidates === */
 section('who can cover a shift');
 

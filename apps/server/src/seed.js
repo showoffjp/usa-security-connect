@@ -36,6 +36,7 @@ if (RESET) {
     'time_off_requests', 'availability', 'certifications', 'device_tokens',
     'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
     'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
+    'post_pay_rates',
     'users', 'posts', 'sites',
   ];
   await db.exec(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`);

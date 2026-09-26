@@ -6,6 +6,9 @@
  *
  *  - Each hour is paid at the rate in effect on the day it was worked, read
  *    from pay_rate_history, so a raise does not reprice last month.
+ *  - A post can pay more than the officer standing it earns. An armed yard
+ *    differential applies only while they are on that post, so the post is part
+ *    of the rate lookup rather than something added afterwards.
  *  - Overtime is decided per payroll week (Monday to Sunday), never across a
  *    range, at the multiplier over the week's weighted-average rate - the
  *    FLSA "regular rate".
@@ -23,7 +26,11 @@ import {
 } from '../shared.js';
 import { toSql } from './compliance.js';
 
-/** Every rate change, oldest first per person. Small enough to read whole. */
+/**
+ * Every rate change, oldest first per person, plus any differentials the posts
+ * themselves carry. Small enough to read whole, and read once per report rather
+ * than once per time entry.
+ */
 export async function loadRateBook() {
   const history = await db
     .prepare(
@@ -36,24 +43,66 @@ export async function loadRateBook() {
     if (!book.has(h.user_id)) book.set(h.user_id, []);
     book.get(h.user_id).push(h);
   }
+
+  const posts = await db
+    .prepare(
+      `SELECT post_id, user_id, effective_on, pay_rate_cents, overtime_multiplier
+       FROM post_pay_rates ORDER BY post_id, effective_on, id`
+    )
+    .all();
+  const byPost = new Map();
+  for (const p of posts) {
+    if (!byPost.has(p.post_id)) byPost.set(p.post_id, []);
+    byPost.get(p.post_id).push(p);
+  }
+
+  book.posts = byPost;
   return book;
+}
+
+/** The latest entry in a list that had taken effect by `day`. */
+function latestBy(list, day, accept = () => true) {
+  let found = null;
+  for (const row of list || []) {
+    if (String(row.effective_on) > day) break;
+    if (accept(row)) found = row;
+  }
+  return found;
 }
 
 /**
  * The pay rate that applied to `person` (a row with user_id, pay_type,
- * pay_rate_cents, overtime_multiplier) on `day` (YYYY-MM-DD).
+ * pay_rate_cents, overtime_multiplier) on `day` (YYYY-MM-DD), for work at
+ * `postId`.
+ *
+ * Most specific wins: a differential naming this officer at this post, then one
+ * the post pays anybody, then the officer's own rate history, then the record
+ * as it stands. An armed yard that pays more than the officer's standing rate
+ * pays it only while they are standing that post - which is the whole point of
+ * a differential, and why the post has to be part of the lookup rather than
+ * something applied afterwards.
  */
-export function rateOn(book, person, day) {
-  let found = null;
-  for (const h of book.get(person.user_id) || []) {
-    if (String(h.effective_on) <= day) found = h;
-    else break;
+export function rateOn(book, person, day, postId = null) {
+  if (postId != null && book.posts) {
+    const atPost = book.posts.get(postId);
+    const mine = latestBy(atPost, day, (r) => r.user_id === person.user_id);
+    const anyone = latestBy(atPost, day, (r) => r.user_id == null);
+    const differential = mine || anyone;
+    if (differential) {
+      return {
+        rate: differential.pay_rate_cents,
+        multiplier: differential.overtime_multiplier ?? person.overtime_multiplier,
+        source: mine ? 'officer_at_post' : 'post',
+      };
+    }
   }
+
+  const found = latestBy(book.get(person.user_id), day);
   // A change of pay basis is not something a rate lookup can reconcile;
   // it falls back to the record as it stands.
   return found && found.pay_type === person.pay_type && found.pay_rate_cents != null
-    ? { rate: found.pay_rate_cents, multiplier: found.overtime_multiplier ?? person.overtime_multiplier }
-    : { rate: person.pay_rate_cents, multiplier: person.overtime_multiplier };
+    ? { rate: found.pay_rate_cents, multiplier: found.overtime_multiplier ?? person.overtime_multiplier, source: 'history' }
+    : { rate: person.pay_rate_cents, multiplier: person.overtime_multiplier, source: 'record' };
 }
 
 /** The local calendar day an instant falls on. */
@@ -108,7 +157,7 @@ export async function loadPricedEntries(f) {
 
   return rows.map((r) => {
     const day = toDateString(new Date(sqlToIso(r.clock_in_at)));
-    const applied = rateOn(book, r, day);
+    const applied = rateOn(book, r, day, r.post_id);
     r = { ...r, pay_rate_cents: applied.rate, overtime_multiplier: applied.multiplier || 1.5 };
     const paid = billableMinutes(r.minutes_worked, r.unpaid_break_minutes);
     const billRate = effectiveBillRate({

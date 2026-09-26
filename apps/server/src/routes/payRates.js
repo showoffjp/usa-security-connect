@@ -359,3 +359,126 @@ payRatesRouter.get(
     });
   })
 );
+
+/* ------------------------------------------------- post differentials --- */
+
+/**
+ * What each post pays over and above the officer's own rate.
+ *
+ * Kept separate from an officer's rate history because it is a property of the
+ * post, not the person: an armed yard pays the differential to whoever stands
+ * it, and keeps paying it after that officer moves on.
+ */
+payRatesRouter.get(
+  '/posts/differentials',
+  wrap(async (_req, res) => {
+    const rows = await db
+      .prepare(
+        `SELECT r.*, p.name AS post_name, p.post_code, p.armed,
+                s.name AS site_name,
+                u.first_name || ' ' || u.last_name AS officer,
+                u.employee_code,
+                c.first_name || ' ' || c.last_name AS changed_by_name
+         FROM post_pay_rates r
+         JOIN posts p ON p.id = r.post_id
+         JOIN sites s ON s.id = p.site_id
+         LEFT JOIN users u ON u.id = r.user_id
+         LEFT JOIN users c ON c.id = r.changed_by
+         ORDER BY s.name, p.name, r.effective_on DESC, r.id DESC`
+      )
+      .all();
+
+    const today = toDateString(new Date());
+    res.json({
+      differentials: rows.map((r) => ({
+        ...isoFields(r, ['created_at']),
+        pay_rate: dollars(r.pay_rate_cents),
+        // A rate dated ahead of today is agreed but not yet being paid, which
+        // is worth showing rather than leaving someone to compare dates.
+        in_force: String(r.effective_on) <= today,
+      })),
+    });
+  })
+);
+
+const differentialSchema = z.object({
+  postId: z.number().int().positive(),
+  userId: z.number().int().positive().nullable().optional(),
+  payRate: z.number().positive().max(1000),
+  overtimeMultiplier: z.number().min(1).max(3).nullable().optional(),
+  effectiveOn,
+  reason: z.string().trim().min(3, 'Say why this post pays a differential.').max(300),
+});
+
+payRatesRouter.post(
+  '/posts/differentials',
+  onlyAdmin,
+  wrap(async (req, res) => {
+    const body = parse(differentialSchema, req.body);
+
+    const post = await db
+      .prepare(`SELECT p.id, p.name, s.name AS site_name FROM posts p JOIN sites s ON s.id = p.site_id WHERE p.id = ?`)
+      .get(body.postId);
+    if (!post) throw new HttpError(404, 'Post not found.');
+
+    if (body.userId != null) {
+      const officer = await db.prepare(`SELECT id FROM users WHERE id = ?`).get(body.userId);
+      if (!officer) throw new HttpError(404, 'Employee not found.');
+    }
+
+    const effective = body.effectiveOn || toDateString(new Date());
+    const info = await db
+      .prepare(
+        `INSERT INTO post_pay_rates
+           (post_id, user_id, effective_on, pay_rate_cents, overtime_multiplier, reason, changed_by)
+         VALUES (?,?,?,?,?,?,?)`
+      )
+      .run(
+        body.postId,
+        body.userId ?? null,
+        effective,
+        Math.round(body.payRate * 100),
+        body.overtimeMultiplier ?? null,
+        body.reason,
+        req.user.id
+      );
+
+    await audit(req.user.id, 'pay_rate.post_differential', 'post', body.postId, {
+      userId: body.userId ?? null,
+      payRateCents: Math.round(body.payRate * 100),
+      effectiveOn: effective,
+      reason: body.reason,
+    }, req.ip);
+
+    res.status(201).json({
+      differential: await db.prepare(`SELECT * FROM post_pay_rates WHERE id = ?`).get(info.lastInsertRowid),
+    });
+  })
+);
+
+/**
+ * Withdraw a differential.
+ *
+ * Deleted rather than end-dated: unlike an officer's rate history, which is the
+ * record of what they were actually paid, a differential row is only ever a
+ * rule. Work already priced through it keeps its cost, because entries are
+ * costed when the report runs and a withdrawn rule simply stops applying from
+ * the day it goes - so removing one that was entered by mistake is the honest
+ * outcome rather than leaving a rule nobody meant to write.
+ */
+payRatesRouter.delete(
+  '/posts/differentials/:id',
+  onlyAdmin,
+  wrap(async (req, res) => {
+    const row = await db.prepare(`SELECT * FROM post_pay_rates WHERE id = ?`).get(Number(req.params.id));
+    if (!row) throw new HttpError(404, 'Differential not found.');
+
+    await db.prepare(`DELETE FROM post_pay_rates WHERE id = ?`).run(row.id);
+    await audit(req.user.id, 'pay_rate.post_differential_removed', 'post', row.post_id, {
+      payRateCents: row.pay_rate_cents,
+      effectiveOn: row.effective_on,
+    }, req.ip);
+
+    res.json({ removed: true });
+  })
+);

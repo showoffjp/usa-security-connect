@@ -523,6 +523,28 @@ export async function seedExpansion(ctx) {
     ['user_id', 'effective_on', 'employment_type', 'pay_type', 'pay_rate_cents', 'salary_cents',
       'bill_rate_cents', 'overtime_multiplier', 'reason', 'changed_by'], historyRows);
 
+  /* --------------------------------------------- post differentials ---- */
+
+  // Armed posts pay more than the officers standing them earn elsewhere, and
+  // keep paying it whoever is rostered on. Seeded against the post rather than
+  // the person so a report shows the armed premium as a property of the yard,
+  // which is what an operations manager is actually deciding about.
+  const armedPosts = await db
+    .prepare(`SELECT id, name FROM posts WHERE armed = 1 ORDER BY id`)
+    .all();
+  const differentialRows = armedPosts.map((post) => [
+    post.id,
+    null,
+    '2026-01-05',
+    4150,
+    1.5,
+    'Armed post differential - Class G required',
+    original.admin,
+  ]);
+  await batchInsert('post_pay_rates',
+    ['post_id', 'user_id', 'effective_on', 'pay_rate_cents', 'overtime_multiplier', 'reason', 'changed_by'],
+    differentialRows);
+
   /* ----------------------------------------------------------- time off -- */
   const onLeave = (code, date) =>
     TIME_OFF.some((t) => t.code === code && t.status === 'approved' &&

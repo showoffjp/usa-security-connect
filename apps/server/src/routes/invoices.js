@@ -98,7 +98,7 @@ export async function buildLines({ siteId, start, end }) {
     };
     group.minutes += minutes;
     group.entries += 1;
-    group.cost_cents += amountForMinutes(minutes, rateOn(book, r, dayOf(r.clock_in_at)).rate || 0);
+    group.cost_cents += amountForMinutes(minutes, rateOn(book, r, dayOf(r.clock_in_at), r.post_id).rate || 0);
     groups.set(key, group);
   }
 
