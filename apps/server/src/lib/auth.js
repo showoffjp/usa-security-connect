@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { db, audit } from './db.js';
+import { db, audit, demoInstance } from './db.js';
 import { RULES, atLeast, isWeakPin } from '../shared.js';
 import { HttpError } from './http.js';
 
 const JWT_SECRET =
   process.env.USC_JWT_SECRET ||
+  // A demo instance holds nothing but the published demo company.
+  (demoInstance ? 'usc-demo-instance' : null) ||
   (process.env.NODE_ENV === 'production'
     ? (() => {
         throw new Error('USC_JWT_SECRET must be set in production');

@@ -329,13 +329,13 @@ table.data tr.clickable { cursor: pointer; }
 
 .auth-screen {
   min-height: 100vh;
-  display: grid; place-items: center; padding: 24px 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px 16px;
   background:
     radial-gradient(1100px 620px at 15% -10%, #0c3f72 0%, transparent 55%),
     linear-gradient(160deg, var(--navy-900) 0%, #01203f 48%, #2a0f08 140%);
 }
 .auth-card {
-  width: 100%; max-width: 400px;
+  width: 100%; max-width: 400px; min-width: 0;
   background: var(--surface); border-radius: var(--r-xl);
   padding: 30px 26px 26px; box-shadow: var(--shadow-3);
 }
@@ -736,3 +736,9 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
 .issue-list li.issue-warn::before { background: var(--warn); }
 .issue-list li.issue-block { color: var(--danger); font-weight: 650; }
 .issue-list li.issue-block::before { background: var(--danger); }
+
+/* Demo sign-in shortcuts, shown only on a self-contained demo deployment. */
+.demo-accounts { display: grid; gap: 6px; padding: 12px; border-radius: var(--r-md); background: var(--info-bg); color: #10456f; }
+.demo-accounts .btn { box-sizing: border-box; width: 100%; justify-content: flex-start; gap: 10px; background: var(--surface); font-size: 0.85rem; white-space: normal; text-align: left; }
+.demo-accounts .demo-codes { flex: none; font-weight: 700; }
+.demo-accounts .demo-who { min-width: 0; }

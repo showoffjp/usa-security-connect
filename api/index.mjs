@@ -8,4 +8,5 @@
  * runs from Vercel Cron against /api/cron/sweep, and incident photos go to blob
  * storage rather than a local disk.
  */
+import './timezone.mjs';
 export { app as default } from '../apps/server/src/app.js';

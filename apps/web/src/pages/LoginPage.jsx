@@ -1,17 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { Shield, Icon, Spinner, Banner } from '../components/ui.jsx';
 
 const PIN_LENGTH = 4;
 
+/** Shown only on a self-contained demo deployment, whose accounts are public. */
+const DEMO_ACCOUNTS = [
+  { code: '1001', pin: '2468', who: 'Vince Ortega', role: 'Administrator' },
+  { code: '1002', pin: '3571', who: 'Renata Diaz', role: 'Supervisor' },
+  { code: '1003', pin: '4812', who: 'Marcus Bell', role: 'Officer, on duty' },
+];
+
 export default function LoginPage() {
   const { signIn } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState('code');
   const [code, setCode] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const codeRef = useRef(null);
+  const [demo, setDemo] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((d) => alive && setDemo(Boolean(d.demo)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (step === 'code') codeRef.current?.focus();
@@ -27,12 +48,16 @@ export default function LoginPage() {
     setStep('pin');
   };
 
-  const attempt = async (fullPin) => {
+  const attempt = async (fullPin, withCode = code) => {
     setBusy(true);
     setError('');
     try {
-      await signIn(code, fullPin);
-      // On success the router swaps this screen out.
+      const res = await signIn(withCode, fullPin);
+      // On success the router swaps this screen out. Supervisors and
+      // administrators start in the admin console rather than the officer view.
+      if (['admin', 'supervisor'].includes(res?.user?.role) && window.location.pathname === '/') {
+        navigate('/admin', { replace: true });
+      }
     } catch (err) {
       setError(err.message);
       setPin('');
@@ -73,6 +98,35 @@ export default function LoginPage() {
             <div className="sub">Protection Group</div>
           </div>
         </div>
+
+        {demo && step === 'code' && (
+          <div className="demo-accounts" style={{ marginBottom: 14 }}>
+            <div className="small strong">Demo site - tap an account to sign in</div>
+            {DEMO_ACCOUNTS.map((a) => (
+              <button
+                key={a.code}
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={busy}
+                onClick={() => {
+                  setCode(a.code);
+                  setPin(a.pin);
+                  setStep('pin');
+                  attempt(a.pin, a.code);
+                }}
+              >
+                <span className="demo-codes mono">
+                  {a.code} / {a.pin}
+                </span>
+                <span className="demo-who">
+                  {a.who}
+                  <span className="tiny muted"> · {a.role}</span>
+                </span>
+              </button>
+            ))}
+            <div className="tiny muted">Every officer 1004-1043 works too; see the handover notes for their PINs.</div>
+          </div>
+        )}
 
         {error && (
           <div style={{ marginBottom: 14 }}>
