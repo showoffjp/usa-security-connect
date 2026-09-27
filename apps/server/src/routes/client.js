@@ -83,7 +83,17 @@ clientRouter.post(
   '/login',
   // Several contacts at one company share an office IP, so the per-address
   // allowance is generous; the meaningful limit is per email address.
-  rateLimit({ windowMs: 5 * 60000, max: 60, key: (req) => `ip:${req.ip}` }),
+  //
+  // The per-IP figure is overridable because the whole suite signs in from one
+  // address and exhausts it, which made a second run fail on the limiter rather
+  // than on anything real. The per-email limit is deliberately not overridable:
+  // it is the one the security suite measures, and a test that can move the
+  // number it is checking is not checking anything. Production leaves it unset.
+  rateLimit({
+    windowMs: 5 * 60000,
+    max: Number(process.env.USC_CLIENT_LOGIN_LIMIT_PER_IP) || 60,
+    key: (req) => `ip:${req.ip}`,
+  }),
   rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `email:${req.body?.email || 'none'}` }),
   wrap(async (req, res) => {
     const body = parse(loginSchema, req.body);

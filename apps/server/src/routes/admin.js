@@ -178,6 +178,23 @@ adminRouter.get(
       .get(toSql(new Date(Date.now() - RULES.lateGraceMinutes * 60000)))).n);
 
     // Pay periods that have ended and are still waiting to be closed.
+    // Items that should have come back and have not: the officer holding them
+    // is off the clock. The same condition the sweep flags on, so the badge and
+    // the flag list can never disagree.
+    const equipmentOut = Number((await db
+      .prepare(
+        `SELECT COUNT(*) AS n
+         FROM equipment_assignments ea
+         JOIN equipment e ON e.id = ea.equipment_id
+         WHERE ea.returned_at IS NULL
+           AND e.return_by_end_of_shift = true
+           AND NOT EXISTS (
+             SELECT 1 FROM time_entries te
+             WHERE te.user_id = ea.user_id AND te.clock_out_at IS NULL
+           )`
+      )
+      .get()).n);
+
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
       .get(toDateString(new Date()))).n);
@@ -207,6 +224,7 @@ adminRouter.get(
         lateNow,
         lateOrOff: offPost + lateNow,
         payrollDue,
+        equipmentOut,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({

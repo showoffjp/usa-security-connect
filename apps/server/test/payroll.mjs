@@ -205,6 +205,27 @@ const tomorrow = await call(`/admin/pay-rates/${alicia.user_id}`, {
   body: { payRate: afterOne.gross_pay > 0 ? 21 : 20, effectiveOn: localDate(addDays(new Date(), 1)), reason: 'Raise from tomorrow' },
 });
 log(tomorrow.status === 200, 'a raise dated after the closed periods goes through', tomorrow.data?.error);
+// A post differential is a rate change wearing a different hat: it decides what
+// hours at that post cost, so back-dating one into a closed period would restate
+// what was paid just as surely as raising the officer would.
+const anyPost = (await call('/reference', { token: admin })).data.posts[0];
+const diffBack = await call('/admin/pay-rates/posts/differentials', {
+  token: admin, method: 'POST',
+  body: { postId: anyPost.id, payRate: 44, effectiveOn: dueStart, reason: 'Back-dated post differential' },
+});
+log(diffBack.status === 409 && diffBack.data?.details?.code === 'period_closed',
+  'back-dating a post differential into it is refused too', diffBack.data?.error);
+
+const diffAhead = await call('/admin/pay-rates/posts/differentials', {
+  token: admin, method: 'POST',
+  body: {
+    postId: anyPost.id, payRate: 44,
+    effectiveOn: localDate(addDays(new Date(), 1)),
+    reason: 'Differential from tomorrow',
+  },
+});
+log(diffAhead.status === 201, 'while one dated after the closed periods goes through', diffAhead.data?.error);
+
 const frozen = (await call(`/admin/payroll/periods/${due.id}`, { token: admin })).data;
 log(cents(frozen.totals.gross_pay) === cents(ready.totals.gross_pay), 'and the closed period reads exactly as it did');
 

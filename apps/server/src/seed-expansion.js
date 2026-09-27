@@ -523,6 +523,65 @@ export async function seedExpansion(ctx) {
     ['user_id', 'effective_on', 'employment_type', 'pay_type', 'pay_rate_cents', 'salary_cents',
       'bill_rate_cents', 'overtime_multiplier', 'reason', 'changed_by'], historyRows);
 
+  /* ------------------------------------------- keys and equipment ------ */
+
+  // Every site gets radios and a key ring; armed posts get a weapon in the
+  // locker; two sites get a patrol vehicle, which is the case that does NOT
+  // come back at the end of a shift.
+  const equipmentRows = [];
+  for (const site of SITES) {
+    const siteId = siteIds[site.key];
+    equipmentRows.push([siteId, 'radio', `Radio ${site.key.slice(0, 2).toUpperCase()}-1`, `RAD-${siteId}01`, null, true, false, 'available']);
+    equipmentRows.push([siteId, 'radio', `Radio ${site.key.slice(0, 2).toUpperCase()}-2`, `RAD-${siteId}02`, null, true, false, 'available']);
+    equipmentRows.push([siteId, 'keys', `${site.name} master ring`, `KEY-${siteId}`, 'Do not duplicate. Signed out one ring at a time.', true, false, 'available']);
+  }
+
+  const armedPostSites = await db
+    .prepare(`SELECT DISTINCT s.id, s.name FROM posts p JOIN sites s ON s.id = p.site_id WHERE p.armed = true`)
+    .all();
+  for (const site of armedPostSites) {
+    equipmentRows.push([site.id, 'weapon', `Duty firearm - ${site.name}`, `FA-${site.id}`,
+      'Class G required. Logged out at shift start and back into the locker at shift end.', true, true, 'available']);
+  }
+
+  // A vehicle is assigned for a stretch, not a shift, so it is deliberately not
+  // return_by_end_of_shift - otherwise every patrol driver would be flagged
+  // every night for a van that is meant to stay with them.
+  const vehicleSites = armedPostSites.slice(0, 2);
+  for (const site of vehicleSites) {
+    equipmentRows.push([site.id, 'vehicle', `Patrol vehicle - ${site.name}`, `VEH-${site.id}`,
+      'Mileage logged at handover. Fuel card in the glovebox.', false, false, 'available']);
+  }
+
+  // One spare radio belonging to nobody, to prove a company-wide item works.
+  equipmentRows.push([null, 'radio', 'Spare radio (pool)', 'RAD-POOL-1', 'Kept at head office.', true, false, 'available']);
+
+  await batchInsert('equipment',
+    ['site_id', 'category', 'label', 'identifier', 'notes', 'return_by_end_of_shift', 'armed_only', 'status'],
+    equipmentRows);
+
+  /* --------------------------------------------- post differentials ---- */
+
+  // Armed posts pay more than the officers standing them earn elsewhere, and
+  // keep paying it whoever is rostered on. Seeded against the post rather than
+  // the person so a report shows the armed premium as a property of the yard,
+  // which is what an operations manager is actually deciding about.
+  const armedPosts = await db
+    .prepare(`SELECT id, name FROM posts WHERE armed = 1 ORDER BY id`)
+    .all();
+  const differentialRows = armedPosts.map((post) => [
+    post.id,
+    null,
+    '2026-01-05',
+    4150,
+    1.5,
+    'Armed post differential - Class G required',
+    original.admin,
+  ]);
+  await batchInsert('post_pay_rates',
+    ['post_id', 'user_id', 'effective_on', 'pay_rate_cents', 'overtime_multiplier', 'reason', 'changed_by'],
+    differentialRows);
+
   /* ----------------------------------------------------------- time off -- */
   const onLeave = (code, date) =>
     TIME_OFF.some((t) => t.code === code && t.status === 'approved' &&
@@ -852,6 +911,67 @@ export async function seedExpansion(ctx) {
        WHERE type = ? AND resolved_at IS NULL AND occurred_at < ? AND user_id = ANY(?::int[])`
     ).run(supervisorNorth, note, type, toSql(new Date(now.getTime() - 3 * 86400000)),
       `{${Object.values(staff).map((s) => s.id).join(',')}}`);
+  }
+
+  /* --------------------------------- who is holding what right now ---- */
+  // Runs here, not beside the inventory above: time entries do not exist
+  // until later in this file, so asking earlier who is on duty returns
+  // nobody and every item stays on the shelf.
+  // Hand items to the officers who are actually on duty now, so the inventory
+  // is not uniformly "available" - which would show nothing.
+  const allEquipment = await db.prepare(`SELECT * FROM equipment ORDER BY id`).all();
+  const onDutyNow = await db
+    .prepare(
+      `SELECT te.id AS entry_id, te.user_id, p.site_id
+       FROM time_entries te JOIN posts p ON p.id = te.post_id
+       WHERE te.clock_out_at IS NULL`
+    )
+    .all();
+
+  const assignmentRows = [];
+  const takenIds = new Set();
+  for (const duty of onDutyNow) {
+    const radio = allEquipment.find(
+      (e) => e.site_id === duty.site_id && e.category === 'radio' && !takenIds.has(e.id)
+    );
+    if (radio) {
+      takenIds.add(radio.id);
+      assignmentRows.push([radio.id, duty.user_id, duty.entry_id, toSql(at(0, 6)), original.admin, 'good', null]);
+    }
+  }
+
+  // And one that went home in somebody's pocket three days ago: an officer who
+  // has long since clocked out, still holding a site's master keys. That is the
+  // row the whole feature exists to surface.
+  const strayHolder = await db
+    .prepare(
+      `SELECT u.id FROM users u
+       WHERE u.status = 'active' AND u.role = 'officer'
+         AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.clock_out_at IS NULL)
+       ORDER BY u.id LIMIT 1`
+    )
+    .get();
+  const strayKeys = allEquipment.find((e) => e.category === 'keys');
+  if (strayHolder && strayKeys) {
+    takenIds.add(strayKeys.id);
+    assignmentRows.push([strayKeys.id, strayHolder.id, null, toSql(at(-3, 18)), original.admin, 'good',
+      'Relief handover - said he would drop them back in the morning.']);
+  }
+
+  await batchInsert('equipment_assignments',
+    ['equipment_id', 'user_id', 'time_entry_id', 'issued_at', 'issued_by', 'issued_condition', 'issued_note'],
+    assignmentRows);
+
+  if (takenIds.size) {
+    await db.prepare(
+      `UPDATE equipment SET status = 'issued' WHERE id IN (${[...takenIds].map(() => '?').join(',')})`
+    ).run(...takenIds);
+  }
+
+  // One radio away being repaired, so the inventory has a third state in it.
+  const forRepair = allEquipment.find((e) => e.category === 'radio' && !takenIds.has(e.id));
+  if (forRepair) {
+    await db.prepare(`UPDATE equipment SET status = 'maintenance' WHERE id = ?`).run(forRepair.id);
   }
 
   /* ----------------------------------------------------- availability -- */

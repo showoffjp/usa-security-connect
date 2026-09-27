@@ -141,6 +141,19 @@ the point of the feature. Two ways to get the five-minute sweep back:
 
   The endpoint is idempotent, so calling it more often than needed is harmless.
 
+  **This does not work while Deployment Protection is on.** Protection sits in
+  front of the function, so the request is answered with a 302 to Vercel's sign-in
+  page and never reaches the handler - the bearer token is never even looked at.
+  Verified against production: a correctly signed request returned 302, not 200.
+  To use an external scheduler with protection enabled, create a **Protection
+  Bypass for Automation** secret in *Settings -> Deployment Protection* and send it
+  as `x-vercel-protection-bypass` alongside the bearer token.
+
+  Vercel's own cron is invoked internally rather than over the public URL, so it is
+  not affected by this. That is Vercel's documented behaviour rather than something
+  measured here - if flags stop appearing after a protection change, check **Project
+  -> Cron Jobs** for a recent successful run before looking anywhere else.
+
 On a long-running host none of this applies: an internal timer drives the sweep.
 
 Confirm it after the first deploy: **Project → Cron Jobs** should list one job with a
@@ -166,6 +179,18 @@ sign-in, and it can then create everyone else from **Employees**.
 ## 5. Client portal
 
 The portal is part of the same deployment, at `/portal`. Nothing extra to configure.
+
+**Deployment Protection has to be off for that domain, or no client can reach it.**
+Protection answers with a redirect to Vercel's sign-in page, and a site contact has
+no Vercel account - they never get as far as the portal's own login. The usual
+arrangement is *Standard Protection* plus a real custom domain: the `*.vercel.app`
+URLs stay closed and clients use `connect.yourcompany.com`.
+
+Note that Vercel exempts **every domain registered on the project**, including the
+`*.vercel.app` one it generates for you at creation. So "Standard Protection" alone
+can leave that generated address open - check it rather than assuming, because it is
+short and guessable. *All Deployments* closes everything, at the cost of locking
+clients out until you move them to a custom domain.
 
 Give a site contact access from **Billing → Client portal → New login**: their email,
 their name, and the properties they may see. The generated password is shown once —

@@ -11,6 +11,7 @@ import {
   minutesBetween,
 } from '../shared.js';
 import { recordPing } from '../services/tracking.js';
+import { flagOutstanding, outstandingForShift } from '../services/equipment.js';
 import {
   toSql,
   raiseFlag,
@@ -410,11 +411,24 @@ timeclockRouter.post(
 
     await audit(req.user.id, 'timeclock.out', 'time_entry', entry.id, { minutes }, req.ip);
 
+    // Anything that should have gone back in the locker. Flagged now rather
+    // than waiting for the nightly sweep, and handed back in the response so
+    // the officer is told before they walk away rather than the next morning.
+    const stillHolding = await outstandingForShift(req.user.id);
+    if (stillHolding.length) await flagOutstanding(req.user.id, { occurredAt: now });
+
     const updated = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id));
     res.json({
       entry: isoFields(updated, ENTRY_TIMES),
       minutesWorked: minutes,
       geofence: fence,
+      stillHolding: stillHolding.map((h) => ({
+        id: h.id,
+        category: h.category,
+        label: h.label,
+        identifier: h.identifier,
+        site: h.site_name,
+      })),
     });
   })
 );

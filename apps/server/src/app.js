@@ -30,6 +30,7 @@ import { clientAdminRouter } from './routes/clientAdmin.js';
 import { invoicesRouter } from './routes/invoices.js';
 import { liveRouter, punchesRouter } from './routes/operations.js';
 import { payRatesRouter } from './routes/payRates.js';
+import { equipmentRouter } from './routes/equipment.js';
 import { adminReportsRouter } from './routes/adminReports.js';
 import { payrollRouter } from './routes/payroll.js';
 import { ensureDemoInstance } from './services/demoInstance.js';
@@ -130,6 +131,7 @@ app.use('/api/panic', panicRouter);
 app.use('/api/breaks', breaksRouter);
 app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/equipment', equipmentRouter);
 app.use('/api/client', clientRouter);
 app.use('/api/invoices', invoicesRouter);
 // Mounted ahead of adminRouter so these prefixes reach their own routers.

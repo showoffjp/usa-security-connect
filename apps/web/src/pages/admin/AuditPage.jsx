@@ -76,10 +76,17 @@ export default function AuditPage() {
       </div>
 
       <div className="card">
+        {/*
+          The table below takes a tab stop of its own. Every other table on the
+          admin side contains links - an officer's name, a site - which give a
+          keyboard user something to tab to and, with it, a way to scroll the
+          overflow. The audit log is the one table that is purely text, so
+          without this its contents cannot be reached without a mouse.
+        */}
         {filtered.length === 0 ? (
           <Empty icon="clipboard" title="No activity recorded" />
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Audit log entries">
             <table className="data">
               <thead>
                 <tr>

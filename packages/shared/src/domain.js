@@ -201,6 +201,7 @@ export const FLAG_TYPES = {
   NO_SHOW: 'no_show',
   UNSCHEDULED_SHIFT: 'unscheduled_shift',
   OFF_POST: 'off_post',
+  EQUIPMENT_NOT_RETURNED: 'equipment_not_returned',
 };
 
 export const FLAG_LABEL = {
@@ -211,10 +212,12 @@ export const FLAG_LABEL = {
   early_departure: 'Left post early',
   no_show: 'No show',
   unscheduled_shift: 'Unscheduled shift',
+  equipment_not_returned: 'Equipment not returned',
   off_post: 'Left the post geofence',
 };
 
 export const FLAG_SEVERITY = {
+  equipment_not_returned: 'warning',
   late_clock_in: 'warning',
   missed_clock_out: 'warning',
   missed_check_in: 'critical',
@@ -650,4 +653,57 @@ export function daysOverdue(dueOn, status, now = new Date()) {
   const due = new Date(y, m - 1, d, 23, 59, 59, 999);
   const days = Math.floor((now - due) / 86400000);
   return days > 0 ? days : null;
+}
+
+/* ------------------------------------------------- keys and equipment -- */
+
+export const EQUIPMENT_CATEGORIES = ['radio', 'keys', 'vehicle', 'weapon', 'other'];
+
+export const EQUIPMENT_CATEGORY_LABEL = {
+  radio: 'Radio',
+  keys: 'Key ring',
+  vehicle: 'Vehicle',
+  weapon: 'Firearm',
+  other: 'Other',
+};
+
+export const EQUIPMENT_STATUS = ['available', 'issued', 'maintenance', 'lost', 'retired'];
+
+export const EQUIPMENT_STATUS_LABEL = {
+  available: 'Available',
+  issued: 'Signed out',
+  maintenance: 'In maintenance',
+  lost: 'Missing',
+  retired: 'Retired',
+};
+
+/** The condition noted when an item changes hands, both ways. */
+export const EQUIPMENT_CONDITIONS = ['good', 'worn', 'damaged'];
+
+/**
+ * Whether this officer may sign this item out.
+ *
+ * Returns a reason rather than a boolean, because every refusal here has to be
+ * explainable to the person standing at the counter.
+ */
+export function equipmentEligibility({ item, officer, certifications = [] }) {
+  if (!item.active) return { ok: false, reason: 'That item has been retired.' };
+  if (item.status === 'maintenance') return { ok: false, reason: 'That item is in maintenance.' };
+  if (item.status === 'lost') return { ok: false, reason: 'That item is recorded as missing.' };
+  if (item.status === 'issued') return { ok: false, reason: 'Somebody already has that item.' };
+
+  if (item.armed_only) {
+    const armed = certifications.some(
+      (c) => /class g/i.test(c.type || c.name || '') && (!c.expires_on || String(c.expires_on) >= new Date().toISOString().slice(0, 10))
+    );
+    if (!armed) {
+      return { ok: false, reason: 'A current Class G licence is required to sign this out.' };
+    }
+  }
+
+  if (officer.status !== 'active') {
+    return { ok: false, reason: 'That officer is not active.' };
+  }
+
+  return { ok: true };
 }

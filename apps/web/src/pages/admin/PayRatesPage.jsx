@@ -365,6 +365,107 @@ function HistoryDialog({ person, onClose }) {
 
 /* ---------------------------------------------------------- page -- */
 
+
+/* ------------------------------------------------- post differentials --- */
+
+/**
+ * What a post pays over and above the officer's own rate.
+ *
+ * Kept on this screen rather than on Sites & posts because it is a pay
+ * decision, made by the same person on the same afternoon as every other pay
+ * decision - and because it is money, which Sites & posts is not.
+ */
+function DifferentialDialog({ posts, people, onClose, onSaved }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [form, setForm] = useState({
+    postId: '',
+    userId: '',
+    payRate: '',
+    effectiveOn: toDateInput(new Date()),
+    reason: '',
+  });
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    setBusy(true);
+    setErrors({});
+    try {
+      await api.post('/admin/pay-rates/posts/differentials', {
+        postId: Number(form.postId),
+        userId: form.userId ? Number(form.userId) : null,
+        payRate: Number(form.payRate),
+        effectiveOn: form.effectiveOn,
+        reason: form.reason.trim(),
+      });
+      toast.success('Differential recorded.');
+      onSaved();
+    } catch (err) {
+      setErrors(err.details?.fieldErrors || {});
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="What this post pays"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || !form.postId || !form.payRate || form.reason.trim().length < 3}>
+            {busy ? 'Saving' : 'Record it'}
+          </button>
+        </>
+      }
+    >
+      <Banner kind="info" title="A differential belongs to the post">
+        It is paid to whoever stands that post, and keeps being paid after they
+        move on. Hours worked anywhere else are unaffected.
+      </Banner>
+
+      <Field label="Post" required>
+        <select value={form.postId} onChange={set('postId')}>
+          <option value="">Choose a post</option>
+          {posts.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.site_name} &mdash; {p.name}{p.armed ? ' (armed)' : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field
+        label="Only for one officer"
+        hint="Leave blank for the usual case: the post pays this to anybody standing it."
+      >
+        <select value={form.userId} onChange={set('userId')}>
+          <option value="">Anyone on this post</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>{p.name} ({p.employee_code})</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Rate per hour" required error={errors.payRate?.[0]}>
+        <input type="number" step="0.01" min="0" value={form.payRate} onChange={set('payRate')} placeholder="41.50" />
+      </Field>
+
+      <Field label="From" required>
+        <input type="date" value={form.effectiveOn} onChange={set('effectiveOn')} />
+      </Field>
+
+      <Field label="Why" required hint="Shows on the list and in the audit log." error={errors.reason?.[0]}>
+        <input value={form.reason} onChange={set('reason')} placeholder="Armed post differential - Class G required" />
+      </Field>
+    </Modal>
+  );
+}
+
 export default function PayRatesPage() {
   const toast = useToast();
   const { isAdmin } = useAuth();
@@ -374,6 +475,22 @@ export default function PayRatesPage() {
   const [editing, setEditing] = useState(null);
   const [history, setHistory] = useState(null);
   const [bulk, setBulk] = useState(false);
+  const [differentials, setDifferentials] = useState([]);
+  const [posts, setPosts] = useState([]);
+  const [addingDifferential, setAddingDifferential] = useState(false);
+
+  const loadDifferentials = useCallback(async () => {
+    try {
+      const [d, ref] = await Promise.all([
+        api.get('/admin/pay-rates/posts/differentials'),
+        api.get('/reference'),
+      ]);
+      setDifferentials(d.differentials || []);
+      setPosts(ref.posts || []);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }, [toast]);
 
   const load = useCallback(async () => {
     try {
@@ -385,7 +502,8 @@ export default function PayRatesPage() {
   }, [toast]);
   useEffect(() => {
     load();
-  }, [load]);
+    loadDifferentials();
+  }, [load, loadDifferentials]);
 
   const people = useMemo(() => {
     if (!data) return [];
@@ -562,6 +680,88 @@ export default function PayRatesPage() {
         )}
       </div>
 
+      <div className="card">
+        <div className="card-head wrap">
+          <div>
+            <h3>What a post pays</h3>
+            <p className="tiny muted">
+              A post rate replaces the officer&rsquo;s own rate for the hours they
+              work there, and nothing else. It is paid to whoever stands the post.
+            </p>
+          </div>
+          {isAdmin && (
+            <button className="btn btn-ghost" onClick={() => setAddingDifferential(true)}>
+              <Icon name="dollar" size={15} /> Add one
+            </button>
+          )}
+        </div>
+
+        {differentials.length === 0 ? (
+          <Empty icon="dollar" title="No post pays a differential">
+            Every officer is paid their own rate wherever they work.
+          </Empty>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Post</th>
+                  <th>Applies to</th>
+                  <th className="num">Rate</th>
+                  <th>From</th>
+                  <th>Why</th>
+                  {isAdmin && <th />}
+                </tr>
+              </thead>
+              <tbody>
+                {differentials.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      <div className="strong small">{d.post_name}</div>
+                      <div className="tiny muted">{d.site_name}</div>
+                    </td>
+                    <td>
+                      {d.officer ? (
+                        <>
+                          {d.officer}
+                          <div className="tiny muted mono">{d.employee_code}</div>
+                        </>
+                      ) : (
+                        <span className="muted small">Anyone on this post</span>
+                      )}
+                    </td>
+                    <td className="num strong">{rate(d.pay_rate)}</td>
+                    <td className="nowrap small">
+                      {fmtDateShort(d.effective_on)}
+                      {!d.in_force && <Chip kind="warn">Not yet</Chip>}
+                    </td>
+                    <td className="small muted truncate">{d.reason}</td>
+                    {isAdmin && (
+                      <td className="num">
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={async () => {
+                            try {
+                              await api.del(`/admin/pay-rates/posts/differentials/${d.id}`);
+                              toast.success('Withdrawn.');
+                              loadDifferentials();
+                            } catch (err) {
+                              toast.error(err.message);
+                            }
+                          }}
+                        >
+                          Withdraw
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <p className="tiny muted">
         {EMPLOYMENT_LABEL.w2}s are owed FLSA overtime at their multiplier past 40 hours a week; {EMPLOYMENT_LABEL['1099'].toLowerCase()}s are not.
         Pay for the last 28 days is an estimate - the payroll register works it out week by week.
@@ -587,6 +787,17 @@ export default function PayRatesPage() {
         />
       )}
       {history && <HistoryDialog person={history} onClose={() => setHistory(null)} />}
+      {addingDifferential && (
+        <DifferentialDialog
+          posts={posts}
+          people={data.people}
+          onClose={() => setAddingDifferential(false)}
+          onSaved={() => {
+            setAddingDifferential(false);
+            loadDifferentials();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -631,7 +631,7 @@ export function LiveMap({ officers = [], posts = [], height = 480, focusId = nul
     <div>
       <div
         ref={containerRef}
-        role="img"
+        role="group"
         aria-label="Map of officer positions and posts. The same information is in the table below."
         style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
       />
@@ -724,7 +724,7 @@ export function TrackMap({ pings = [], entries = [], height = 380 }) {
     <div>
       <div
         ref={containerRef}
-        role="img"
+        role="group"
         aria-label="Map of the officer's GPS trail. The same readings are listed beside it."
         style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
       />
@@ -803,7 +803,7 @@ export function PositionMap({ me, post, height = 240 }) {
     <div>
       <div
         ref={containerRef}
-        role="img"
+        role="group"
         aria-label="Map showing your position and your assigned post. The distance is also written above."
         style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
       />

@@ -194,6 +194,7 @@ export function AdminShell() {
         { to: '/admin/flags', icon: 'flag', label: 'Flags', count: counts.openFlags },
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
         { to: '/admin/tours', icon: 'route', label: 'Tours' },
+        { to: '/admin/equipment', icon: 'clipboard', label: 'Keys & equipment', count: counts.equipmentOut },
       ],
     },
     {

@@ -39,7 +39,11 @@ export async function raiseFlag({ userId, type, occurredAt, refType, refId, deta
       toSql(occurredAt || new Date()),
       refType ?? null,
       refId ?? null,
-      detail ? (typeof detail === 'string' ? detail : JSON.stringify(detail)) : null
+      // detail is a jsonb column, so a bare string has to be encoded too. The
+      // branch that passed one through raw could only ever produce invalid
+      // JSON and fail the insert; it survived because every caller happens to
+      // pass an object, which makes it a trap rather than a live fault.
+      detail === undefined || detail === null ? null : JSON.stringify(detail)
     ));
 }
 
@@ -253,12 +257,61 @@ async function sweepAbandonedShifts(now) {
  * Run every sweep. Called on a timer by the server and again on demand from
  * the admin dashboard so a supervisor never looks at stale numbers.
  */
+/**
+ * Keys, radios and weapons that went home in somebody's pocket.
+ *
+ * Written here with its own SQL rather than by calling the equipment service,
+ * because that service already imports raiseFlag from this file and importing
+ * it back would close a cycle. One direction is worth a dozen lines of query.
+ *
+ * Only items marked return_by_end_of_shift count, and only once the officer has
+ * actually clocked out - an officer mid-shift is supposed to be holding their
+ * radio.
+ */
+async function sweepUnreturnedEquipment() {
+  const outstanding = (await db
+    .prepare(
+      `SELECT ea.id AS assignment_id, ea.user_id, ea.issued_at,
+              e.category, e.label, e.identifier, s.name AS site_name
+       FROM equipment_assignments ea
+       JOIN equipment e ON e.id = ea.equipment_id
+       LEFT JOIN sites s ON s.id = e.site_id
+       WHERE ea.returned_at IS NULL
+         AND e.return_by_end_of_shift = true
+         AND NOT EXISTS (
+           SELECT 1 FROM time_entries te
+           WHERE te.user_id = ea.user_id AND te.clock_out_at IS NULL
+         )`
+    )
+    .all());
+
+  for (const item of outstanding) {
+    await raiseFlag({
+      userId: item.user_id,
+      type: FLAG_TYPES.EQUIPMENT_NOT_RETURNED,
+      occurredAt: fromSql(item.issued_at),
+      refType: 'equipment_assignment',
+      refId: item.assignment_id,
+      detail: {
+        category: item.category,
+        label: item.label,
+        identifier: item.identifier,
+        site: item.site_name,
+        issued_at: fromSql(item.issued_at),
+      },
+    });
+  }
+  return outstanding.length;
+}
+
 export async function sweep(now = new Date()) {
-  const result = { missedCheckIns: 0, noShows: 0, autoClosed: 0, notified: 0, alerted: 0 };
+  const result = { missedCheckIns: 0, noShows: 0, autoClosed: 0, equipmentOut: 0, notified: 0, alerted: 0 };
   await db.transaction(async () => {
     result.missedCheckIns = await sweepMissedCheckIns(now);
     result.noShows = await sweepNoShows(now);
     result.autoClosed = await sweepAbandonedShifts(now);
+    // After the auto-close, so a shift closed in this same pass is counted.
+    result.equipmentOut = await sweepUnreturnedEquipment();
   })();
 
   // Notifications run outside the transaction: they call out to a third-party
