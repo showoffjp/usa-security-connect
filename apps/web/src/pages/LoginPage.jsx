@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
+import { useDemo } from '../lib/demo.js';
 import { Shield, Icon, Spinner, Banner } from '../components/ui.jsx';
 
 /**
@@ -27,18 +28,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const codeRef = useRef(null);
-  const [demo, setDemo] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((d) => alive && setDemo(Boolean(d.demo)))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const demo = useDemo();
 
   useEffect(() => {
     if (step === 'code') codeRef.current?.focus();

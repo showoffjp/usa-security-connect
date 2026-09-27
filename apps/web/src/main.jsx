@@ -5,6 +5,7 @@ import App from './App.jsx';
 import PortalApp from './pages/portal/PortalApp.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 import { ToastProvider } from './components/ui.jsx';
+import DemoStrip from './components/DemoStrip.jsx';
 import './styles/app.css';
 
 /**
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <ToastProvider>
+        <DemoStrip />
         <Routes>
           <Route path="/portal/*" element={<PortalApp />} />
           <Route
