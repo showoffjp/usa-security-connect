@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --port 5174",
     "test:a11y": "node test/a11y.mjs",
-    "capture:roles": "node tools/capture-roles.mjs"
+    "capture:roles": "node tools/capture-roles.mjs",
+    "test:roles": "node test/roles-e2e.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

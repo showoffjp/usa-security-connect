@@ -226,3 +226,54 @@ export async function notifyPortalAccount({ client, sites = [], reset = false, l
       .join('\n'),
   });
 }
+
+/**
+ * Tell the contact who asked for extra coverage what became of it.
+ * `request` carries site_name, starts_at, ends_at, officers, status, response.
+ */
+export async function notifyCoverageRequestAnswered(request) {
+  const contact = request.client_user_id
+    ? await db
+        .prepare(`SELECT id, email, name FROM client_users WHERE id = ? AND status = 'active'`)
+        .get(request.client_user_id)
+    : null;
+  if (!contact) return 0;
+
+  const when = (iso) =>
+    new Date(iso).toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      timeZone: 'America/New_York',
+    });
+  const scheduled = request.status === 'scheduled';
+  await send({
+    to: contact.email,
+    name: contact.name,
+    kind: scheduled ? 'coverage_scheduled' : 'coverage_declined',
+    entity: 'coverage_request',
+    entityId: request.id,
+    subject: scheduled
+      ? `Extra coverage confirmed - ${request.site_name}`
+      : `Extra coverage request - ${request.site_name}`,
+    body: [
+      `Dear ${contact.name},`,
+      '',
+      scheduled
+        ? `Your request for extra coverage at ${request.site_name} has been scheduled.`
+        : `We are unable to cover your request for extra coverage at ${request.site_name}.`,
+      '',
+      `  From      ${when(request.starts_at)}`,
+      `  To        ${when(request.ends_at)}`,
+      `  Officers  ${request.officers}${request.armed ? ' (armed)' : ''}`,
+      request.response ? '' : null,
+      request.response ? `  Note      ${request.response}` : null,
+      '',
+      scheduled
+        ? 'The officers standing it will appear on the coverage record in your portal.'
+        : 'Reply to this email or call the office if you would like to talk it through.',
+      signOff(),
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
+  });
+  return 1;
+}

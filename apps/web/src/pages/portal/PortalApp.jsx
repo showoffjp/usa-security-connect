@@ -12,6 +12,7 @@ import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
 import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../components/ui.jsx';
 import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
+import PortalRequests from './PortalRequests.jsx';
 import {
   PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
 } from './PortalPages.jsx';
@@ -167,8 +168,9 @@ function PortalShell() {
     { to: '/portal/coverage', icon: 'clock', label: 'Coverage' },
     { to: '/portal/patrols', icon: 'route', label: 'Patrols' },
     { to: '/portal/incidents', icon: 'alert', label: 'Incidents' },
-    { to: '/portal/report', icon: 'clipboard', label: 'Daily report' },
+    { to: '/portal/report', icon: 'clipboard', label: 'Report' },
     { to: '/portal/invoices', icon: 'chart', label: 'Invoices' },
+    { to: '/portal/requests', icon: 'plus', label: 'Requests' },
   ];
 
   return (
@@ -199,7 +201,7 @@ function PortalShell() {
         <Outlet />
       </main>
 
-      <nav className="tabbar" aria-label="Main">
+      <nav className="tabbar tabbar-dense" aria-label="Main">
         {tabs.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? 'active' : '')}>
             <Icon name={t.icon} size={21} />
@@ -265,6 +267,7 @@ function PortalRoutes() {
         <Route path="incidents" element={<PortalIncidents sites={sites} />} />
         <Route path="report" element={<PortalReport sites={sites} />} />
         <Route path="invoices" element={<PortalInvoices />} />
+        <Route path="requests" element={<PortalRequests sites={sites} />} />
       </Route>
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

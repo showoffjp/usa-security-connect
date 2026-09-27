@@ -34,6 +34,7 @@ import { equipmentRouter } from './routes/equipment.js';
 import { adminReportsRouter } from './routes/adminReports.js';
 import { payrollRouter } from './routes/payroll.js';
 import { ensureDemoInstance } from './services/demoInstance.js';
+import { coverageRequestsRouter } from './routes/coverageRequests.js';
 
 export const app = express();
 
@@ -141,6 +142,7 @@ app.use('/api/admin/punches', punchesRouter);
 app.use('/api/admin/pay-rates', payRatesRouter);
 app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin/payroll', payrollRouter);
+app.use('/api/admin/coverage-requests', coverageRequestsRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

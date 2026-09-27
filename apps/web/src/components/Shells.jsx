@@ -203,6 +203,7 @@ export function AdminShell() {
         { to: '/admin/employees', icon: 'users', label: 'Employees' },
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
         { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
+        { to: '/admin/coverage-requests', icon: 'plus', label: 'Client requests', count: counts.coverageRequests, urgent: true },
         { to: '/admin/punches', icon: 'list', label: 'Punch log' },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay' },
         { to: '/admin/payroll', icon: 'dollar', label: 'Payroll', count: counts.payrollDue, urgent: true },

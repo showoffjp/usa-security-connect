@@ -52,6 +52,7 @@ const STAFF_PAGES = [
   ['Punch log', '/admin/punches'],
   ['Pay rates', '/admin/pay-rates'],
   ['Payroll', '/admin/payroll'],
+  ['Client requests', '/admin/coverage-requests'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],
   ['Pay period, to approve', '/admin/payroll/2'],
@@ -67,6 +68,7 @@ const PORTAL_PAGES = [
   ['Portal incidents', '/portal/incidents'],
   ['Portal daily report', '/portal/report'],
   ['Portal invoices', '/portal/invoices'],
+  ['Portal coverage requests', '/portal/requests'],
 ];
 
 let failures = 0;

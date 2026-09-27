@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { db } from '../lib/db.js';
-import { wrap, isoFields } from '../lib/http.js';
+import { wrap, isoFields, toDateString, sqlToIso } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import { splitOvertime, toHours } from '../shared.js';
 import { toSql } from '../services/compliance.js';
+import { loadPricedEntries, personPay } from '../services/payroll.js';
+import { dayString } from '../services/payPeriods.js';
 
 export const scheduleRouter = Router();
 scheduleRouter.use(requireAuth);
@@ -99,5 +101,69 @@ scheduleRouter.get(
       )
       .all(req.user.id));
     res.json({ flags: rows.map((r) => isoFields(r, ['occurred_at', 'resolved_at', 'created_at'])) });
+  })
+);
+
+/**
+ * What the signed-in person has been paid, and is earning this week.
+ *
+ * Closed pay periods come straight from the payroll lines frozen at close, so
+ * an officer sees exactly what was approved. This week is an estimate from the
+ * shared pricing, and says so.
+ */
+scheduleRouter.get(
+  '/my-pay',
+  wrap(async (req, res) => {
+    const stubs = await db
+      .prepare(
+        `SELECT l.minutes, l.regular_minutes, l.overtime_minutes, l.regular_pay_cents, l.overtime_pay_cents,
+                l.gross_cents, l.entries, l.sites, l.employment_type, l.pay_type,
+                p.id AS period_id, p.period_start, p.period_end, p.closed_at
+         FROM pay_period_lines l JOIN pay_periods p ON p.id = l.pay_period_id
+         WHERE l.user_id = ? AND p.status = 'closed'
+         ORDER BY p.period_start DESC LIMIT 26`
+      )
+      .all(req.user.id);
+
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const entries = await loadPricedEntries({ from: monday, to: new Date(), userId: req.user.id });
+    const week = entries.length ? personPay(entries) : null;
+
+    const u = req.user;
+    const dollars = (c) => (c == null ? null : c / 100);
+    res.json({
+      basis: {
+        employment_type: u.employment_type,
+        pay_type: u.pay_type,
+        pay_rate: dollars(u.pay_rate_cents),
+        salary: dollars(u.salary_cents),
+        overtime_multiplier: u.overtime_multiplier,
+        earns_overtime: u.employment_type === 'w2' && !u.exempt && u.pay_type === 'hourly',
+      },
+      thisWeek: {
+        from: toDateString(monday),
+        shifts: entries.length,
+        hours: toHours(week?.minutes || 0),
+        overtime_hours: toHours(week?.overtimeMinutes || 0),
+        estimated_pay: dollars(week?.payCents ?? 0),
+      },
+      stubs: stubs.map((s) => ({
+        period_id: s.period_id,
+        period_start: dayString(s.period_start),
+        period_end: dayString(s.period_end),
+        closed_at: sqlToIso(s.closed_at),
+        shifts: s.entries,
+        hours: toHours(s.minutes),
+        regular_hours: toHours(s.regular_minutes),
+        overtime_hours: toHours(s.overtime_minutes),
+        regular_pay: dollars(s.regular_pay_cents),
+        overtime_pay: dollars(s.overtime_pay_cents),
+        gross_pay: dollars(s.gross_cents),
+        sites: s.sites ? JSON.parse(s.sites) : [],
+        employment_type: s.employment_type,
+      })),
+    });
   })
 );

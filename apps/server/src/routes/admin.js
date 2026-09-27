@@ -177,6 +177,11 @@ adminRouter.get(
       )
       .get(toSql(new Date(Date.now() - RULES.lateGraceMinutes * 60000)))).n);
 
+    // Extra coverage clients have asked for and nobody has answered yet.
+    const coverageRequests = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM coverage_requests WHERE status = 'open'`)
+      .get()).n);
+
     // Pay periods that have ended and are still waiting to be closed.
     // Items that should have come back and have not: the officer holding them
     // is off the clock. The same condition the sweep flags on, so the badge and
@@ -225,6 +230,7 @@ adminRouter.get(
         lateOrOff: offPost + lateNow,
         payrollDue,
         equipmentOut,
+        coverageRequests,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
