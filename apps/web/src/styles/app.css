@@ -742,3 +742,10 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
 .demo-accounts .btn { box-sizing: border-box; width: 100%; justify-content: flex-start; gap: 10px; background: var(--surface); font-size: 0.85rem; white-space: normal; text-align: left; }
 .demo-accounts .demo-codes { flex: none; font-weight: 700; }
 .demo-accounts .demo-who { min-width: 0; }
+
+/* The self-contained demo says so on every page. */
+.demo-strip {
+  padding: 6px 16px; text-align: center; font-size: 0.8rem; line-height: 1.4;
+  background: #fdf0df; color: #6b4000; border-bottom: 1px solid #f0d7ae;
+}
+body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
