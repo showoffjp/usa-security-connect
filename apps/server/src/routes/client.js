@@ -745,3 +745,99 @@ clientRouter.get(
     });
   })
 );
+
+/* ------------------------------------------------- extra coverage ---- */
+
+const coverageFields = [
+  'id', 'site_id', 'starts_at', 'ends_at', 'officers', 'armed', 'reason', 'status',
+  'response', 'shifts_created', 'handled_at', 'created_at',
+];
+
+/** A request as the client sees it: no internal notes, no pay, no staff names. */
+const presentCoverage = (r) => {
+  const out = {};
+  for (const k of coverageFields) out[k] = r[k];
+  out.site_name = r.site_name;
+  out.armed = Boolean(r.armed);
+  return isoFields(out, ['starts_at', 'ends_at', 'handled_at', 'created_at']);
+};
+
+clientRouter.get(
+  '/coverage-requests',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = scope(req);
+    const rows = await db
+      .prepare(
+        `SELECT r.*, s.name AS site_name FROM coverage_requests r JOIN sites s ON s.id = r.site_id
+         WHERE r.site_id IN (${sc.sql}) ORDER BY r.created_at DESC LIMIT 100`
+      )
+      .all(...sc.ids);
+    res.json({ requests: rows.map(presentCoverage) });
+  })
+);
+
+const coverageSchema = z.object({
+  siteId: z.number().int().positive(),
+  startsAt: z.string().min(10),
+  endsAt: z.string().min(10),
+  officers: z.number().int().min(1, 'Ask for at least one officer.').max(10, 'For more than ten officers, call the office.'),
+  armed: z.boolean().default(false),
+  reason: z.string().trim().min(5, 'Tell us what the coverage is for.').max(1000),
+});
+
+clientRouter.post(
+  '/coverage-requests',
+  requireClient,
+  rateLimit({ windowMs: 60 * 60000, max: 20, key: (req) => `coverage:${req.client.id}` }),
+  wrap(async (req, res) => {
+    const body = parse(coverageSchema, req.body);
+    const siteId = assertSite(req, body.siteId);
+    const start = new Date(body.startsAt);
+    const end = new Date(body.endsAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new HttpError(422, 'Those times are not valid.');
+    }
+    if (start < new Date(Date.now() + 60 * 60000)) {
+      throw new HttpError(422, 'Coverage has to start at least an hour from now. For anything sooner, call the office.');
+    }
+    if (start > new Date(Date.now() + 120 * 86400000)) {
+      throw new HttpError(422, 'Requests can be made up to 120 days ahead.');
+    }
+    if (end <= start) throw new HttpError(422, 'The coverage has to end after it starts.');
+    if (end - start > 16 * 3600000) {
+      throw new HttpError(422, 'A single request can cover up to 16 hours. Make one request per shift for longer.');
+    }
+
+    const created = await db
+      .prepare(
+        `INSERT INTO coverage_requests (site_id, client_user_id, starts_at, ends_at, officers, armed, reason)
+         VALUES (?,?,?,?,?,?,?)`
+      )
+      .run(siteId, req.client.id, toSql(start), toSql(end), body.officers, body.armed, body.reason);
+    const id = Number(created.lastInsertRowid);
+    await audit(null, 'coverage_request.created', 'coverage_request', id, { client: req.client.id }, req.ip);
+    const row = await db
+      .prepare(`SELECT r.*, s.name AS site_name FROM coverage_requests r JOIN sites s ON s.id = r.site_id WHERE r.id = ?`)
+      .get(id);
+    res.status(201).json({ request: presentCoverage(row) });
+  })
+);
+
+clientRouter.post(
+  '/coverage-requests/:id/cancel',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = scope(req);
+    const row = await db
+      .prepare(`SELECT * FROM coverage_requests WHERE id = ? AND site_id IN (${sc.sql})`)
+      .get(Number(req.params.id), ...sc.ids);
+    if (!row) throw new HttpError(404, 'Request not found.');
+    if (row.status !== 'open') {
+      throw new HttpError(409, 'Only a request we have not answered yet can be withdrawn. Call the office to change it.');
+    }
+    await db.prepare(`UPDATE coverage_requests SET status = 'cancelled' WHERE id = ?`).run(row.id);
+    await audit(null, 'coverage_request.cancelled', 'coverage_request', row.id, { client: req.client.id }, req.ip);
+    res.json({ ok: true });
+  })
+);

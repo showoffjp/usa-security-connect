@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { fmtDate, fmtDateTime, fmtTime } from '../../lib/format.js';
+import { fmtDate, fmtDateShort, fmtDateTime, fmtTime, fmtMoney } from '../../lib/format.js';
 import { LoadingPage, Icon, Chip, StatusChip, Empty, useToast, Banner } from '../../components/ui.jsx';
 import { ROLE_LABEL, FLAG_LABEL, toHours } from '@shared/domain.js';
 
@@ -12,18 +12,21 @@ export default function ProfilePage() {
   const [hours, setHours] = useState(null);
   const [flags, setFlags] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [pay, setPay] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [h, f, e] = await Promise.all([
+        const [h, f, e, p] = await Promise.all([
           api.get('/schedule/hours'),
           api.get('/schedule/my-flags'),
           api.get('/timeclock/entries?limit=12'),
+          api.get('/schedule/my-pay'),
         ]);
         setHours(h);
         setFlags(f.flags);
         setEntries(e.entries);
+        setPay(p);
       } catch (err) {
         toast.error(err.message);
       }
@@ -177,6 +180,8 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {pay && <MyPay pay={pay} />}
+
       <div className="card">
         <div className="card-head">
           <h3>Recent clock history</h3>
@@ -227,6 +232,109 @@ export default function ProfilePage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+const money = (dollars) => (dollars == null ? '--' : fmtMoney(Math.round(dollars * 100)));
+
+/** What this person has been paid, period by period, and is earning this week. */
+function MyPay({ pay }) {
+  const { basis, thisWeek, stubs } = pay;
+  const contractor = basis.employment_type === '1099';
+  const rateText =
+    basis.pay_type === 'salary'
+      ? `Salaried${basis.salary != null ? `, ${money(basis.salary)} per period` : ''}`
+      : basis.pay_type === 'per_shift'
+        ? `${money(basis.pay_rate)} per shift`
+        : `${money(basis.pay_rate)} an hour${basis.earns_overtime ? `, ${basis.overtime_multiplier || 1.5}x past 40 hours a week` : ''}`;
+
+  return (
+    <div className="card">
+      <div className="card-head wrap">
+        <h3>{contractor ? 'My payments' : 'My pay'}</h3>
+        <span className="small muted">
+          {contractor ? '1099 contractor' : 'W-2 employee'} · {rateText}
+        </span>
+      </div>
+      <div className="card-body stack">
+        <div className="grid grid-3">
+          <div className="stat">
+            <div className="label">This week so far</div>
+            <div className="value">{money(thisWeek.estimated_pay)}</div>
+            <div className="foot">
+              {thisWeek.hours}h over {thisWeek.shifts} shift{thisWeek.shifts === 1 ? '' : 's'} · estimate
+            </div>
+          </div>
+          <div className="stat">
+            <div className="label">Overtime this week</div>
+            <div className="value">{basis.earns_overtime ? `${thisWeek.overtime_hours}h` : '--'}</div>
+            <div className="foot">{basis.earns_overtime ? 'Hours past 40' : 'Not paid overtime'}</div>
+          </div>
+          <div className="stat">
+            <div className="label">Last pay period</div>
+            <div className="value">{stubs[0] ? money(stubs[0].gross_pay) : '--'}</div>
+            <div className="foot">
+              {stubs[0] ? `${fmtDateShort(stubs[0].period_start)} to ${fmtDateShort(stubs[0].period_end)}` : 'None closed yet'}
+            </div>
+          </div>
+        </div>
+        <p className="tiny muted" style={{ margin: 0 }}>
+          This week is worked out from your punches so far and may change until payroll is approved. Closed periods
+          below are exactly what was approved for payment{contractor ? '' : ', before taxes and deductions'}.
+        </p>
+      </div>
+      {stubs.length === 0 ? (
+        <Empty icon="dollar" title="No closed pay periods yet">
+          Your pay for each period appears here once payroll closes it.
+        </Empty>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <caption className="sr-only">{contractor ? 'Payments' : 'Pay'} by pay period</caption>
+            <thead>
+              <tr>
+                <th>Pay period</th>
+                <th className="num">Hours</th>
+                <th className="num">Regular</th>
+                <th className="num">Overtime</th>
+                <th className="num">Gross</th>
+                <th>Where</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stubs.map((s) => (
+                <tr key={s.period_id}>
+                  <td className="nowrap">
+                    {fmtDateShort(s.period_start)} to {fmtDate(s.period_end)}
+                    <div className="tiny muted">{s.shifts} shift{s.shifts === 1 ? '' : 's'}</div>
+                  </td>
+                  <td className="num">{s.hours}h</td>
+                  <td className="num small">{money(s.regular_pay)}</td>
+                  <td className="num small">
+                    {s.overtime_hours > 0 ? (
+                      <>
+                        {money(s.overtime_pay)}
+                        <div className="tiny muted">{s.overtime_hours}h</div>
+                      </>
+                    ) : (
+                      '--'
+                    )}
+                  </td>
+                  <td className="num strong">{money(s.gross_pay)}</td>
+                  <td className="small">
+                    {s.sites.map((x) => (
+                      <div key={x.site}>
+                        {x.site} <span className="tiny muted">{x.hours}h</span>
+                      </div>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

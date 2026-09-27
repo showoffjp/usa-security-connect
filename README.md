@@ -128,6 +128,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   tick off per-checkpoint tasks, or skip with a recorded reason. Required checkpoints
   block completion until they are dealt with.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
+- **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
+  week so far, and every closed pay period: hours, regular and overtime pay, gross and
+  where they worked, exactly as payroll approved it. A 1099 contractor sees *My
+  payments*, with no overtime.
 - **Broadcasts and training** — priority notices with read/acknowledge receipts, and
   required videos that cannot be marked complete until they have actually been watched.
 - **Messaging** with supervisors and dispatch.
@@ -166,6 +170,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   armed or unarmed, by percent or dollars) with a preview first. Every change - from
   this screen, a bulk raise or the employee record - lands in the rate history.
   Supervisors can read rates; only administrators can change them.
+- **Client requests** — extra coverage clients have asked for from the portal. A
+  supervisor schedules a request (which puts that many open shifts on one of the site's
+  posts, armed posts only for an armed request) or declines it with a reason the
+  client reads. The dashboard and menu count the ones waiting.
 - **Payroll** — weekly (or up to four-week) pay periods, each reviewed officer by
   officer: hours, regular and overtime pay, gross, sites worked, and what needs a second
   look (open shifts, corrected punches, off-site clock-ins, unresolved flags, missing
@@ -261,6 +269,11 @@ a PIN — and sees, for their own properties only:
   print straight to PDF.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
   printable document they can save as a PDF.
+- **Extra coverage requests** — the one thing a client can ask for: officers beyond the
+  standing roster for an event or a stretch of extra risk (date, times, how many, armed
+  or not, and what it is for). The office schedules it or declines it with a reason;
+  the client sees the answer in the portal and by email, and can withdraw a request
+  nobody has answered yet.
 
 What a client can never see: another client's property, any pay rate, classification or
 margin, an officer's employment record, or the internal review notes on an incident.
@@ -435,11 +448,20 @@ the server is running corrupts the data directory.
   punch log and its filters, pay-rate changes and history, bulk raises that touch
   exactly who they should, every report - with W-2 overtime recomputed week by week
   from the raw punches rather than trusted - and copying a week's roster.
+- **`test/requests.mjs`** — client coverage requests across the client/staff line: a
+  client sees and touches only their own property's requests, answering one puts exactly
+  that many open shifts on the right post and emails the client, and an officer's own
+  pay matches the payroll line it comes from to the cent.
+- **`apps/web/test/roles-e2e.mjs`** — signs in through the real screens as an
+  administrator, a supervisor, a W-2 officer, a 1099 contractor, an officer who must
+  change their PIN and a client, opens every screen each one is offered, and fails on
+  any refused or broken request, script error, error message, blank page or sideways
+  scroll. Ends with a client requesting coverage and a supervisor scheduling it.
 - **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 44 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 46 screens
 through axe-core. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
 

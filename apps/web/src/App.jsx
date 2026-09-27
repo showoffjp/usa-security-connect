@@ -40,6 +40,7 @@ import PunchesPage from './pages/admin/PunchesPage.jsx';
 import EquipmentPage from './pages/admin/EquipmentPage.jsx';
 import PayRatesPage from './pages/admin/PayRatesPage.jsx';
 import PayrollPage from './pages/admin/PayrollPage.jsx';
+import CoverageRequestsPage from './pages/admin/CoverageRequestsPage.jsx';
 import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
 import ReportsPage from './pages/admin/ReportsPage.jsx';
 
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="equipment" element={<EquipmentPage />} />
         <Route path="pay-rates" element={<PayRatesPage />} />
         <Route path="payroll" element={<PayrollPage />} />
+        <Route path="coverage-requests" element={<CoverageRequestsPage />} />
         <Route path="payroll/:id" element={<PayrollPeriodPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="employees" element={<EmployeesPage />} />

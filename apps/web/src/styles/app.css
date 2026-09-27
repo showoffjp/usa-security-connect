@@ -130,9 +130,15 @@ a { color: var(--navy-600); }
 .stat {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 16px; box-shadow: var(--shadow-1);
+  min-width: 0;
 }
 .stat .label { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 650; }
-.stat .value { font-size: 1.85rem; font-weight: 750; letter-spacing: -0.03em; margin-top: 4px; }
+/* Money figures run long ($67,343.10); the size eases off before a tile can
+   clip them, and a figure that still cannot fit wraps rather than spilling. */
+.stat .value {
+  font-size: clamp(1.35rem, 0.9rem + 1.05vw, 1.85rem); font-weight: 750; letter-spacing: -0.03em;
+  margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
 .stat .foot { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
 .stat.alert { border-color: #f3c9c3; background: linear-gradient(180deg, #fff 0%, var(--danger-bg) 220%); }
 .stat.alert .value { color: var(--danger); }
@@ -285,6 +291,12 @@ table.data tr.clickable { cursor: pointer; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   text-decoration: none; color: var(--muted); font-size: 0.68rem; font-weight: 600;
   position: relative;
+}
+/* Labels shrink and clip rather than run into each other when a bar has many tabs. */
+.tabbar a { min-width: 0; padding: 0 2px; text-align: center; line-height: 1.15; }
+@media (max-width: 480px) {
+  .tabbar.tabbar-dense a { font-size: 0.6rem; letter-spacing: -0.01em; }
+  .tabbar.tabbar-dense a svg { width: 19px; height: 19px; }
 }
 .tabbar a.active { color: var(--brand-600); }
 .tabbar a.active::before {

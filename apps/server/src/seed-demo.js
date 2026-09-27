@@ -42,7 +42,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'time_off_requests', 'availability', 'certifications', 'device_tokens',
       'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
-      'post_pay_rates', 'equipment_assignments', 'equipment',
+      'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -1116,6 +1116,51 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   // Pay periods last, once the sweep has closed any shift left open, so the
   // approvals are pinned to the hours as they will stay.
   const payroll = await seedPayroll({ db, users });
+
+  // Extra coverage clients have asked for from the portal: one waiting for an
+  // answer, one already scheduled onto open shifts, one declined.
+  {
+    const contact = async (email) =>
+      (await db.prepare(`SELECT c.id, cs.site_id FROM client_users c JOIN client_sites cs ON cs.client_user_id = c.id
+                         WHERE c.email = ? ORDER BY cs.site_id LIMIT 1`).get(email));
+    const dana = await contact('dana.whitfield@riverfrontholdings.com');
+    const marcusR = await contact('marcus.reyes@palmettoridgehoa.org');
+    const alicia = await contact('alicia.grant@gulfportfreight.com');
+    const request = (c, startDays, startHour, hours, officers, armed, reason, extra = {}) =>
+      db.prepare(
+        `INSERT INTO coverage_requests (site_id, client_user_id, starts_at, ends_at, officers, armed, reason,
+           status, response, post_id, shifts_created, handled_by, handled_at, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        c.site_id, c.id, toSql(at(startDays, startHour)), toSql(at(startDays, startHour + hours)),
+        officers, armed, reason, extra.status || 'open', extra.response || null, extra.postId || null,
+        extra.shifts || 0, extra.by || null, extra.handledAt ? toSql(extra.handledAt) : null,
+        toSql(extra.created || at(-1, 15, 20))
+      );
+    if (dana) {
+      await request(dana, 5, 17, 6, 2, false,
+        'Tenant holiday reception in the main atrium, about 300 guests. Need two officers on the doors and lobby.');
+    }
+    if (marcusR) {
+      const gate = (await db.prepare(`SELECT id FROM posts WHERE site_id = ? ORDER BY id LIMIT 1`).get(marcusR.site_id)).id;
+      for (let i = 0; i < 1; i++) {
+        await db.prepare(
+          `INSERT INTO shifts (user_id, post_id, starts_at, ends_at, status, notes, created_by)
+           VALUES (NULL, ?, ?, ?, 'scheduled', ?, ?)`
+        ).run(gate, toSql(at(9, 18)), toSql(at(9, 24)), 'Extra coverage requested by the client', users.supervisor);
+      }
+      await request(marcusR, 9, 18, 6, 1, false,
+        'HOA annual meeting in the clubhouse - extra officer at the gate for visitor check-in.',
+        { status: 'scheduled', postId: gate, shifts: 1, by: users.supervisor, handledAt: at(-1, 9, 5), created: at(-2, 19, 40),
+          response: 'Scheduled - one officer at the main gate from 6 PM.' });
+    }
+    if (alicia) {
+      await request(alicia, 3, 22, 8, 2, true,
+        'High-value container arriving overnight; want two armed officers on the yard.',
+        { status: 'declined', by: users.admin, handledAt: at(-1, 11, 30), created: at(-2, 8, 15),
+          response: 'We cannot staff two armed officers on that notice. We can offer one armed officer - please call to confirm.' });
+    }
+  }
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 

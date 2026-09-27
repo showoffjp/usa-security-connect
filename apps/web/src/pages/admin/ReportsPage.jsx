@@ -299,7 +299,7 @@ export default function ReportsPage() {
                 </p>
               </div>
 
-              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {report.summary.map((s) => (
                   <Stat key={s.label} label={s.label} value={formatCell(s.value, s.type)} />
                 ))}

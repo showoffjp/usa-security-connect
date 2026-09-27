@@ -140,7 +140,7 @@ npm run verify --workspace @usc/server            # everything, in the right ord
 npm run verify --workspace @usc/server -- --fresh # wipe the database first
 ```
 
-584 checks across eleven suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
+674 checks across fourteen suites. The counts below are what the run reports. `verify.mjs` reseeds, starts the API, runs each
 suite and stops it. CI runs exactly this, plus the web build and a mobile
 bundle for both platforms.
 
@@ -156,6 +156,7 @@ bundle for both platforms.
 | `security.mjs` | 24 | set-password links, and the shared rate limiter |
 | `roles.mjs` | 51 | what each staff tier can and cannot reach |
 | `tracking.mjs` | 122 | location reports, walk-off flags, the live board, GPS tracks, the punch log, pay-rate changes and history, bulk raises, every report (overtime recomputed from raw punches), effective-dated rates, Timesheets / reports / invoice cost agreeing to the cent, ranking who can cover a shift, eligibility enforced on direct assignment with an audited override, copying a week |
+| `requests.mjs` | 40 | client coverage requests across the client/staff line (own property only, validation, answered once, the right number of open shifts on the right post, armed requests on armed posts, the client emailed and shown the answer, withdrawal) and an officer's own pay matching the payroll line to the cent |
 | `payroll.mjs` | 69 | pay periods in whole payroll weeks, per-officer approval pinned to a fingerprint of the hours and rates, "changed since approved" after a corrected punch, overtime checked against the raw hours and pay against the reports to the cent, closing, every back-door change to a closed period refused (punch corrections, moving an entry in, back-dated and bulk rates), reopening with a reason, the payroll register CSV, the audit trail |
 
 `verify.mjs` gives the API under test a cron secret, a two-second ping-thinning
@@ -163,7 +164,7 @@ gap and a larger login allowance. Each is an environment variable with a
 production default; none of them should be set in production.
 
 There is also an accessibility audit, run separately because it needs a
-browser: `npm run test:a11y --workspace @usc/web` drives all 44 screens
+browser: `npm run test:a11y --workspace @usc/web` drives all 46 screens
 through axe-core with the API and web app running.
 
 **The suites are mostly adversarial, deliberately.** `portal.mjs` walks every

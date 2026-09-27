@@ -164,6 +164,26 @@ The list at the foot of the pay rates screen is every differential on file.
   open. Supervisors can read payroll; only administrators can approve, close, reopen
   or export.
 
+## Client coverage requests
+
+A client can ask for officers beyond their standing roster from the portal's
+**Requests** tab: a date, a start and finish (a finish earlier than the start runs past
+midnight), how many officers (1-10), whether they must be armed, and what it is for.
+It has to start at least an hour ahead and no more than 120 days out, and one request
+covers up to 16 hours. Anything sooner is a phone call.
+
+Requests land in **Workforce -> Client requests**, counted on the menu and the
+dashboard. A supervisor or administrator answers each one once:
+
+- **Schedule** puts that many *unassigned* open shifts on the post you choose - one of
+  that site's posts, and an armed post if the client asked for armed officers. Staff
+  them from the schedule as usual; the shifts carry a note saying which request they
+  came from. An optional note goes to the client with the confirmation.
+- **Decline** needs a reason, which the client reads in the portal and in the email.
+
+The client is emailed either way. They can withdraw a request until it is answered;
+after that, changes go through the office.
+
 ## Reports
 
 Every report is built from the same rows as the timesheet and invoice, so the numbers
