@@ -4,7 +4,12 @@ import { useAuth } from '../src/auth.jsx';
 import { Shield, Button, Field, Input, Banner } from '../src/ui.jsx';
 import { C, S } from '../src/theme.js';
 
-const PIN_LENGTH = 4;
+/**
+ * PINs are 4 to 6 digits. A six-digit PIN signs in by itself; a shorter one
+ * with the Sign in button.
+ */
+const PIN_MIN = 4;
+const PIN_MAX = 6;
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
@@ -28,11 +33,11 @@ export default function LoginScreen() {
   };
 
   useEffect(() => {
-    if (pin.length === PIN_LENGTH && !busy) attempt(pin);
+    if (pin.length === PIN_MAX && !busy) attempt(pin);
   }, [pin]);
 
   const press = (digit) => {
-    if (busy || pin.length >= PIN_LENGTH) return;
+    if (busy || pin.length >= PIN_MAX) return;
     setPin((p) => p + digit);
   };
 
@@ -100,11 +105,11 @@ export default function LoginScreen() {
               </View>
 
               <Text style={[S.small, S.muted, { textAlign: 'center' }]}>
-                Enter your {PIN_LENGTH}-digit PIN
+                Enter your PIN
               </Text>
 
               <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 13 }}>
-                {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+                {Array.from({ length: Math.max(PIN_MIN, pin.length) }).map((_, i) => (
                   <View
                     key={i}
                     style={{
@@ -153,6 +158,13 @@ export default function LoginScreen() {
                   );
                 })}
               </View>
+
+              <Button
+                title={busy ? 'Signing in...' : 'Sign in'}
+                variant="primary"
+                disabled={busy || pin.length < PIN_MIN}
+                onPress={() => attempt(pin)}
+              />
             </View>
           )}
 

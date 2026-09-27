@@ -52,6 +52,8 @@ async function staffSignIn(page, code, pin) {
   await page.click('button[type="submit"]');
   await page.waitForSelector('.keypad', { timeout: 5000 });
   for (const digit of pin) await page.click(`.keypad button:text-is("${digit}")`);
+  // PINs shorter than six digits are sent with the Sign in button.
+  if (pin.length < 6) await page.click('button:text-is("Sign in")');
   await page.waitForTimeout(1800);
 }
 

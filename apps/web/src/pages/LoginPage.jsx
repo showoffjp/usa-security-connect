@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { Shield, Icon, Spinner, Banner } from '../components/ui.jsx';
 
-const PIN_LENGTH = 4;
+/**
+ * PINs are 4 to 6 digits: the server accepts either, a reset can issue six and
+ * the first administrator's is six. A six-digit PIN signs in by itself; a
+ * shorter one with the Sign in button or Enter.
+ */
+const PIN_MIN = 4;
+const PIN_MAX = 6;
 
 /** Shown only on a self-contained demo deployment, whose accounts are public. */
 const DEMO_ACCOUNTS = [
@@ -66,10 +72,14 @@ export default function LoginPage() {
   };
 
   const pressKey = (digit) => {
-    if (busy || pin.length >= PIN_LENGTH) return;
+    if (busy || pin.length >= PIN_MAX) return;
     const next = pin + digit;
     setPin(next);
-    if (next.length === PIN_LENGTH) attempt(next);
+    if (next.length === PIN_MAX) attempt(next);
+  };
+
+  const submitPin = () => {
+    if (!busy && pin.length >= PIN_MIN) attempt(pin);
   };
 
   // Let a physical keyboard drive the keypad too - most posts have one.
@@ -77,6 +87,7 @@ export default function LoginPage() {
     if (step !== 'pin') return;
     const onKey = (e) => {
       if (/^[0-9]$/.test(e.key)) pressKey(e.key);
+      else if (e.key === 'Enter') submitPin();
       else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1));
       else if (e.key === 'Escape') {
         setStep('code');
@@ -167,10 +178,10 @@ export default function LoginPage() {
 
             <div>
               <div className="center small muted" style={{ marginBottom: 8 }}>
-                Enter your {PIN_LENGTH}-digit PIN
+                Enter your PIN
               </div>
               <div className="pin-display" aria-hidden="true">
-                {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+                {Array.from({ length: Math.max(PIN_MIN, pin.length) }).map((_, i) => (
                   <span key={i} className={`pin-dot${i < pin.length ? ' filled' : ''}`} />
                 ))}
               </div>
@@ -220,6 +231,16 @@ export default function LoginPage() {
                   Delete
                 </button>
               </div>
+            )}
+            {!busy && (
+              <button
+                type="button"
+                className="btn btn-primary btn-lg btn-block"
+                onClick={submitPin}
+                disabled={pin.length < PIN_MIN}
+              >
+                Sign in
+              </button>
             )}
           </div>
         )}
