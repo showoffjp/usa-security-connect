@@ -4,8 +4,8 @@
  *   npm run seed            -> fills an empty database, leaves existing data alone
  *   npm run reset           -> wipes everything first
  *
- * Also run by services/bootstrap.js when a deployment starts against a
- * database with no accounts at all, so a fresh site can be signed in to.
+ * Also run by services/demoInstance.js to fill the throwaway database of a
+ * deployment that has no database configured.
  *
  * Every account below uses a fixed PIN so the demo is reproducible. Real
  * accounts get a random PIN from the admin screen instead.

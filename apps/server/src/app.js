@@ -8,7 +8,7 @@
 
 import express from 'express';
 import cors from 'cors';
-import { migrate, db } from './lib/db.js';
+import { migrate, db, demoInstance } from './lib/db.js';
 import { errorHandler, wrap, HttpError } from './lib/http.js';
 import { requireAuth } from './lib/auth.js';
 import { sweep } from './services/compliance.js';
@@ -32,6 +32,7 @@ import { liveRouter, punchesRouter } from './routes/operations.js';
 import { payRatesRouter } from './routes/payRates.js';
 import { adminReportsRouter } from './routes/adminReports.js';
 import { payrollRouter } from './routes/payroll.js';
+import { ensureDemoInstance } from './services/demoInstance.js';
 
 export const app = express();
 
@@ -51,12 +52,20 @@ app.use(express.json({ limit: '2mb' }));
  */
 let ready = null;
 app.use((_req, _res, next) => {
-  ready ??= migrate();
-  ready.then(() => next(), next);
+  // A deployment with no database is a self-contained demo; it fills its own
+  // throwaway database first. With a database configured this is migrate().
+  ready ??= demoInstance ? ensureDemoInstance() : migrate();
+  ready.then(
+    () => next(),
+    (err) => {
+      ready = null;
+      next(err);
+    }
+  );
 });
 
 app.get('/api/health', (_req, res) =>
-  res.json({ ok: true, service: 'USA Security Connect API', time: new Date().toISOString() })
+  res.json({ ok: true, service: 'USA Security Connect API', time: new Date().toISOString(), demo: demoInstance })
 );
 
 /** Sites and posts an officer may need to pick from when clocking in. */

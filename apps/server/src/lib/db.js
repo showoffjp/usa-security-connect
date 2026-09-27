@@ -26,10 +26,19 @@ export const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL
 export const usingNeon = Boolean(DATABASE_URL);
 
 /**
+ * A Vercel deployment with no database configured runs as a self-contained
+ * demo: each server instance keeps its own throwaway database in /tmp and
+ * fills it with the demo company (see services/demoInstance.js). It never
+ * connects to any shared database, and nothing in it outlives the instance.
+ */
+export const demoInstance = !usingNeon && Boolean(process.env.VERCEL);
+
+/**
  * Local uploads directory. Only used when blob storage is not configured;
  * see services/storage.js.
  */
-const DATA_DIR = process.env.USC_DATA_DIR || path.resolve(__dirname, '../../data');
+const DATA_DIR =
+  process.env.USC_DATA_DIR || (demoInstance ? '/tmp/usc-demo' : path.resolve(__dirname, '../../data'));
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 /* --------------------------------------------------------------- driver -- */
@@ -73,7 +82,7 @@ async function connect() {
   // PGlite keeps its database on disk, and a serverless bundle is read-only,
   // so falling back to it there fails deep inside mkdir with an EROFS trace
   // that says nothing about the actual mistake. Say the actual mistake.
-  if (process.env.VERCEL) {
+  if (process.env.VERCEL && !demoInstance) {
     throw new Error(
       'DATABASE_URL is not set. A serverless deployment needs a hosted Postgres ' +
         '(Neon, using its pooled connection string); the local PGlite database ' +
