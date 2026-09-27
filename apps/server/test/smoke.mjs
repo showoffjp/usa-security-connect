@@ -170,6 +170,17 @@ log(goodPin.status === 200 && goodPin.data.user.must_change_pin === false, 'PIN 
 const reset = await call(`/admin/employees/${created.data.employee.id}/reset-pin`, { token: aTok, method: 'POST' });
 log(reset.status === 200 && /^\d{4}$/.test(reset.data?.pin || ''), 'admin PIN reset', reset.data?.pin);
 
+// A six-digit PIN - what a reset can issue and what the first administrator
+// is given - has to sign in like any other.
+const reset6 = await call(`/admin/employees/${created.data.employee.id}/reset-pin`, {
+  token: aTok, method: 'POST', body: { length: 6 },
+});
+log(reset6.status === 200 && /^\d{6}$/.test(reset6.data?.pin || ''), 'a six-digit PIN can be issued', reset6.data?.pin);
+const login6 = await call('/auth/login', {
+  method: 'POST', body: { employeeCode: created.data.employee.employee_code, pin: reset6.data?.pin },
+});
+log(login6.status === 200 && Boolean(login6.data?.token), 'and signs in');
+
 const timesheets = await call('/admin/timesheets', { token: aTok });
 log(timesheets.status === 200 && timesheets.data.rows.length > 0, 'timesheets',
   `top: ${timesheets.data?.rows?.[0]?.officer} ${timesheets.data?.rows?.[0]?.hours}h`);
