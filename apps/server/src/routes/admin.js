@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { db, audit } from '../lib/db.js';
+import { db, audit, demoInstance } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
 import { requireAuth, requireRole, hashPin, generatePin, generateEmployeeCode, publicUser } from '../lib/auth.js';
 import {
@@ -660,6 +660,9 @@ adminRouter.post(
     const user = (await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id));
     if (!user) throw new HttpError(404, 'Employee not found.');
 
+    if (demoInstance) {
+      throw new HttpError(403, 'PINs cannot be reset on the demo site, so everyone can keep using the published ones.');
+    }
     const length = Number(req.body?.length) === 6 ? 6 : 4;
     const pin = generatePin(length);
     const { hash, salt } = hashPin(pin);

@@ -39,15 +39,54 @@ Around those eight, the seed builds a regional operation: **ten client sites** f
 Pensacola to Miami, **43 staff** (27 W-2, 8 1099 contractors, 4 armed), a month of
 rosters, 6,000+ GPS points, and a live "right now" whatever hour you seed it - officers
 on post, one who has walked off it, one on a meal break, one whose phone has gone
-quiet, one running late and one who never turned up. A few of the regional accounts:
+quiet, one running late and one who never turned up. Every one of them can sign in:
+
+<details>
+<summary>All 35 regional accounts, 1009-1043</summary>
 
 | Code | PIN | Who | Notes |
 |------|-----|-----|-------|
-| `1009` | `8271` | Terrence Boyd | Supervisor, South Florida |
-| `1010` | `7190` | Megan Hollis | Supervisor, North Florida, armed |
-| `1014` | `2866` | Keisha Turner | Officer, 12-hour nights at Harborview (overtime) |
-| `1020` | `5380` | Raymond Hayes | **1099**, armed garage post in Tallahassee |
-| `1028` | `5732` | Victor Morales | **1099**, armed warehouse post in Pensacola |
+| `1009` | `8271` | Terrence Boyd | Supervisor, W-2, Miami |
+| `1010` | `7190` | Megan Hollis | Supervisor, W-2, armed, Tallahassee |
+| `1011` | `6109` | Andre Mitchell | Officer, W-2, Miami |
+| `1012` | `5028` | Sofia Ramirez | Officer, W-2, Miami |
+| `1013` | `3947` | Jamal Whitaker | Officer, W-2, Hialeah |
+| `1014` | `2866` | Keisha Turner | Officer, W-2, Miami |
+| `1015` | `1785` | Daniel Cho | Officer, W-2, Miami |
+| `1016` | `9704` | Tyler Brooks | Officer, W-2, St. Petersburg |
+| `1017` | `8623` | Hector Alvarado | Officer, **1099**, St. Petersburg |
+| `1018` | `7542` | Brianna Scott | Officer, W-2, Tallahassee |
+| `1019` | `6461` | Owen Gallagher | Officer, W-2, Tallahassee |
+| `1020` | `5380` | Raymond Hayes | Officer, **1099**, armed, Tallahassee |
+| `1021` | `4299` | Emily Novak | Officer, W-2, Gainesville |
+| `1022` | `3218` | Christopher Lane | Officer, W-2, Gainesville |
+| `1023` | `2137` | Isaiah Coleman | Officer, W-2, Gainesville |
+| `1024` | `1056` | Natalie Price | Officer, W-2, Daytona Beach |
+| `1025` | `8975` | Luis Castillo | Officer, **1099**, Daytona Beach |
+| `1026` | `7894` | Wesley Tate | Officer, W-2, Pensacola |
+| `1027` | `6813` | Denise Holloway | Officer, W-2, Pensacola |
+| `1028` | `5732` | Victor Morales | Officer, **1099**, armed, Pensacola |
+| `1029` | `4651` | Tanisha Greene | Officer, W-2, Miami |
+| `1030` | `3570` | Cody Fletcher | Officer, W-2, Pensacola |
+| `1031` | `2489` | Jasmine Reed | Officer, W-2, Pensacola |
+| `1032` | `1408` | Gabriel Santos | Officer, W-2, Miami |
+| `1033` | `9327` | Priya Nair | Officer, W-2, Coral Gables |
+| `1034` | `8246` | Ethan Walsh | Officer, W-2, St. Petersburg |
+| `1035` | `7165` | Olivia Bennett | Officer, W-2, Tallahassee |
+| `1036` | `6084` | Darnell Hughes | Officer, **1099**, armed, Tallahassee |
+| `1037` | `5003` | Chloe Martin | Officer, W-2, Gainesville |
+| `1038` | `3922` | Mason Clark | Officer, W-2, Gainesville |
+| `1039` | `2841` | Grace Kim | Officer, W-2, Ormond Beach |
+| `1040` | `1760` | Jordan Ellis | Officer, W-2, Gainesville |
+| `1041` | `9679` | Brandon Moss | Officer, **1099**, Daytona Beach |
+| `1042` | `8598` | Alexis Rivera | Officer, W-2, Tallahassee |
+| `1043` | `7517` | Samuel Ortiz | Officer, W-2, Pensacola — **on leave, cannot sign in (by design)** |
+
+</details>
+
+Samuel Ortiz (`1043`) is deliberately on leave, to show what an inactive account
+looks like: he is refused at sign-in with a message saying so, until a supervisor
+sets him back to active under Employees. Every other code above signs in.
 
 `npm run seed` prints every code and PIN, and who is on duty at that moment.
 

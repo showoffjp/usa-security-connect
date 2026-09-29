@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { db, audit } from '../lib/db.js';
+import { db, audit, demoInstance } from '../lib/db.js';
 import { HttpError, wrap, parse, rateLimit } from '../lib/http.js';
 import { authenticate, hashPin, verifyPin, publicUser, requireAuth, issueToken } from '../lib/auth.js';
 import { isWeakPin } from '../shared.js';
@@ -22,7 +22,14 @@ authRouter.post(
   // The overrides exist for the local test run, where a dozen suites sign the
   // same demo accounts in within five minutes. Production leaves them unset.
   rateLimit({ windowMs: 5 * 60000, max: Number(process.env.USC_LOGIN_LIMIT_PER_IP) || 60, key: (req) => `ip:${req.ip}` }),
-  rateLimit({ windowMs: 5 * 60000, max: Number(process.env.USC_LOGIN_LIMIT_PER_CODE) || 10, key: (req) => `code:${req.body?.employeeCode || 'none'}` }),
+  // On the demo site every visitor signs in to the same published accounts,
+  // whose PINs are public anyway, so the per-code limit would only lock
+  // strangers out of each other's tour.
+  rateLimit({
+    windowMs: 5 * 60000,
+    max: demoInstance ? 500 : Number(process.env.USC_LOGIN_LIMIT_PER_CODE) || 10,
+    key: (req) => `code:${req.body?.employeeCode || 'none'}`,
+  }),
   wrap(async (req, res) => {
     const { employeeCode, pin, deviceId } = parse(loginSchema, req.body);
     const { user, token } = await authenticate({ employeeCode, pin, ip: req.ip });
@@ -58,6 +65,11 @@ authRouter.post(
   '/change-pin',
   requireAuth,
   wrap(async (req, res) => {
+    // Each demo server keeps its own copy of the data, so a changed PIN would
+    // work on one and not the next. The published PINs stay as they are.
+    if (demoInstance) {
+      throw new HttpError(403, 'PINs cannot be changed on the demo site, so everyone can keep using the published ones.');
+    }
     const { currentPin, newPin } = parse(changePinSchema, req.body);
 
     if (!verifyPin(currentPin, req.user.pin_hash, req.user.pin_salt)) {

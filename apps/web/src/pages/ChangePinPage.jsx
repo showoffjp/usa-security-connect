@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { Shield, Field, Banner, Icon, Spinner } from '../components/ui.jsx';
 import { isWeakPin } from '@shared/domain.js';
+import { useDemo } from '../lib/demo.js';
 
 export default function ChangePinPage({ forced = false }) {
   const { changePin, signOut } = useAuth();
   const navigate = useNavigate();
+  const demo = useDemo();
   const [form, setForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
@@ -53,6 +55,13 @@ export default function ChangePinPage({ forced = false }) {
           <div style={{ marginBottom: 14 }}>
             <Banner kind="info" title="One more step">
               You are signed in with the temporary PIN your supervisor issued. Pick your own before you go on post.
+            </Banner>
+          </div>
+        )}
+        {demo && (
+          <div style={{ marginBottom: 14 }}>
+            <Banner kind="info" title="Not on the demo site">
+              Everyone shares these demo logins, so PINs stay as published. On your own site, officers change theirs here.
             </Banner>
           </div>
         )}
@@ -104,7 +113,7 @@ export default function ChangePinPage({ forced = false }) {
             />
           </Field>
 
-          <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
+          <button className="btn btn-primary btn-lg btn-block" disabled={busy || demo}>
             {busy ? <Spinner /> : <Icon name="check" size={18} />}
             {busy ? 'Saving' : 'Save PIN'}
           </button>

@@ -125,8 +125,11 @@ log(unapprove.status === 200, 'an approval can be taken back while the period is
 log((await call(`/admin/payroll/periods/${due.id}/approvals/${alicia.user_id}`, { token: admin, method: 'DELETE' })).status === 404,
   'but not twice');
 
+// Everyone not approved right now: the pending, Alicia again, and anyone
+// else whose seeded hours happen to have changed since their approval.
+const waiting = (await call(`/admin/payroll/periods/${due.id}`, { token: admin })).data.lines.filter((l) => l.approval.state !== 'approved');
 const all = await call(`/admin/payroll/periods/${due.id}/approve`, { token: admin, method: 'POST', body: {} });
-log(all.status === 200 && all.data.approved.length === pending.length + 1 && all.data.skipped.length === 0,
+log(all.status === 200 && waiting.length > pending.length && all.data.approved.length === waiting.length && all.data.skipped.length === 0,
   'approve-all approves everyone still waiting', `${all.data?.approved?.length} approved, ${all.data?.skipped?.length} skipped`);
 const ready = (await call(`/admin/payroll/periods/${due.id}`, { token: admin })).data;
 log(ready.totals.approved === ready.totals.people && ready.blockers.length === 0, 'with everyone approved, nothing stands in the way');

@@ -63,17 +63,30 @@ export async function request(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body) headers['Content-Type'] = 'application/json';
 
+  // A read is safe to repeat, so a dropped connection or a gateway hiccup
+  // (a serverless function still starting) is retried twice before the
+  // screen is told. Writes are never retried: the first may have landed.
+  const attempts = method === 'GET' ? 3 : 1;
   let res;
-  try {
-    res = await fetch(BASE + path, {
-      method,
-      headers,
-      body: formData ?? (body ? JSON.stringify(body) : undefined),
-      signal,
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') throw err;
-    throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await fetch(BASE + path, {
+        method,
+        headers,
+        body: formData ?? (body ? JSON.stringify(body) : undefined),
+        signal,
+      });
+      if (attempt < attempts && [502, 503, 504].includes(res.status)) throw new Error('gateway');
+      break;
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      if (attempt >= attempts) {
+        if (res) break;
+        throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
+      }
+      res = undefined;
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
   }
 
   if (res.status === 204) return null;

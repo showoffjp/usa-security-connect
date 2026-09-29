@@ -7,6 +7,27 @@
     <meta name="description" content="USA Security Connect - workforce operations for USA Security & Protection Group." />
     <title>USA Security Connect</title>
     <link rel="icon" href="/shield.svg" type="image/svg+xml" />
+    <script>
+      // If the app's stylesheet fails to load on a flaky connection, fetch it
+      // again rather than leave an unstyled page. Error events do not bubble,
+      // so this listens in the capture phase.
+      document.addEventListener(
+        'error',
+        function (e) {
+          var el = e.target;
+          if (!el || el.tagName !== 'LINK' || el.rel !== 'stylesheet' || el.href.indexOf('/assets/') < 0) return;
+          var tries = Number(el.getAttribute('data-retry') || 0);
+          if (tries >= 3) return;
+          var again = el.cloneNode();
+          again.setAttribute('data-retry', String(tries + 1));
+          again.href = el.href.split('?')[0] + '?retry=' + (tries + 1);
+          setTimeout(function () {
+            el.parentNode && el.parentNode.replaceChild(again, el);
+          }, 500 * (tries + 1));
+        },
+        true
+      );
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

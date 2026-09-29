@@ -201,6 +201,13 @@ export async function authenticateClient({ email, password, ip }) {
     throw new HttpError(403, 'This account is not active. Contact your account manager.');
   }
 
+  // The demo site publishes these passwords and every visitor shares them,
+  // so a few wrong guesses must not lock the account for everyone else.
+  if (demoInstance && !verifyPassword(password, client.password_hash, client.password_salt)) {
+    await audit(null, 'client.login_failed', 'client_user', client.id, null, ip);
+    throw new HttpError(401, 'Email or password is incorrect. On this demo site, check the details in the list above.');
+  }
+
   if (!verifyPassword(password, client.password_hash, client.password_salt)) {
     const attempts = client.failed_attempts + 1;
     const lock = attempts >= RULES.maxPinAttempts;

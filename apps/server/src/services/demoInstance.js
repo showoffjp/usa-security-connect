@@ -22,6 +22,8 @@ async function fill() {
   const started = Date.now();
   const { seedDemo } = await import('../seed-demo.js');
   await seedDemo({ log: () => {} });
+  // Nobody is forced to change a published PIN here; see routes/auth.js.
+  await db.prepare(`UPDATE users SET must_change_pin = false`).run();
   console.log(`[usc] demo instance filled in ${Date.now() - started} ms`);
 }
 

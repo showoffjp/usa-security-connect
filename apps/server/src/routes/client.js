@@ -14,7 +14,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { db, audit } from '../lib/db.js';
+import { db, audit, demoInstance } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields, rateLimit, parseDay, toDateString, sqlToIso } from '../lib/http.js';
 import {
   authenticateClient,
@@ -94,7 +94,10 @@ clientRouter.post(
     max: Number(process.env.USC_CLIENT_LOGIN_LIMIT_PER_IP) || 60,
     key: (req) => `ip:${req.ip}`,
   }),
-  rateLimit({ windowMs: 5 * 60000, max: 10, key: (req) => `email:${req.body?.email || 'none'}` }),
+  // Except on the demo site, where every visitor shares the published
+  // contacts and their passwords are public: there it would only lock
+  // strangers out of each other's tour.
+  rateLimit({ windowMs: 5 * 60000, max: demoInstance ? 500 : 10, key: (req) => `email:${req.body?.email || 'none'}` }),
   wrap(async (req, res) => {
     const body = parse(loginSchema, req.body);
     const { client, token } = await authenticateClient({ ...body, ip: req.ip });
@@ -165,6 +168,11 @@ clientRouter.post(
   '/change-password',
   requireClient,
   wrap(async (req, res) => {
+    // Each demo server keeps its own copy of the data, so a changed password
+    // would work on one and not the next. The published ones stay as they are.
+    if (demoInstance) {
+      throw new HttpError(403, 'Passwords cannot be changed on the demo site, so everyone can keep using the published ones.');
+    }
     const body = parse(
       z.object({
         currentPassword: z.string().min(1, 'Enter your current password.'),
