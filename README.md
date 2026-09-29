@@ -101,7 +101,7 @@ merely see more or less of the same screen — they get different applications.
 | | Officer `1003` | Supervisor `1002` | Administrator `1001` |
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
-| **Navigation** | 5 tabs | 24 destinations | 25 destinations |
+| **Navigation** | 5 tabs | 25 destinations | 26 destinations |
 | **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
 | **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes |
@@ -182,6 +182,17 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   - **Pass-down notes**: what one shift tells the next, marked important when it is.
     The next officer on the post sees the notes on their home screen, can read them
     up to twelve hours before the shift starts, and acknowledges each one.
+  - **Watchlist**: the people not to be let in at this site or any site, with a
+    description, vehicle, the reason, and what to do: refuse entry, call the police,
+    call the supervisor, or escort only. Every visitor sign-in is checked against
+    it by name, alias and plate. A match stops the sign-in and shows the entry. The
+    officer can let the person in anyway only by naming the entry and giving a
+    reason, such as the ID they checked, and that stays on the record.
+  - **Vehicles**: log a parking violation (fire lane, no permit, accessible bay,
+    blocking, abandoned, reserved) and what was done (warning, tagged, booted,
+    towed). Look up any plate first: its violations at every site, the visits it
+    came in with, and whether it is on the watchlist. Two or more in six months
+    marks it a repeat offender, and each row says which offence it is.
 - **Messaging** with supervisors and dispatch.
 - **Supervisor visits** (supervisors only) — uniform, post orders, equipment and site
   checks, logged with GPS.
@@ -204,6 +215,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Post logs** — everyone signed in at a site right now, with a count per site and in
   the sidebar; any day's visitor log; and every pass-down note with who has read it.
   The daily activity report lists the day's visitors.
+  The same screen keeps the **watchlist** (add, edit, lapse or remove entries, and
+  see every sign-in that overrode a match) and **vehicles** (repeat offenders by
+  plate, and every violation by site and period).
+- **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
+  ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
+  25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
+  half), clean record 15 (compliance flags per shift). A part with nothing to judge
+  is left out rather than scored as zero. Filter to those under 75.
 - **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
   officers outside their geofence, unfilled shifts, and a strip counting who is off
   post or has not clocked in for a shift that has started.
@@ -323,7 +342,8 @@ a PIN — and sees, for their own properties only:
 - **Daily activity report** — the same document the account manager reviews, laid out to
   print straight to PDF, including who came through the building: every visitor,
   contractor and delivery the officers signed in, when they arrived and left, and their
-  vehicle. The officer who logged them is not shown.
+  vehicle. The officer who logged them is not shown. Parking enforcement on the
+  property that day is listed too.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
   printable document they can save as a PDF.
 - **Extra coverage requests** — the one thing a client can ask for: officers beyond the
@@ -522,11 +542,17 @@ the server is running corrupts the data directory.
   visitor at another site, and cannot read or acknowledge another post's notes. A
   client sees only their own building's visitors, without the officer's name. Also
   checks the quick search: literal wildcards, and no PINs or pay in the results.
+- **`test/watch.mjs`** — the watchlist at the desk: matches on name (any case or
+  spacing), alias and plate, but not on a similar name, an expired entry or another
+  site's. An override needs the matching entry and a reason, and stays on the
+  record. Vehicle violations count a plate as the same however it is written. A
+  plate lookup shows a repeat offender and the visit it came in with. Scorecards
+  are bounded, ranked, and add up.
 - **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 52 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 58 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright

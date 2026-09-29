@@ -370,6 +370,39 @@ for (const u of STAFF) {
   await settle(client.page);
   log(await client.page.locator('li.list-item', { hasText: visitor }).count() === 1, "the client sees the visitor in today's daily report");
 
+  // The watchlist: a listed name is stopped at the desk.
+  await officer.page.click('button:has-text("Sign someone in")');
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.getByLabel('Full name').fill('Kyle Banner');
+  await officer.page.getByLabel('Here for').fill('Says he has a meeting');
+  await officer.page.click('[role="dialog"] button:has-text("Sign in")');
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('[role="dialog"]:has-text("matches the watchlist")').count() === 1,
+    'a watchlisted name is stopped with the instruction to follow');
+  log(await officer.page.locator('[role="dialog"] button:has-text("Sign in anyway")').isDisabled(),
+    'and cannot be waved through without a reason');
+  await officer.page.click('[role="dialog"] button:has-text("Do not sign in")');
+  officer.problems.splice(0); // the 409 above is the refusal being tested, not a fault
+
+  // A vehicle violation, then the plate's history.
+  await officer.page.goto(WEB + '/post-log?tab=vehicles');
+  await settle(officer.page);
+  const plate = `E2E${Date.now() % 10000}`;
+  await officer.page.click('button:has-text("Log violation")');
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.locator('[role="dialog"]').getByLabel('Plate').fill(plate);
+  await officer.page.getByLabel('Where').fill('Fire lane, east door');
+  await officer.page.click('[role="dialog"] button:has-text("Log violation")');
+  await officer.page.waitForTimeout(1500);
+  log(await officer.page.locator('li.list-item', { hasText: plate }).count() === 1, 'a vehicle violation is logged');
+  await checkScreen('officer: vehicles', officer.page, officer.problems);
+  await officer.page.fill('#plate-lookup', 'GHT 4410');
+  await officer.page.click('button:has-text("Check")');
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('text=Repeat offender').count() > 0, 'looking up a plate with a history flags a repeat offender');
+  await officer.page.goto(WEB + '/post-log?tab=visitors');
+  await settle(officer.page);
+
   // Sign them back out so a rerun starts clean.
   await officer.page.locator('li.list-item', { hasText: visitor }).locator('button:has-text("Sign out")').click();
   await officer.page.waitForTimeout(1200);

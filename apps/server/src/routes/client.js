@@ -746,6 +746,14 @@ clientRouter.get(
          ORDER BY arrived_at`
       )
       .all(siteId, from, to);
+    const vehicles = await db
+      .prepare(
+        `SELECT id, plate, plate_state, vehicle_desc, location_text, violation, action, occurred_at
+         FROM vehicle_violations
+         WHERE site_id = ? AND occurred_at >= ? AND occurred_at < ?
+         ORDER BY occurred_at`
+      )
+      .all(siteId, from, to);
     const onSiteNow = await db
       .prepare(`SELECT COUNT(*) AS n FROM visitor_log WHERE site_id = ? AND departed_at IS NULL`)
       .get(siteId);
@@ -755,6 +763,7 @@ clientRouter.get(
       site,
       visitors: visitors.map((v) => isoFields(v, ['arrived_at', 'departed_at'])),
       visitorsOnSiteNow: Number(onSiteNow.n),
+      vehicles: vehicles.map((v) => isoFields(v, ['occurred_at'])),
       totalHours: toHours(coverage.reduce((sum, c) => sum + (c.minutes_worked || 0), 0)),
       coverage: coverage.map((c) => ({
         ...isoFields(c, ['clock_in_at', 'clock_out_at']),

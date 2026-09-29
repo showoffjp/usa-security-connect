@@ -277,6 +277,33 @@ export default function DarPage() {
         </div>
       )}
 
+      {/* ----------------------------------------------------- vehicles -- */}
+      {data.vehicles?.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Parking enforcement</h3>
+            <span className="small muted">{data.vehicles.length}</span>
+          </div>
+          <div className="list">
+            {data.vehicles.map((v) => (
+              <div key={v.id} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+                <div className="grow">
+                  <div className="small strong">
+                    <span className="mono">{v.plate}</span> - {v.violation.replace('_', ' ')}, {v.action}
+                  </div>
+                  <div className="tiny muted">
+                    {v.site_name}
+                    {v.location_text ? ` · ${v.location_text}` : ''}
+                    {v.logged_by_name ? ` · ${v.logged_by_name}` : ''}
+                  </div>
+                </div>
+                <div className="nowrap small muted">{fmtTime(v.occurred_at)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ------------------------------------------------------- visits -- */}
       {data.visits.length > 0 && (
         <div className="card">

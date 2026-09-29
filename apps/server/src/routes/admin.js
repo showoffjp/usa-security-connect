@@ -1874,3 +1874,146 @@ adminRouter.get(
     });
   })
 );
+
+/* -------------------------------------------------------- scorecards --- */
+
+/**
+ * Officer scorecards: how each officer has actually worked over a period,
+ * from the records already kept - never a supervisor's impression.
+ *
+ * The score (0-100) weighs what a client notices first:
+ *   35  punctuality   clocked in within the grace period of the shift start
+ *   25  attendance    shifts worked out of shifts that should have been
+ *   25  check-ins     answered in their window (a late answer counts half)
+ *   15  clean record  fewer compliance flags per shift worked
+ * A part with nothing to judge (no check-ins due, say) is left out and the
+ * rest scaled up, so an officer is not marked down for what never came up.
+ */
+adminRouter.get(
+  '/scorecards',
+  wrap(async (req, res) => {
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 180);
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86400000);
+    const f = toSql(from);
+    const t = toSql(to);
+    const grace = RULES.lateGraceMinutes;
+
+    const people = await db
+      .prepare(
+        `SELECT id, employee_code, first_name, last_name, role, employment_type, status
+         FROM users WHERE role IN ('officer', 'supervisor') AND status = 'active' ORDER BY last_name, first_name`
+      )
+      .all();
+    const byUser = (rows) => new Map(rows.map((r) => [r.user_id, r]));
+
+    // Shifts that have ended (or begun) in the window, and whether they were worked.
+    const shifts = byUser(
+      await db
+        .prepare(
+          `SELECT sh.user_id,
+                  COUNT(*) AS due,
+                  SUM(CASE WHEN te.id IS NOT NULL THEN 1 ELSE 0 END) AS worked,
+                  SUM(CASE WHEN te.id IS NULL AND sh.status IN ('missed', 'no_show') THEN 1 ELSE 0 END) AS missed,
+                  SUM(CASE WHEN te.id IS NOT NULL
+                            AND te.clock_in_at <= sh.starts_at + make_interval(mins => ?) THEN 1 ELSE 0 END) AS on_time,
+                  AVG(CASE WHEN te.id IS NOT NULL AND te.clock_in_at > sh.starts_at + make_interval(mins => ?)
+                           THEN EXTRACT(EPOCH FROM (te.clock_in_at - sh.starts_at)) / 60 END) AS avg_late
+           FROM shifts sh
+           LEFT JOIN LATERAL (
+             SELECT id, clock_in_at FROM time_entries x WHERE x.shift_id = sh.id ORDER BY x.clock_in_at LIMIT 1
+           ) te ON true
+           WHERE sh.user_id IS NOT NULL AND sh.starts_at >= ? AND sh.starts_at < ? AND sh.status <> 'cancelled'
+           GROUP BY sh.user_id`
+        )
+        .all(grace, grace, f, t)
+    );
+    const hours = byUser(
+      await db
+        .prepare(
+          `SELECT user_id, COALESCE(SUM(minutes_worked), 0) AS minutes FROM time_entries
+           WHERE clock_in_at >= ? AND clock_in_at < ? GROUP BY user_id`
+        )
+        .all(f, t)
+    );
+    const checks = byUser(
+      await db
+        .prepare(
+          `SELECT user_id,
+                  SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS ok,
+                  SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) AS late,
+                  SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS missed
+           FROM status_checks WHERE due_at >= ? AND due_at < ? GROUP BY user_id`
+        )
+        .all(f, t)
+    );
+    const tours = byUser(
+      await db
+        .prepare(
+          `SELECT user_id, COUNT(*) AS runs,
+                  SUM(CASE WHEN status LIKE 'completed%' THEN 1 ELSE 0 END) AS completed
+           FROM tour_runs WHERE started_at >= ? AND started_at < ? GROUP BY user_id`
+        )
+        .all(f, t)
+    );
+    const incidents = byUser(
+      await db.prepare(`SELECT user_id, COUNT(*) AS n FROM incidents WHERE occurred_at >= ? AND occurred_at < ? GROUP BY user_id`).all(f, t)
+    );
+    const flags = byUser(
+      await db
+        .prepare(
+          `SELECT user_id, COUNT(*) AS n, SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical
+           FROM flags WHERE occurred_at >= ? AND occurred_at < ? GROUP BY user_id`
+        )
+        .all(f, t)
+    );
+
+    const n = (v) => Number(v || 0);
+    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
+
+    const cards = people
+      .map((p) => {
+        const s = shifts.get(p.id) || {};
+        const c = checks.get(p.id) || {};
+        const tr = tours.get(p.id) || {};
+        const fl = flags.get(p.id) || {};
+        const worked = n(s.worked);
+        const due = worked + n(s.missed);
+        const checksDue = n(c.ok) + n(c.late) + n(c.missed);
+        const parts = [
+          [35, worked ? n(s.on_time) / worked : null],
+          [25, due ? worked / due : null],
+          [25, checksDue ? (n(c.ok) + n(c.late) * 0.5) / checksDue : null],
+          [15, worked ? Math.max(0, 1 - n(fl.n) / worked / 2) : null],
+        ].filter(([, v]) => v !== null);
+        const weight = parts.reduce((a, [w]) => a + w, 0);
+        const score = weight ? Math.round(parts.reduce((a, [w, v]) => a + w * v, 0) / weight * 100) : null;
+        return {
+          id: p.id,
+          employee_code: p.employee_code,
+          name: `${p.first_name} ${p.last_name}`,
+          role: p.role,
+          employment_type: p.employment_type,
+          score,
+          shifts: { due, worked, missed: n(s.missed), onTime: n(s.on_time), onTimePct: pct(n(s.on_time), worked), avgLateMin: s.avg_late ? Math.round(Number(s.avg_late)) : 0 },
+          hours: toHours(n(hours.get(p.id)?.minutes)),
+          checkIns: { ok: n(c.ok), late: n(c.late), missed: n(c.missed), answeredPct: pct(n(c.ok) + n(c.late), checksDue) },
+          tours: { runs: n(tr.runs), completed: n(tr.completed) },
+          incidents: n(incidents.get(p.id)?.n),
+          flags: { total: n(fl.n), critical: n(fl.critical) },
+        };
+      })
+      .filter((c) => c.shifts.due > 0 || c.hours > 0);
+
+    cards.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
+    const scored = cards.filter((c) => c.score !== null);
+    res.json({
+      days,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      graceMinutes: grace,
+      averageScore: scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : null,
+      cards,
+    });
+  })
+);

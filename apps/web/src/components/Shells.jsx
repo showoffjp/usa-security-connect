@@ -251,6 +251,7 @@ export function AdminShell() {
       title: 'Reporting',
       items: [
         { to: '/admin/reports', icon: 'chart', label: 'Reports' },
+        { to: '/admin/scorecards', icon: 'users', label: 'Scorecards' },
         { to: '/admin/dar', icon: 'clipboard', label: 'Daily report' },
         { to: '/admin/broadcasts', icon: 'megaphone', label: 'Broadcasts' },
         { to: '/admin/training', icon: 'book', label: 'Training' },

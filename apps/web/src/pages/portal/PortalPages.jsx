@@ -825,6 +825,12 @@ export function PortalInvoices() {
 
 /* --------------------------------------------------------------- DAR -- */
 
+const VIOLATION_TEXT = {
+  fire_lane: 'Fire lane', no_permit: 'No permit', accessible: 'Accessible bay', blocking: 'Blocking',
+  abandoned: 'Abandoned vehicle', reserved: 'Reserved space', other: 'Other',
+};
+const ACTION_TEXT = { warning: 'warning left', tagged: 'tagged', booted: 'booted', towed: 'towed' };
+
 export function PortalReport({ sites }) {
   const [siteId, setSiteId] = useState(sites[0]?.id ?? null);
   const [date, setDate] = useState(toDateInput(new Date()));
@@ -1007,6 +1013,32 @@ export function PortalReport({ sites }) {
                 </ul>
               )}
             </section>
+
+            {data.vehicles?.length > 0 && (
+              <section className="card">
+                <div className="card-head">
+                  <h2>Parking enforcement</h2>
+                  <span className="small muted">{data.vehicles.length}</span>
+                </div>
+                <ul className="list">
+                  {data.vehicles.map((v) => (
+                    <li key={v.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                      <div className="grow">
+                        <div className="strong small">
+                          <span className="mono">{v.plate}</span>
+                          {v.vehicle_desc ? <span className="muted"> · {v.vehicle_desc}</span> : null}
+                        </div>
+                        <div className="small">
+                          {VIOLATION_TEXT[v.violation] || v.violation} · {ACTION_TEXT[v.action] || v.action}
+                        </div>
+                        {v.location_text && <div className="tiny muted">{v.location_text}</div>}
+                      </div>
+                      <div className="nowrap small muted">{fmtTime(v.occurred_at)}</div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {data.visits.length > 0 && (
               <section className="card">
