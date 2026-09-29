@@ -7,7 +7,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { db, audit } from '../lib/db.js';
+import { db, audit, demoInstance } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { publicClient, createPasswordToken } from '../lib/clientAuth.js';
@@ -194,6 +194,9 @@ clientAdminRouter.post(
   wrap(async (req, res) => {
     const client = await db.prepare(`SELECT * FROM client_users WHERE id = ?`).get(req.params.id);
     if (!client) throw new HttpError(404, 'Client login not found.');
+    if (demoInstance) {
+      throw new HttpError(403, 'Passwords cannot be reset on the demo site, so everyone can keep using the published ones.');
+    }
 
     // The old password stops working immediately and every open session goes
     // with it - that is the point of a reset when a laptop has gone missing.

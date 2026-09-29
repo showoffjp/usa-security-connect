@@ -13,6 +13,7 @@ import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../co
 import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
 import PortalRequests from './PortalRequests.jsx';
+import { useDemo } from '../../lib/demo.js';
 import {
   PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
 } from './PortalPages.jsx';
@@ -21,6 +22,7 @@ import {
 
 function PasswordDialog({ onClose }) {
   const { changePassword } = useClientAuth();
+  const demo = useDemo();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -61,7 +63,7 @@ function PasswordDialog({ onClose }) {
             <button
               className="btn btn-primary"
               onClick={save}
-              disabled={busy || !current || next.length < 12 || !confirm}
+              disabled={demo || busy || !current || next.length < 12 || !confirm}
             >
               Change password
             </button>
@@ -75,6 +77,11 @@ function PasswordDialog({ onClose }) {
         </Banner>
       ) : (
         <div className="stack">
+          {demo && (
+            <Banner kind="info" title="Not on the demo site">
+              Everyone shares these demo logins, so passwords stay as published. Your real portal lets you change yours here.
+            </Banner>
+          )}
           {error && <Banner kind="danger">{error}</Banner>}
           <Field label="Current password" required>
             <input

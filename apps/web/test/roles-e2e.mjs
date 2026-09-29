@@ -34,7 +34,12 @@ async function launch() {
   ];
   for (const o of options) {
     try {
-      return await chromium.launch({ ...o, args: ['--no-sandbox'] });
+      return await chromium.launch({
+        ...o,
+        args: ['--no-sandbox'],
+        // To run against a deployed site from behind a proxy.
+        ...(process.env.USC_BROWSER_PROXY ? { proxy: { server: process.env.USC_BROWSER_PROXY } } : {}),
+      });
     } catch {
       /* next */
     }
@@ -47,10 +52,29 @@ const browser = await launch();
 
 /** A page that records everything that goes wrong on it. */
 async function watchedPage(viewport) {
-  const context = await browser.newContext({ viewport });
+  const context = await browser.newContext({ viewport, ignoreHTTPSErrors: Boolean(process.env.USC_BROWSER_PROXY) });
   const page = await context.newPage();
+  // A flaky network (a proxy, a phone tether) drops the odd page load; retry
+  // those rather than report the site broken. A real error still fails.
+  const goto = page.goto.bind(page);
+  page.goto = async (url, options) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await goto(url, { timeout: 60000, ...options });
+      } catch (err) {
+        if (attempt >= 4 || !/net::ERR_(TOO_MANY_RETRIES|CONNECTION|TIMED_OUT|NETWORK)/.test(err.message)) throw err;
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+    }
+  };
   const problems = [];
   page.on('pageerror', (e) => problems.push(`script error: ${e.message.split('\n')[0]}`));
+  page.on('requestfailed', (r) => {
+    // Only the app's own API: a dropped map tile is not the site's fault.
+    if (r.url().includes('/api/') && !/ERR_ABORTED/.test(r.failure()?.errorText || '')) {
+      problems.push(`request failed: ${r.url().replace(/^.*\/api/, '/api')} ${r.failure()?.errorText}`);
+    }
+  });
   page.on('response', (r) => {
     const url = r.url();
     if (!url.includes('/api/')) return;
@@ -195,10 +219,14 @@ for (const u of STAFF) {
 {
   console.log('\n--- Officer who must change their PIN (1007) ---');
   const { context, page, problems } = await watchedPage({ width: 390, height: 844 });
+  // The demo site clears the flag - its published PINs never change - so
+  // there 1007 goes straight in like everyone else.
+  const demo = await page.request.get(WEB + '/api/health').then((r) => r.json()).then((d) => Boolean(d.demo), () => false);
   await staffSignIn(page, '1007', '8140');
   await settle(page);
-  log(/change-pin/.test(page.url()) || /Choose your PIN/i.test(await page.textContent('body')),
-    'a must-change-PIN officer is sent to choose a PIN first', new URL(page.url()).pathname);
+  const forced = /change-pin/.test(page.url()) || /Choose your PIN/i.test(await page.textContent('body'));
+  if (demo) log(!forced, 'on the demo site the new hire signs straight in', new URL(page.url()).pathname);
+  else log(forced, 'a must-change-PIN officer is sent to choose a PIN first', new URL(page.url()).pathname);
   problems.splice(0);
   await context.close();
 }

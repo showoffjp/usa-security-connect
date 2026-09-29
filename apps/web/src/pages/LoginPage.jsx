@@ -17,6 +17,11 @@ const DEMO_ACCOUNTS = [
   { code: '1001', pin: '2468', who: 'Vince Ortega', role: 'Administrator' },
   { code: '1002', pin: '3571', who: 'Renata Diaz', role: 'Supervisor' },
   { code: '1003', pin: '4812', who: 'Marcus Bell', role: 'Officer, on duty' },
+  { code: '1004', pin: '5930', who: 'Janelle Carter', role: 'Officer, licence expiring' },
+  { code: '1005', pin: '6174', who: 'Dwayne Foster', role: '1099 contractor, armed' },
+  { code: '1006', pin: '7285', who: 'Alicia Nunez', role: 'Officer, W-2 hourly' },
+  { code: '1007', pin: '8140', who: 'Kevin Osei', role: 'Officer, new hire' },
+  { code: '1008', pin: '9351', who: 'Renee Okafor', role: '1099 contractor, per shift' },
 ];
 
 export default function LoginPage() {
@@ -125,7 +130,9 @@ export default function LoginPage() {
                 </span>
               </button>
             ))}
-            <div className="tiny muted">Every officer 1004-1043 works too; see the handover notes for their PINs.</div>
+            <div className="tiny muted">
+              Codes 1009-1042 sign in too; the README lists each one with its PIN. 1043 is on leave, so it is refused by design.
+            </div>
           </div>
         )}
 

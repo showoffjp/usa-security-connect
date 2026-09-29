@@ -94,7 +94,19 @@ export async function authenticate({ employeeCode, pin, ip }) {
 
   if (user.status !== 'active') {
     await audit(user.id, 'login.blocked', 'user', user.id, { status: user.status }, ip);
-    throw new HttpError(403, 'This account is not active. Contact your supervisor.');
+    const why = {
+      on_leave: 'is marked as on leave',
+      suspended: 'is suspended',
+      terminated: 'has been closed',
+    }[user.status] || 'is not active';
+    throw new HttpError(403, `This account ${why}, so it cannot sign in. A supervisor can reactivate it from Employees.`);
+  }
+
+  // The self-contained demo publishes its PINs, so anyone could lock a shared
+  // account for everyone else with a few wrong guesses. It never locks.
+  if (demoInstance && !verifyPin(pin, user.pin_hash, user.pin_salt)) {
+    await audit(user.id, 'login.failed', 'user', user.id, null, ip);
+    throw new HttpError(401, 'Employee code or PIN is incorrect. On this demo site, check the code and PIN in the list above.');
   }
 
   if (!verifyPin(pin, user.pin_hash, user.pin_salt)) {
