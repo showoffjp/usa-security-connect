@@ -501,6 +501,59 @@ for (const u of STAFF) {
   await settle(officer.page);
   log(await officer.page.locator('a[href^="tel:"]').count() >= 2, 'the officer home has the site contacts, tap to call');
 
+  // Post orders: the officer reads the changed orders; a supervisor issues
+  // another version and the officer is asked to read that one too.
+  const ordersCard = officer.page.locator('#orders-title');
+  if (await ordersCard.count()) {
+    await officer.page.click('button:has-text("I have read these orders")');
+    await officer.page.waitForTimeout(1200);
+    log(await ordersCard.count() === 0, 'the officer acknowledges their changed post orders');
+  } else {
+    log(true, 'post orders already acknowledged (rerun)');
+  }
+  await staff.page.goto(WEB + '/admin/post-logs?tab=orders');
+  await settle(staff.page);
+  const lobbyRow = staff.page.locator('li.list-item', { hasText: 'RF-01' });
+  log(await lobbyRow.count() === 1, 'a supervisor sees the post orders for every post');
+  await checkScreen('supervisor: post orders', staff.page, staff.problems);
+  const change = `E2E change ${Date.now() % 100000}`;
+  await lobbyRow.locator('button:has-text("New version")').click();
+  await staff.page.waitForSelector('[role="dialog"] textarea');
+  const current = await staff.page.locator('[role="dialog"] textarea').inputValue();
+  await staff.page.locator('[role="dialog"] textarea').fill(`${current}\n${change}: radio check on the hour.`);
+  await staff.page.getByLabel('What changed').fill(change);
+  await staff.page.click('[role="dialog"] button:has-text("Issue version")');
+  await staff.page.waitForTimeout(1500);
+  log(await staff.page.locator('li.list-item', { hasText: 'RF-01' }).locator('text=Marcus Bell has not read it').count() === 1,
+    'issues a new version, and sees who has not read it');
+  await officer.page.goto(WEB + '/');
+  await settle(officer.page);
+  log(await officer.page.locator('text=Your post orders have changed').count() === 1 && await officer.page.locator(`text=${change}`).count() > 0,
+    'the officer is told their orders changed, and what changed');
+  await officer.page.click('button:has-text("I have read these orders")');
+  await officer.page.waitForTimeout(1200);
+  log(await ordersCard.count() === 0, 'and acknowledges the new version');
+
+  // The alerts inbox: a bell with the unread count; an alert opens its screen.
+  const bell = staff.page.locator('.bell-btn');
+  log(/unread/.test((await bell.getAttribute('aria-label')) || ''), 'the supervisor has unread alerts on the bell');
+  await bell.click();
+  await staff.page.waitForSelector('.alerts-list');
+  const before = staff.page.url();
+  await staff.page.locator('.alerts-list button').first().click();
+  await staff.page.waitForTimeout(1200);
+  log(staff.page.url() !== before && /\/admin\//.test(staff.page.url()), 'opening an alert goes to where it is dealt with', new URL(staff.page.url()).pathname);
+  await checkScreen('supervisor: screen opened from an alert', staff.page, staff.problems);
+
+  // Printable QR tags for a tour's checkpoints.
+  await staff.page.goto(WEB + '/admin/tours?tab=templates');
+  await settle(staff.page);
+  await staff.page.locator('a:has-text("QR tags")').first().click();
+  await staff.page.waitForSelector('.qr-img svg', { timeout: 10000 });
+  const tags = await staff.page.locator('.qr-tag').count();
+  log(tags > 0 && (await staff.page.locator('.qr-img svg').count()) === tags, 'a supervisor prints a QR tag for every checkpoint', `${tags} tags`);
+  await checkScreen('supervisor: checkpoint QR tags', staff.page, staff.problems);
+
   await officer.page.goto(WEB + '/post-log?tab=visitors');
   await settle(officer.page);
 

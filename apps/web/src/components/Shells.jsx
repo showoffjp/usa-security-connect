@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import QuickSearch from './QuickSearch.jsx';
+import AlertsBell from './AlertsBell.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { api } from '../lib/api.js';
 import { Icon, Shield, Modal } from './ui.jsx';
@@ -54,7 +55,7 @@ function AccountMenu({ open, onClose }) {
   );
 }
 
-function TopBar({ onMenu, dutyState, onSearch }) {
+function TopBar({ onMenu, dutyState, onSearch, alerts = false }) {
   const [menu, setMenu] = useState(false);
   const { user } = useAuth();
 
@@ -88,6 +89,7 @@ function TopBar({ onMenu, dutyState, onSearch }) {
           </span>
         </button>
       )}
+      {alerts && <AlertsBell />}
       <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Account menu" title={user.full_name}>
         <Icon name="user" size={18} />
       </button>
@@ -274,7 +276,7 @@ export function AdminShell() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <TopBar onMenu={() => setOpen((v) => !v)} onSearch={() => setSearching(true)} />
+      <TopBar onMenu={() => setOpen((v) => !v)} onSearch={() => setSearching(true)} alerts />
       {searching && (
         <QuickSearch
           pages={groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.title })))}

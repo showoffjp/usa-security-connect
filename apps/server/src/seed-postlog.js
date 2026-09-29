@@ -427,5 +427,37 @@ export async function seedPostLog({ db }) {
     }
   }
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback };
+  /* ---------------------------------------------------------- post orders -- */
+
+  const posts = await db.prepare(`SELECT id, site_id, name, instructions FROM posts WHERE instructions IS NOT NULL ORDER BY id`).all();
+  let orders = 0;
+  for (const p of posts) {
+    const issued = new Date(now.getTime() - 60 * 86400000);
+    const info = await db
+      .prepare(`INSERT INTO post_orders (post_id, version, body, change_note, created_by, created_at) VALUES (?,?,?,?,?,?)`)
+      .run(p.id, 1, p.instructions, 'Orders issued', sup.id, toSql(issued));
+    orders++;
+    // Everyone who has worked the post in the last month read version 1 on their first shift.
+    const crew = await db
+      .prepare(`SELECT user_id, MIN(clock_in_at) AS first FROM time_entries WHERE post_id = ? AND clock_in_at >= ? GROUP BY user_id`)
+      .all(p.id, toSql(new Date(now.getTime() - 30 * 86400000)));
+    for (const c of crew) {
+      await db
+        .prepare(`INSERT INTO post_order_acks (post_order_id, user_id, acked_at) VALUES (?,?,?) ON CONFLICT DO NOTHING`)
+        .run(Number(info.lastInsertRowid), c.user_id, toSql(new Date(new Date(c.first).getTime() + 15 * 60000)));
+    }
+  }
+  // The Riverfront lobby's orders changed two days ago; the officer on post has not read them yet.
+  const lobby = posts.find((p) => p.site_id === siteId(/Riverfront/));
+  if (lobby) {
+    const revised = `${lobby.instructions}\n\nFrom this week: the loading dock roll-up door is out of order. Check it on every round and log it in the activity log. Deliveries after 6 PM go to the east entrance only - call the tenant before letting a courier up.`;
+    await db
+      .prepare(`INSERT INTO post_orders (post_id, version, body, change_note, created_by, created_at) VALUES (?,?,?,?,?,?)`)
+      .run(lobby.id, 2, revised, 'Loading dock door out of order; after-hours deliveries to the east entrance.', sup.id,
+        toSql(new Date(now.getTime() - 2 * 86400000)));
+    await db.prepare(`UPDATE posts SET instructions = ? WHERE id = ?`).run(revised, lobby.id);
+    orders++;
+  }
+
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders };
 }

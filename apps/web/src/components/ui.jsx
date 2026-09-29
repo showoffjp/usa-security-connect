@@ -48,6 +48,8 @@ const iconPaths = {
   building: 'M4 21V6l7-3 7 3v15M4 21h16M9 10h2M13 10h2M9 14h2M13 14h2M9 18h6',
   shield: 'M12 3 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z',
   check: 'M4 12.5 9 17.5 20 6.5',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2ZM10 21h4',
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z',
   x: 'M6 6l12 12M18 6L6 18',
   plus: 'M12 5v14M5 12h14',
   chevron: 'M9 6l6 6-6 6',

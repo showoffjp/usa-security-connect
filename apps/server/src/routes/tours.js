@@ -109,7 +109,7 @@ toursRouter.post(
       .prepare(`SELECT * FROM tour_runs WHERE user_id = ? AND status = 'in_progress' LIMIT 1`)
       .get(req.user.id));
     if (existing) {
-      throw new HttpError(409, 'Finish or abandon your current tour before starting another.', {
+      throw new HttpError(409, 'Finish your current tour before starting another. Skip, with a reason, any checkpoint you cannot reach.', {
         activeRunId: existing.id,
       });
     }
@@ -161,6 +161,9 @@ toursRouter.get(
   })
 );
 
+/** The code printed on a checkpoint's QR tag when it has no tag ID of its own. */
+export const checkpointCode = (id) => `USC-CP-${id}`;
+
 const scanSchema = z.object({
   method: z.enum(['nfc', 'qr', 'manual', 'gps']).default('manual'),
   tagId: z.string().max(200).optional(),
@@ -184,8 +187,17 @@ toursRouter.post(
     // When the officer taps a physical tag, confirm it is the right one.
     if (body.tagId) {
       const cp = (await db.prepare(`SELECT * FROM checkpoints WHERE id = ?`).get(req.params.checkpointId));
-      const expected = (cp.nfc_tag_id || cp.qr_code || '').trim();
-      if (expected && expected.toLowerCase() !== body.tagId.trim().toLowerCase()) {
+      // A checkpoint may carry an NFC tag, a QR sticker, or both; the printed
+      // tag falls back to the checkpoint's own code when neither is set.
+      const accepted = [cp.nfc_tag_id, cp.qr_code, checkpointCode(cp.id)]
+        .map((v) => String(v || '').trim().toLowerCase())
+        .filter(Boolean);
+      const configured = Boolean((cp.nfc_tag_id || '').trim() || (cp.qr_code || '').trim());
+      const given = body.tagId.trim().toLowerCase();
+      if (configured && !accepted.includes(given)) {
+        throw new HttpError(409, `That tag belongs to a different checkpoint.`);
+      }
+      if (!configured && given.startsWith('usc-cp-') && given !== checkpointCode(cp.id).toLowerCase()) {
         throw new HttpError(409, `That tag belongs to a different checkpoint.`);
       }
     }
