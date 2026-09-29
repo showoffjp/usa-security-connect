@@ -182,6 +182,17 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   - **Pass-down notes**: what one shift tells the next, marked important when it is.
     The next officer on the post sees the notes on their home screen, can read them
     up to twelve hours before the shift starts, and acknowledges each one.
+  - **Activity log**: short, time-stamped entries through the shift (patrol,
+    observation, access, alarm, safety, customer service): the stuff of a daily
+    activity report. Entries go into the client's report unless the officer marks
+    them internal, and an officer can take back their own entry from the same shift.
+  - **Building issues**: report a light out, a door that will not lock, a leak or a
+    hazard, marked urgent when it is. The client sees it on their portal overview.
+    When the client says "seen, it's in hand" or "fixed", with a note, the officer on
+    post sees the reply.
+  - **Lost and found**: log an item, where it was found and where it is kept. Hand
+    it back by recording who collected it and the phone number or ID checked.
+    Disposing of property is for supervisors only.
   - **Watchlist**: the people not to be let in at this site or any site, with a
     description, vehicle, the reason, and what to do: refuse entry, call the police,
     call the supervisor, or escort only. Every visitor sign-in is checked against
@@ -215,7 +226,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Post logs** — everyone signed in at a site right now, with a count per site and in
   the sidebar; any day's visitor log; and every pass-down note with who has read it.
   The daily activity report lists the day's visitors.
-  The same screen keeps the **watchlist** (add, edit, lapse or remove entries, and
+  The same screen has each day's **activity log** across sites (internal entries
+  marked), every **building issue** with its status and the client's reply (reopen
+  or close them), and **lost and found** with the items held over 30 days picked
+  out. It also keeps the **watchlist** (add, edit, lapse or remove entries, and
   see every sign-in that overrode a match) and **vehicles** (repeat offenders by
   plate, and every violation by site and period).
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
@@ -343,9 +357,13 @@ a PIN — and sees, for their own properties only:
   print straight to PDF, including who came through the building: every visitor,
   contractor and delivery the officers signed in, when they arrived and left, and their
   vehicle. The officer who logged them is not shown. Parking enforcement on the
-  property that day is listed too.
+  property that day is listed too, along with the officers' activity log (without
+  entries marked internal) and any building issues reported.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
   printable document they can save as a PDF.
+- **Building issues** — on the overview: whatever our officers found wrong with the
+  property, urgent first. The client marks each one "seen, it's in hand" or "fixed",
+  with a note for the officer on post. The officer who reported it stays internal.
 - **Extra coverage requests** — the one thing a client can ask for: officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
@@ -548,11 +566,17 @@ the server is running corrupts the data directory.
   record. Vehicle violations count a plate as the same however it is written. A
   plate lookup shows a repeat offender and the visit it came in with. Scorecards
   are bounded, ranked, and add up.
+- **`test/sitelog.mjs`** — activity entries can only be written by an officer on
+  duty, for a time within their shift. The client never sees internal entries or
+  another client's site. A building issue goes from officer to client and back:
+  the client acknowledges it, fixes it, and a fixed issue stays closed to them,
+  while a supervisor can reopen it. Found items leave only with a name and a
+  contact, and only supervisors dispose of property.
 - **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 58 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 65 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright

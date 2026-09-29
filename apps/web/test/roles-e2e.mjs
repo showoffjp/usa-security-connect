@@ -403,6 +403,65 @@ for (const u of STAFF) {
   await officer.page.goto(WEB + '/post-log?tab=visitors');
   await settle(officer.page);
 
+  // The activity log, a building issue and a found item.
+  const entry = `E2E rounds complete ${Date.now() % 100000}`;
+  await officer.page.goto(WEB + '/post-log?tab=activity');
+  await settle(officer.page);
+  await officer.page.click('button[aria-pressed]:has-text("Patrol")');
+  await officer.page.fill('#activity-body', entry);
+  await officer.page.click('button:has-text("Log it")');
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('li.list-item', { hasText: entry }).count() === 1, 'an activity entry is logged');
+  await checkScreen('officer: activity log', officer.page, officer.problems);
+
+  const issueText = `E2E light out in stairwell ${Date.now() % 100000}`;
+  await officer.page.goto(WEB + '/post-log?tab=issues');
+  await settle(officer.page);
+  await officer.page.click('button:has-text("Report issue")');
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.getByLabel('What is wrong').fill(issueText);
+  await officer.page.click('[role="dialog"] button:has-text("Report it")');
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('li.list-item', { hasText: issueText }).count() === 1, 'a building issue is reported');
+
+  const itemText = `E2E black umbrella ${Date.now() % 100000}`;
+  await officer.page.goto(WEB + '/post-log?tab=found');
+  await settle(officer.page);
+  await officer.page.click('button:has-text("Log item")');
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.getByRole('textbox', { name: 'Item' }).fill(itemText);
+  await officer.page.getByLabel('Kept where').fill('Security desk');
+  await officer.page.click('[role="dialog"] button:has-text("Log item")');
+  await officer.page.waitForTimeout(1200);
+  const itemRow = officer.page.locator('li.list-item', { hasText: itemText });
+  await itemRow.locator('button:has-text("Hand back")').click();
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.getByLabel('Collected by').fill('Pat Owner');
+  await officer.page.getByLabel('Phone or ID checked').fill('(904) 555-0101');
+  await officer.page.click('[role="dialog"] button:has-text("Returned")');
+  await officer.page.waitForTimeout(1200);
+  log(await itemRow.locator('text=Returned').count() === 1, 'a found item is logged and handed back');
+
+  // The client sees the entry in the report and closes the issue from the overview.
+  await client.page.goto(WEB + '/portal/report');
+  await settle(client.page);
+  log(await client.page.locator('li.list-item', { hasText: entry }).count() === 1, "the client sees the officer's entry in the daily report");
+  await client.page.goto(WEB + '/portal');
+  await settle(client.page);
+  const issueRow = client.page.locator('li.list-item', { hasText: issueText });
+  log(await issueRow.count() === 1, 'the client sees the building issue on their overview');
+  await issueRow.locator('button:has-text("Update")').click();
+  await issueRow.locator('input').fill('Maintenance replaced the bulb.');
+  await issueRow.locator('button:has-text("It is fixed")').click();
+  await client.page.waitForTimeout(1200);
+  log(await client.page.locator('li.list-item', { hasText: issueText }).count() === 0, 'and marks it fixed');
+  await officer.page.goto(WEB + '/post-log?tab=issues');
+  await settle(officer.page);
+  log(await officer.page.locator('li.list-item', { hasText: issueText }).locator('text=replaced the bulb').count() === 1,
+    "the officer on post sees the client's reply");
+  await officer.page.goto(WEB + '/post-log?tab=visitors');
+  await settle(officer.page);
+
   // Sign them back out so a rerun starts clean.
   await officer.page.locator('li.list-item', { hasText: visitor }).locator('button:has-text("Sign out")').click();
   await officer.page.waitForTimeout(1200);

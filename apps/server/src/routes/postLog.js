@@ -39,7 +39,7 @@ const PASSDOWN_DAYS = 7;
 const PASSDOWN_LEAD_HOURS = 12;
 
 /** The post the officer is clocked in at, if any. */
-async function dutyPost(userId) {
+export async function dutyPost(userId) {
   return db
     .prepare(
       `SELECT te.id AS time_entry_id, p.id AS post_id, p.name AS post_name, p.post_code,
@@ -57,7 +57,7 @@ async function dutyPost(userId) {
  * The post whose pass-down the officer should be reading: where they are on
  * duty, or else where their next shift in the coming hours is.
  */
-async function readingPost(userId) {
+export async function readingPost(userId) {
   const onDuty = await dutyPost(userId);
   if (onDuty) return { ...onDuty, onDuty: true };
   const now = new Date();
@@ -76,7 +76,7 @@ async function readingPost(userId) {
   return next ? { ...isoFields(next, ['starts_at']), onDuty: false } : null;
 }
 
-async function requireDuty(req) {
+export async function requireDuty(req) {
   const post = await dutyPost(req.user.id);
   if (!post) throw new HttpError(409, 'Clock in at your post first - the log belongs to the post you are on.');
   return post;

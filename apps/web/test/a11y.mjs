@@ -57,6 +57,9 @@ const STAFF_PAGES = [
   ['Post logs: pass-down', '/admin/post-logs?tab=passdown'],
   ['Post logs: watchlist', '/admin/post-logs?tab=watchlist'],
   ['Post logs: vehicles', '/admin/post-logs?tab=vehicles'],
+  ['Post logs: activity', '/admin/post-logs?tab=activity'],
+  ['Post logs: building issues', '/admin/post-logs?tab=issues'],
+  ['Post logs: lost and found', '/admin/post-logs?tab=found'],
   ['Officer scorecards', '/admin/scorecards'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],
@@ -212,6 +215,12 @@ await page.waitForSelector('text=matches the watchlist');
 await audit(page, 'Post log: watchlist match', null);
 await audit(page, 'Post log: vehicles', '/post-log?tab=vehicles');
 await audit(page, 'Post log: watchlist', '/post-log?tab=watchlist');
+await audit(page, 'Post log: activity', '/post-log?tab=activity');
+await audit(page, 'Post log: lost and found', '/post-log?tab=found');
+await audit(page, 'Post log: building issues', '/post-log?tab=issues');
+await page.click('button:has-text("Report issue")');
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Post log: report an issue', null);
 
 // --- client portal --------------------------------------------------------
 console.log('\n--- client portal ---');

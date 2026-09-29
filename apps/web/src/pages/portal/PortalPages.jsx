@@ -133,6 +133,124 @@ function coverageStatus(shift, now = Date.now()) {
   return { kind: '', label: 'Scheduled' };
 }
 
+/* ------------------------------------------------- building issues -- */
+
+const ISSUE_TEXT = {
+  lighting: 'Lighting', door_lock: 'Door or lock', leak: 'Leak', damage: 'Damage', hazard: 'Hazard',
+  cleanliness: 'Cleanliness', equipment: 'Equipment', other: 'Other',
+};
+const ISSUE_STATE = { open: ['warn', 'New'], acknowledged: ['info', 'Seen'], fixed: ['ok', 'Fixed'] };
+
+/**
+ * What our officers found wrong with the building, for the client to act on:
+ * "seen it" tells the officers it is in hand, "fixed" closes it. A note goes
+ * back to the officer on post.
+ */
+function BuildingIssues() {
+  const { data, error, loading, reload } = usePortal('/client/issues', []);
+  const [answering, setAnswering] = useState(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const answer = async (issue, status) => {
+    setBusy(true);
+    try {
+      await clientApi.post(`/client/issues/${issue.id}/status`, { status, note: note || null });
+      setMessage(status === 'fixed' ? 'Marked fixed. Thank you.' : 'Marked as seen. The officers on post will see your note.');
+      setAnswering(null);
+      setNote('');
+      reload();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (error || (loading && !data)) return null;
+  const open = data?.issues.filter((i) => i.status !== 'fixed') || [];
+  const fixed = data?.issues.filter((i) => i.status === 'fixed') || [];
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Building issues</h2>
+        <span className="small muted">
+          {open.length} open{fixed.length ? ` · ${fixed.length} fixed this month` : ''}
+        </span>
+      </div>
+      {message && (
+        <div className="card-pad" style={{ paddingBottom: 0 }}>
+          <Banner kind="info">{message}</Banner>
+        </div>
+      )}
+      {open.length === 0 ? (
+        <div className="card-pad">
+          <Empty icon="building" title="Nothing waiting on you">
+            When our officers find a light out, a door that will not lock or a hazard, it appears here.
+          </Empty>
+        </div>
+      ) : (
+        <ul className="list">
+          {open.map((i) => {
+            const [kind, label] = ISSUE_STATE[i.status] || ['', i.status];
+            return (
+              <li key={i.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                <div className="grow">
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    <span className="strong small">{ISSUE_TEXT[i.category] || i.category}</span>
+                    {i.priority === 'urgent' && <Chip kind="danger">Urgent</Chip>}
+                    <Chip kind={kind}>{label}</Chip>
+                  </div>
+                  {i.location_text && <div className="tiny muted">{i.location_text}</div>}
+                  <div className="small" style={{ marginTop: 3 }}>{i.description}</div>
+                  {i.client_note && <div className="tiny muted" style={{ marginTop: 3 }}>Your note: {i.client_note}</div>}
+                  <div className="tiny muted" style={{ marginTop: 3 }}>
+                    Reported {fmtDateTime(i.created_at)}
+                    {sitesLabel(i)}
+                  </div>
+                  {answering === i.id && (
+                    <div className="stack-sm" style={{ marginTop: 8 }}>
+                      <label className="small strong" htmlFor={`issue-note-${i.id}`}>
+                        Note for the officers (optional)
+                      </label>
+                      <input id={`issue-note-${i.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
+                      <div className="row wrap" style={{ gap: 6 }}>
+                        {i.status === 'open' && (
+                          <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => answer(i, 'acknowledged')}>
+                            Seen - it is in hand
+                          </button>
+                        )}
+                        <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => answer(i, 'fixed')}>
+                          It is fixed
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {answering !== i.id && (
+                  <button
+                    className="btn btn-sm btn-navy"
+                    onClick={() => {
+                      setAnswering(i.id);
+                      setNote('');
+                      setMessage('');
+                    }}
+                  >
+                    Update
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+const sitesLabel = (i) => (i.site_name ? ` · ${i.site_name}` : '');
+
 /* ---------------------------------------------------------- overview -- */
 
 export function PortalOverview({ sites }) {
@@ -155,6 +273,8 @@ export function PortalOverview({ sites }) {
       <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading your coverage">
         {data && (
           <div className="stack">
+            <BuildingIssues />
+
             <section className="card">
               <div className="card-head">
                 <h2>On post right now</h2>
@@ -971,6 +1091,49 @@ export function PortalReport({ sites }) {
                 </ul>
               )}
             </section>
+
+            {data.activity?.length > 0 && (
+              <section className="card">
+                <div className="card-head">
+                  <h2>Activity log</h2>
+                  <span className="small muted">{data.activity.length} entries</span>
+                </div>
+                <ul className="list">
+                  {data.activity.map((a) => (
+                    <li key={a.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                      <div className="nowrap small strong" style={{ width: 62 }}>{fmtTime(a.occurred_at)}</div>
+                      <div className="grow">
+                        <div className="small">{a.body}</div>
+                        <div className="tiny muted">{a.officer_name}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {data.issues?.length > 0 && (
+              <section className="card">
+                <div className="card-head">
+                  <h2>Building issues reported</h2>
+                  <span className="small muted">{data.issues.length}</span>
+                </div>
+                <ul className="list">
+                  {data.issues.map((i) => (
+                    <li key={i.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                      <div className="grow">
+                        <div className="strong small">
+                          {ISSUE_TEXT[i.category] || i.category}
+                          {i.location_text ? <span className="muted"> · {i.location_text}</span> : null}
+                        </div>
+                        <div className="small">{i.description}</div>
+                      </div>
+                      <Chip kind={(ISSUE_STATE[i.status] || [''])[0]}>{(ISSUE_STATE[i.status] || ['', i.status])[1]}</Chip>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             <section className="card">
               <div className="card-head">
