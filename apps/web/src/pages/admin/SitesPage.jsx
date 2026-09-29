@@ -166,7 +166,7 @@ function PostDialog({ post, sites, onClose, onSaved }) {
           </Field>
         </div>
 
-        <Field label="Officer instructions" hint="Shown on the officer's home screen while they are on post.">
+        <Field label="Officer instructions" hint="Shown on the officer's home screen while they are on post. Saving a change issues a new version of the post orders, which officers acknowledge.">
           <textarea value={form.instructions} onChange={set('instructions')} rows={5} />
         </Field>
 

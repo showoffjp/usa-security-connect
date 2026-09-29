@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { getPosition } from '../../lib/geo.js';
@@ -7,12 +7,75 @@ import {
   LoadingPage, Icon, Chip, Modal, Field, Progress, useToast, Banner, StatusChip,
 } from '../../components/ui.jsx';
 
+/**
+ * Reads a checkpoint's QR tag with the camera, where the browser can
+ * (BarcodeDetector: Chrome and Edge on Android and desktop). Elsewhere the
+ * officer types the code printed under the QR instead.
+ */
+function QrScanner({ onCode, onCancel }) {
+  const video = useRef(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let stream;
+    let timer;
+    let done = false;
+    (async () => {
+      try {
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        if (done) return;
+        video.current.srcObject = stream;
+        await video.current.play();
+        const tick = async () => {
+          if (done) return;
+          try {
+            const [hit] = await detector.detect(video.current);
+            if (hit?.rawValue) {
+              done = true;
+              onCode(hit.rawValue.trim());
+              return;
+            }
+          } catch {
+            /* a frame that could not be read; try the next */
+          }
+          timer = setTimeout(tick, 250);
+        };
+        tick();
+      } catch (err) {
+        setError(err?.name === 'NotAllowedError' ? 'Camera permission was refused.' : 'The camera could not be started.');
+      }
+    })();
+    return () => {
+      done = true;
+      clearTimeout(timer);
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [onCode]);
+  return (
+    <div className="stack">
+      {error ? (
+        <Banner kind="warn" title="Cannot scan">
+          {error} Type the code printed under the QR instead.
+        </Banner>
+      ) : (
+        <video ref={video} className="qr-video" muted playsInline aria-label="Camera view for scanning the QR tag" />
+      )}
+      <button className="btn btn-ghost" onClick={onCancel}>
+        Stop scanning
+      </button>
+    </div>
+  );
+}
+
+const canScanQr = () => typeof window !== 'undefined' && 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
+
 /** Checkpoint tasks: tick each one, or skip with a reason. */
 function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [manualTag, setManualTag] = useState('');
+  const [qr, setQr] = useState(false);
 
   const setTask = async (task, status) => {
     setBusy(true);
@@ -25,12 +88,13 @@ function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
     }
   };
 
-  const scan = async (tagId) => {
+  const scan = async (tagId, method = tagId ? 'nfc' : 'manual') => {
+    setQr(false);
     setScanning(true);
     try {
       const fix = await getPosition({ timeout: 7000 });
       const res = await api.post(`/tours/runs/${runId}/checkpoints/${checkpoint.checkpoint_id}/scan`, {
-        method: tagId ? 'nfc' : 'manual',
+        method,
         tagId: tagId || undefined,
         latitude: fix.ok ? fix.latitude : null,
         longitude: fix.ok ? fix.longitude : null,
@@ -44,6 +108,11 @@ function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
     }
   };
 
+  // Stable, so the scanner is not restarted on every render.
+  const scanRef = useRef(scan);
+  scanRef.current = scan;
+  const qrCode = useRef((code) => scanRef.current(code, 'qr')).current;
+
   const allTasksDone = checkpoint.tasks.every((t) => t.status !== 'pending');
 
   return (
@@ -56,7 +125,7 @@ function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
             Close
           </button>
           {checkpoint.status === 'pending' && (
-            <button className="btn btn-primary" onClick={() => scan(checkpoint.nfc_tag_id)} disabled={scanning}>
+            <button className="btn btn-primary" onClick={() => scan()} disabled={scanning}>
               <Icon name="check" size={16} />
               {scanning ? 'Recording...' : allTasksDone ? 'Complete checkpoint' : 'Mark visited'}
             </button>
@@ -128,9 +197,19 @@ function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
             </summary>
             <div className="stack" style={{ marginTop: 10 }}>
               <Banner kind="info" title="NFC on this device">
-                The mobile app reads the tag directly. In the browser, type the tag ID printed on the checkpoint.
+                The mobile app reads the tag directly. In the browser, scan the QR tag with the camera or type the code
+                printed on it.
               </Banner>
-              <Field label="Tag ID">
+              {qr ? (
+                <QrScanner onCode={qrCode} onCancel={() => setQr(false)} />
+              ) : (
+                canScanQr() && (
+                  <button className="btn btn-navy" onClick={() => setQr(true)} disabled={scanning}>
+                    <Icon name="qr" size={16} /> Scan QR code
+                  </button>
+                )
+              )}
+              <Field label="Tag ID or printed code">
                 <input
                   value={manualTag}
                   onChange={(e) => setManualTag(e.target.value)}

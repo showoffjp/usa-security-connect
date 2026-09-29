@@ -61,6 +61,8 @@ const STAFF_PAGES = [
   ['Post logs: building issues', '/admin/post-logs?tab=issues'],
   ['Post logs: lost and found', '/admin/post-logs?tab=found'],
   ['Post logs: site contacts', '/admin/post-logs?tab=contacts'],
+  ['Post logs: post orders', '/admin/post-logs?tab=orders'],
+  ['Checkpoint QR tags', '/admin/tours/1/tags'],
   ['Client feedback', '/admin/feedback'],
   ['Officer scorecards', '/admin/scorecards'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
@@ -201,10 +203,20 @@ await page.keyboard.press('Control+k');
 await page.fill('[role="combobox"]', 'bell');
 await page.waitForTimeout(800);
 await audit(page, 'Quick search, with results', null);
+await page.keyboard.press('Escape');
+
+// The alerts inbox is another dialog from the top bar.
+await page.click('.bell-btn');
+await page.waitForSelector('.alerts-list');
+await audit(page, 'Alerts inbox', null);
+await page.keyboard.press('Escape');
 
 // An officer on post, for the post log with visitors and notes in it.
 await page.evaluate(() => localStorage.removeItem('usc.token'));
 await staffSignIn('1003', '4812');
+// Marcus's post orders changed two days ago and he has not read them yet.
+await page.waitForSelector('#orders-title');
+await audit(page, 'Officer home, with new post orders', null);
 await audit(page, 'Post log: pass-down', '/post-log');
 await audit(page, 'Post log: visitors', '/post-log?tab=visitors');
 await page.click('text=Sign someone in');

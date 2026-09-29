@@ -19,6 +19,7 @@ import { HttpError, wrap, parse, isoFields, parseDay, idParam, sendCsv } from '.
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
+import { currentOrders, reviseOrders, ordersForOfficer } from '../services/postOrders.js';
 
 export const postLogRouter = Router();
 postLogRouter.use(requireAuth);
@@ -292,8 +293,10 @@ postLogRouter.get(
       ).map(presentViolation);
     }
 
+    const orders = await ordersForOfficer(post.post_id, req.user.id);
+
     res.json({
-      post, onDuty: post.onDuty, visitors, passdown, unacked, watchlist, vehicles,
+      post, onDuty: post.onDuty, visitors, passdown, unacked, watchlist, vehicles, orders,
       kinds: VISITOR_KINDS, violations: VIOLATIONS, violationActions: VIOLATION_ACTIONS,
     });
   })
@@ -657,5 +660,118 @@ postLogRouter.get(
       repeatOffenders: repeat.map((r) => ({ ...isoFields(r, ['last_at']), n: Number(r.n), towed: Number(r.towed) })),
       windowDays: REPEAT_WINDOW_DAYS,
     });
+  })
+);
+
+
+/* ============================================================ post orders == */
+
+/** "I have read these." Only the version in force, for the post the officer is on or about to be. */
+postLogRouter.post(
+  '/orders/:id/ack',
+  wrap(async (req, res) => {
+    const order = await db.prepare(`SELECT * FROM post_orders WHERE id = ?`).get(idParam(req.params.id, 'orders'));
+    const post = await readingPost(req.user.id);
+    if (!order || !post || order.post_id !== post.post_id) throw new HttpError(404, 'Those post orders were not found.');
+    const current = await currentOrders(order.post_id);
+    if (current.id !== order.id) throw new HttpError(409, 'These orders have been replaced. Read the current version.');
+    await db.prepare(`INSERT INTO post_order_acks (post_order_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`).run(order.id, req.user.id);
+    await audit(req.user.id, 'post_orders.acknowledged', 'post_order', order.id, { version: order.version }, req.ip);
+    res.json({ orders: await ordersForOfficer(order.post_id, req.user.id) });
+  })
+);
+
+/**
+ * Every post's orders, and who still has to acknowledge the version in
+ * force: anyone who has worked the post in the last 30 days or is scheduled
+ * on it in the next 14.
+ */
+postLogRouter.get(
+  '/admin/orders',
+  supervisor,
+  wrap(async (req, res) => {
+    const siteId = idParam(req.query.siteId, 'site');
+    const posts = await db
+      .prepare(
+        `SELECT p.id, p.name, p.post_code, s.id AS site_id, s.name AS site_name
+         FROM posts p JOIN sites s ON s.id = p.site_id
+         WHERE p.active = 1 ${siteId ? 'AND s.id = ?' : ''} ORDER BY s.name, p.name`
+      )
+      .all(...(siteId ? [siteId] : []));
+    const since = toSql(new Date(Date.now() - 30 * 86400000));
+    const until = toSql(new Date(Date.now() + 14 * 86400000));
+    const out = [];
+    for (const p of posts) {
+      const order = await currentOrders(p.id);
+      if (!order?.body.trim()) {
+        out.push({ ...p, order: null, acked: [], outstanding: [] });
+        continue;
+      }
+      const crew = await db
+        .prepare(
+          `SELECT DISTINCT u.id, u.first_name || ' ' || u.last_name AS name, u.employee_code
+           FROM users u
+           WHERE u.status = 'active' AND (
+             EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.post_id = ? AND te.clock_in_at >= ?)
+             OR EXISTS (SELECT 1 FROM shifts sh WHERE sh.user_id = u.id AND sh.post_id = ? AND sh.status <> 'cancelled' AND sh.starts_at BETWEEN ? AND ?)
+           )
+           ORDER BY name`
+        )
+        .all(p.id, since, p.id, toSql(new Date()), until);
+      const acks = await db
+        .prepare(
+          `SELECT a.user_id, a.acked_at, u.first_name || ' ' || u.last_name AS name
+           FROM post_order_acks a JOIN users u ON u.id = a.user_id WHERE a.post_order_id = ? ORDER BY a.acked_at`
+        )
+        .all(order.id);
+      const ackedIds = new Set(acks.map((a) => a.user_id));
+      out.push({
+        ...p,
+        order: isoFields(order, ['created_at']),
+        acked: acks.map((a) => isoFields(a, ['acked_at'])),
+        outstanding: crew.filter((c) => !ackedIds.has(c.id)),
+      });
+    }
+    res.json({ posts: out, outstandingTotal: out.reduce((n, p) => n + p.outstanding.length, 0) });
+  })
+);
+
+postLogRouter.get(
+  '/admin/orders/:postId/history',
+  supervisor,
+  wrap(async (req, res) => {
+    const postId = idParam(req.params.postId, 'post');
+    await currentOrders(postId);
+    const rows = await db
+      .prepare(
+        `SELECT o.*, u.first_name || ' ' || u.last_name AS author_name,
+                (SELECT COUNT(*) FROM post_order_acks a WHERE a.post_order_id = o.id) AS acks
+         FROM post_orders o LEFT JOIN users u ON u.id = o.created_by
+         WHERE o.post_id = ? ORDER BY o.version DESC`
+      )
+      .all(postId);
+    res.json({ versions: rows.map((r) => ({ ...isoFields(r, ['created_at']), acks: Number(r.acks) })) });
+  })
+);
+
+/** New orders for a post. Supervisors may issue them; the old version stays on record. */
+postLogRouter.post(
+  '/admin/orders',
+  supervisor,
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({
+        postId: z.number().int().positive(),
+        body: z.string().trim().min(10, 'Post orders need to say what the officer does.').max(5000),
+        changeNote: z.string().trim().max(300).optional().nullable(),
+      }),
+      req.body
+    );
+    if (!(await db.prepare(`SELECT id FROM posts WHERE id = ?`).get(body.postId))) throw new HttpError(404, 'Post not found.');
+    await currentOrders(body.postId);
+    const { order, created } = await reviseOrders(body.postId, body.body, req.user.id, body.changeNote || null);
+    if (!created) throw new HttpError(409, 'Those are the orders already in force.');
+    await audit(req.user.id, 'post_orders.revised', 'post_order', order.id, { postId: body.postId, version: order.version }, req.ip);
+    res.status(201).json({ order: isoFields(order, ['created_at']) });
   })
 );

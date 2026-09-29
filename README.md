@@ -165,7 +165,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   (camera or library on mobile).
 - **Tours and tasks** — walk a route, scan each checkpoint by NFC/QR tag or manually,
   tick off per-checkpoint tasks, or skip with a recorded reason. Required checkpoints
-  block completion until they are dealt with.
+  block completion until they are dealt with. In the browser the camera reads the
+  printed QR tag (Chrome and Edge; elsewhere, type the code printed under it). A
+  checkpoint marked visited without a tag is recorded as manual, never as a scan.
+- **Post orders** — when a supervisor changes the standing orders for the officer's
+  post, the home screen leads with them: what changed, who changed it, and the full
+  orders, until the officer confirms "I have read these orders". Only the version
+  in force can be acknowledged.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
@@ -235,6 +241,18 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   out. It also keeps the **watchlist** (add, edit, lapse or remove entries, and
   see every sign-in that overrode a match) and **vehicles** (repeat offenders by
   plate, and every violation by site and period).
+- **Alerts inbox** — the bell in the header, with the unread count, lists everything
+  waiting on a supervisor: open duress alerts, no-shows, missed check-ins and
+  walk-offs from the last three days, watchlist overrides, urgent building issues,
+  unanswered low client ratings, open coverage requests and licences lapsing within
+  14 days. Most serious first; opening one goes to the screen that deals with it and
+  marks it read. Alerts are worked out from the records, so they clear themselves when
+  the problem is resolved; only who has read what is stored, per person.
+- **Post orders** (Post logs → Post orders) — each post's standing orders, versioned.
+  Issuing new orders, or editing the instructions on the Sites screen, makes a new
+  version; the old ones stay on record with who acknowledged each. Every post shows
+  who has not yet read the version in force: anyone who worked it in the last 30 days
+  or is scheduled on it in the next 14.
 - **Site contacts** (Post logs → Site contacts) — who officers call at each site,
   kept by supervisors and by the client; each entry says who added it.
 - **Client feedback** — every client's monthly rating per property with their
@@ -347,6 +365,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   drag the pin, or use your current position), with the geofence drawn to scale.
   Check-in cadence, post orders and the armed flag live here too.
 - **Tours** — build routes and checkpoints, and see completed walks as proof of service.
+  **QR tags** prints a tag for every checkpoint on a tour (three to a page, in walking
+  order), each encoding the checkpoint's own tag ID, or `USC-CP-<id>` when it has none.
 - **Audit log** — every sign-in, clock event, PIN reset and record change.
 
 ### Client portal (web, `/portal`)
@@ -529,7 +549,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 21 steps and stops it:
+One command reseeds the database, starts the API, runs all 22 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -569,7 +589,8 @@ the server is running corrupts the data directory.
   scroll. Ends with a client requesting coverage and a supervisor scheduling it. Then
   an officer on post signs a visitor in, which the supervisor sees under Post logs and
   the client sees in the day's report. The supervisor also finds the officer with
-  Ctrl+K.
+  Ctrl+K, issues new post orders the officer then reads and acknowledges, opens an
+  alert from the bell, and prints a tour's QR tags.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -592,6 +613,12 @@ the server is running corrupts the data directory.
   is one rating per contact, property and month; a low rating needs a reason, and
   the reply reaches the client without our staff member's name. Every export
   downloads as a real CSV, with formulas neutralised.
+- **`test/orders.mjs`** — post orders, the alerts inbox and QR tags. An officer can
+  acknowledge only the version in force, for their own post; a new version, from the
+  orders screen or the Sites screen, has to be read again, and the supervisor's list of
+  who has not read it is right. Alerts are ranked by severity, carry a link to where
+  they are handled, and read marks are per person. A checkpoint accepts its NFC tag,
+  its QR code or its own printed code, and refuses another checkpoint's.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -605,7 +632,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 67 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 71 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright

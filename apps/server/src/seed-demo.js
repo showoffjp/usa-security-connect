@@ -44,7 +44,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
-      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback',
+      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'post_order_acks', 'post_orders', 'alert_reads',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -1180,7 +1180,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

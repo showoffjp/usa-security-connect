@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtDateTime, fmtRelative } from '../../lib/format.js';
@@ -186,7 +187,8 @@ export default function AdminToursPage() {
   const [tours, setTours] = useState(null);
   const [runs, setRuns] = useState([]);
   const [sites, setSites] = useState([]);
-  const [tab, setTab] = useState('runs');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') === 'templates' ? 'templates' : 'runs');
   const [builder, setBuilder] = useState(false);
 
   const load = async () => {
@@ -298,6 +300,11 @@ export default function AdminToursPage() {
                     <Chip kind="navy">{t.checkpoint_count} checkpoints</Chip>
                     {t.expected_minutes && <Chip>~{t.expected_minutes} min</Chip>}
                     {!t.active && <Chip kind="warn">Inactive</Chip>}
+                    {Number(t.checkpoint_count) > 0 && (
+                      <Link className="btn btn-sm btn-ghost" to={`/admin/tours/${t.id}/tags`} aria-label={`Print QR tags for ${t.name}`}>
+                        <Icon name="qr" size={15} /> QR tags
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

@@ -25,6 +25,7 @@ import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
 import { assertHoursOpen } from '../services/payPeriods.js';
+import { currentOrders, reviseOrders } from '../services/postOrders.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 
@@ -1599,9 +1600,16 @@ adminRouter.patch(
     for (const [k, col] of Object.entries({ requiresGps: 'requires_gps', armed: 'armed', active: 'active' })) {
       if (b[k] !== undefined) { sets.push(`${col} = ?`); params.push(b[k] ? 1 : 0); }
     }
+    // A change to the instructions is a new version of the post orders,
+    // which the officers on the post then have to acknowledge. The text as it
+    // stood is recorded as version 1 first, before the update replaces it.
+    if (b.instructions !== undefined) await currentOrders(post.id);
     if (sets.length) {
       params.push(post.id);
       (await db.prepare(`UPDATE posts SET ${sets.join(', ')} WHERE id = ?`).run(...params));
+    }
+    if (b.instructions !== undefined) {
+      await reviseOrders(post.id, b.instructions, req.user.id, 'Edited on the Sites screen');
     }
     res.json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(post.id)) });
   })
@@ -2104,5 +2112,136 @@ adminRouter.post(
       .run(body.response, req.user.id, row.id);
     await audit(req.user.id, 'feedback.responded', 'client_feedback', row.id, null, req.ip);
     res.json({ ok: true });
+  })
+);
+
+/* --------------------------------------------------------- alerts inbox --- */
+
+/**
+ * One inbox for everything waiting on a supervisor, worked out from the
+ * records rather than stored: a duress button pressed, an officer who missed
+ * a check-in or walked off post, a watchlisted person let in anyway, an
+ * urgent building issue, an unhappy client, a request nobody has answered,
+ * a licence about to lapse. Only the read marks are kept, per person, so the
+ * list is always current and never needs clearing up.
+ */
+async function buildAlerts(userId) {
+  const since = toSql(new Date(Date.now() - 72 * 3600000));
+  const alerts = [];
+  const push = (a) => alerts.push(a);
+
+  for (const p of await db
+    .prepare(
+      `SELECT pa.id, pa.triggered_at, pa.status, u.first_name || ' ' || u.last_name AS officer, po.name AS post_name
+       FROM panic_alerts pa JOIN users u ON u.id = pa.user_id LEFT JOIN posts po ON po.id = pa.post_id
+       WHERE pa.status IN ('active', 'acknowledged') ORDER BY pa.triggered_at DESC`
+    )
+    .all()) {
+    push({ key: `duress:${p.id}`, kind: 'duress', severity: 'critical', at: p.triggered_at, link: '/admin/safety',
+      title: `Duress alert: ${p.officer}`, detail: `${p.post_name || 'Unknown post'} - ${p.status === 'active' ? 'not yet acknowledged' : 'acknowledged, still open'}` });
+  }
+
+  for (const f of await db
+    .prepare(
+      `SELECT f.id, f.type, f.severity, f.occurred_at, u.first_name || ' ' || u.last_name AS officer
+       FROM flags f JOIN users u ON u.id = f.user_id
+       WHERE f.resolved_at IS NULL AND f.occurred_at >= ? AND (f.severity = 'critical' OR f.type IN ('no_show', 'off_post', 'missed_check_in'))
+       ORDER BY f.occurred_at DESC LIMIT 25`
+    )
+    .all(since)) {
+    push({ key: `flag:${f.id}`, kind: 'flag', severity: f.severity === 'critical' ? 'critical' : 'warning', at: f.occurred_at, link: '/admin/flags',
+      title: `${FLAG_LABEL[f.type] || f.type}: ${f.officer}`, detail: 'Open compliance flag, not yet resolved' });
+  }
+
+  for (const v of await db
+    .prepare(
+      `SELECT v.id, v.full_name, v.arrived_at, s.name AS site_name, w.action, u.first_name || ' ' || u.last_name AS officer
+       FROM visitor_log v JOIN sites s ON s.id = v.site_id JOIN watchlist w ON w.id = v.watchlist_id
+       LEFT JOIN users u ON u.id = v.logged_by
+       WHERE v.arrived_at >= ? ORDER BY v.arrived_at DESC`
+    )
+    .all(since)) {
+    push({ key: `override:${v.id}`, kind: 'watchlist', severity: 'warning', at: v.arrived_at, link: '/admin/post-logs?tab=watchlist',
+      title: `Watchlist override: ${v.full_name}`, detail: `Let in at ${v.site_name} by ${v.officer || 'an officer'}` });
+  }
+
+  for (const i of await db
+    .prepare(
+      `SELECT i.id, i.category, i.location_text, i.created_at, s.name AS site_name
+       FROM site_issues i JOIN sites s ON s.id = i.site_id
+       WHERE i.priority = 'urgent' AND i.status <> 'fixed' ORDER BY i.created_at DESC`
+    )
+    .all()) {
+    push({ key: `issue:${i.id}`, kind: 'issue', severity: 'warning', at: i.created_at, link: '/admin/post-logs?tab=issues',
+      title: `Urgent building issue at ${i.site_name}`, detail: `${i.category.replace('_', ' ')}${i.location_text ? `, ${i.location_text}` : ''}` });
+  }
+
+  for (const f of await db
+    .prepare(
+      `SELECT f.id, f.rating, f.updated_at, s.name AS site_name, c.name AS client_name
+       FROM client_feedback f JOIN sites s ON s.id = f.site_id JOIN client_users c ON c.id = f.client_user_id
+       WHERE f.rating <= 2 AND f.response IS NULL ORDER BY f.updated_at DESC`
+    )
+    .all()) {
+    push({ key: `feedback:${f.id}`, kind: 'feedback', severity: 'warning', at: f.updated_at, link: '/admin/feedback',
+      title: `${f.client_name} rated ${f.site_name} ${f.rating} of 5`, detail: 'Waiting for a reply' });
+  }
+
+  for (const r of await db
+    .prepare(
+      `SELECT r.id, r.starts_at, r.officers, r.created_at, s.name AS site_name
+       FROM coverage_requests r JOIN sites s ON s.id = r.site_id WHERE r.status = 'open' ORDER BY r.starts_at`
+    )
+    .all()) {
+    push({ key: `coverage:${r.id}`, kind: 'coverage', severity: 'info', at: r.created_at, link: '/admin/coverage-requests',
+      title: `${s(r.officers, 'officer')} requested at ${r.site_name}`, detail: 'Starts', detailAt: sqlToIso(r.starts_at) });
+  }
+
+  for (const c of await db
+    .prepare(
+      `SELECT c.id, c.type, c.expires_on, u.first_name || ' ' || u.last_name AS officer
+       FROM certifications c JOIN users u ON u.id = c.user_id
+       WHERE u.status = 'active' AND c.expires_on IS NOT NULL AND c.expires_on <= current_date + 14
+       ORDER BY c.expires_on`
+    )
+    .all()) {
+    const lapsed = new Date(c.expires_on) < new Date(new Date().toDateString());
+    push({ key: `licence:${c.id}:${String(c.expires_on).slice(0, 10)}`, kind: 'licence', severity: lapsed ? 'warning' : 'info',
+      at: c.expires_on, link: '/admin/compliance',
+      title: `${c.officer}: ${c.type.replace(/_/g, ' ')} ${lapsed ? 'has lapsed' : 'expires soon'}`, detail: `Expires ${String(c.expires_on).slice(0, 10)}` });
+  }
+
+  const read = new Set(
+    (await db.prepare(`SELECT alert_key FROM alert_reads WHERE user_id = ?`).all(userId)).map((r) => r.alert_key)
+  );
+  const rank = { critical: 0, warning: 1, info: 2 };
+  return alerts
+    .map((a) => ({ ...a, at: sqlToIso(a.at), read: read.has(a.key) }))
+    .sort((a, b) => Number(a.read) - Number(b.read) || rank[a.severity] - rank[b.severity] || String(b.at).localeCompare(String(a.at)));
+}
+const s = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+adminRouter.get(
+  '/alerts',
+  wrap(async (req, res) => {
+    const alerts = await buildAlerts(req.user.id);
+    res.json({ alerts, unread: alerts.filter((a) => !a.read).length });
+  })
+);
+
+adminRouter.post(
+  '/alerts/read',
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({ keys: z.array(z.string().max(120)).max(500).optional(), all: z.boolean().optional() }),
+      req.body
+    );
+    const keys = body.all ? (await buildAlerts(req.user.id)).map((a) => a.key) : body.keys || [];
+    if (!keys.length) throw new HttpError(422, 'Say which alerts to mark read.');
+    for (const key of keys) {
+      await db.prepare(`INSERT INTO alert_reads (user_id, alert_key) VALUES (?, ?) ON CONFLICT DO NOTHING`).run(req.user.id, key);
+    }
+    const alerts = await buildAlerts(req.user.id);
+    res.json({ unread: alerts.filter((a) => !a.read).length });
   })
 );

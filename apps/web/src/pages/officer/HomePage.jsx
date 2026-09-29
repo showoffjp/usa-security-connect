@@ -11,6 +11,70 @@ import {
 import { formatDuration, toHours } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
 
+/* ----------------------------------------------------------- post orders -- */
+
+/**
+ * Standing orders the officer has not yet acknowledged. When a supervisor
+ * changes them, this is the first thing the officer sees on the home screen
+ * until they confirm they have read the new version.
+ */
+function PostOrdersCard({ onDuty }) {
+  const toast = useToast();
+  const [orders, setOrders] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.get('/post-log').then((d) => alive && setOrders(d.orders || null), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [onDuty]);
+  if (!orders || orders.acked_at) return null;
+  const ack = async () => {
+    setBusy(true);
+    try {
+      const d = await api.post(`/post-log/orders/${orders.id}/ack`);
+      setOrders(d.orders);
+      toast.success('Post orders acknowledged.');
+    } catch (err) {
+      toast.error(err.message);
+      if (err.status === 409) api.get('/post-log').then((d) => setOrders(d.orders || null), () => {});
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card card-pad stack" aria-labelledby="orders-title" style={{ borderLeft: '4px solid var(--warn)' }}>
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        <div className="lead-icon" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+          <Icon name="clipboard" size={19} />
+        </div>
+        <div className="grow">
+          <h3 id="orders-title" style={{ margin: 0 }}>
+            {orders.version > 1 ? 'Your post orders have changed' : 'Read your post orders'}
+          </h3>
+          <div className="tiny muted">
+            Version {orders.version}
+            {orders.author_name ? `, from ${orders.author_name}` : ''}, {fmtDay(orders.created_at)}
+          </div>
+        </div>
+        <Chip kind="warn">Unread</Chip>
+      </div>
+      {orders.change_note && orders.version > 1 && (
+        <div className="small">
+          <strong>What changed:</strong> {orders.change_note}
+        </div>
+      )}
+      <div className="small" style={{ whiteSpace: 'pre-line', color: 'var(--ink-3)', maxHeight: 220, overflowY: 'auto' }}>
+        {orders.body}
+      </div>
+      <button className="btn btn-primary" onClick={ack} disabled={busy}>
+        {busy ? 'Saving...' : 'I have read these orders'}
+      </button>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------ post log -- */
 
 /**
@@ -306,6 +370,9 @@ export default function HomePage() {
       </div>
 
       {checkIn?.is_open && <CheckInPrompt checkIn={checkIn} onAnswered={load} />}
+
+      {/* Changed orders come before anything else on post. */}
+      <PostOrdersCard onDuty={onDuty} />
 
       {/* -------------------------------------------------- post card -- */}
       <div className="card">

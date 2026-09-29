@@ -4,6 +4,7 @@ import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtTime, toDateInput } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
 import { WatchEntry, WATCH_ACTION, VIOLATION_LABEL, VIOLATION_ACTION } from '../officer/PostLogPage.jsx';
+import { OrdersAdmin } from './PostOrdersAdmin.jsx';
 import { ActivityAdmin, IssuesAdmin, FoundAdmin, ContactsAdmin, CsvButton } from './SiteLogAdmin.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
@@ -554,7 +555,7 @@ function Vehicles({ siteId, sites, setSiteId }) {
 
 export default function PostLogsPage() {
   const [params, setParams] = useSearchParams();
-  const tab = ['passdown', 'watchlist', 'vehicles', 'activity', 'issues', 'found', 'contacts'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
+  const tab = ['orders', 'passdown', 'watchlist', 'vehicles', 'activity', 'issues', 'found', 'contacts'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
   const [siteId, setSiteId] = useState('');
   const [sites, setSites] = useState([]);
   useEffect(() => {
@@ -566,7 +567,7 @@ export default function PostLogsPage() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="eyebrow">Operations</div>
         <h1>Post logs</h1>
-        <p className="lead">Everything recorded on post: visitors, the activity log, pass-down, building issues, lost property, the watchlist and vehicles.</p>
+        <p className="lead">Everything recorded on post: visitors, the activity log, pass-down, building issues, lost property, the watchlist, vehicles and each post's standing orders.</p>
       </div>
       <Segmented
         label="Log"
@@ -581,9 +582,12 @@ export default function PostLogsPage() {
           { value: 'watchlist', label: 'Watchlist' },
           { value: 'vehicles', label: 'Vehicles' },
           { value: 'contacts', label: 'Site contacts' },
+          { value: 'orders', label: 'Post orders' },
         ]}
       />
-      {tab === 'contacts' ? (
+      {tab === 'orders' ? (
+        <OrdersAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
+      ) : tab === 'contacts' ? (
         <ContactsAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
       ) : tab === 'activity' ? (
         <ActivityAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
