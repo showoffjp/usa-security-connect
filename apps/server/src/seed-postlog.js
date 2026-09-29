@@ -363,5 +363,69 @@ export async function seedPostLog({ db }) {
     found++;
   }
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found };
+  /* -------------------------------------------------------- site contacts -- */
+
+  const PEOPLE_BY_ROLE = [
+    ['Property manager', ['Laura Kim', 'Dennis Ortiz', 'Monica Hale', 'Greg Summers', 'Tasha Reid']],
+    ['Maintenance on call', ['Facilities hotline', 'Ray Delgado', 'Building engineer', 'Mike Patel']],
+    ['Alarm monitoring', ['ADT Commercial', 'Vector Security', 'Johnson Controls monitoring']],
+    ['Police non-emergency', ['Local police non-emergency']],
+  ];
+  let contacts = 0;
+  const firstClient = async (site) =>
+    (await db.prepare(`SELECT client_user_id AS id FROM client_sites WHERE site_id = ? ORDER BY client_user_id LIMIT 1`).get(site))?.id || null;
+  for (const [i, site] of sites.entries()) {
+    const client = await firstClient(site.id);
+    for (const [j, [role, names]] of PEOPLE_BY_ROLE.entries()) {
+      const phone = `(${['904', '305', '850', '727', '352', '386'][i % 6]}) 555-${String(1000 + i * 37 + j * 211).slice(-4)}`;
+      await db
+        .prepare(
+          `INSERT INTO site_contacts (site_id, name, role, phone, email, notes, after_hours, sort, added_by_user, added_by_client)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run(
+          site.id, names[i % names.length], role, phone,
+          j === 0 ? `${names[i % names.length].split(' ')[0].toLowerCase()}@${site.name.split(' ')[0].toLowerCase()}.example.com` : null,
+          j === 1 ? 'Call first for anything leaking, broken or stuck.' : j === 2 ? 'Give the site number and the zone.' : null,
+          j !== 0, j, j === 0 && client ? null : sup.id, j === 0 && client ? client : null
+        );
+      contacts++;
+    }
+  }
+
+  /* ------------------------------------------------------ client feedback -- */
+
+  const pairs = await db.prepare(`SELECT client_user_id, site_id FROM client_sites ORDER BY client_user_id, site_id`).all();
+  const COMMENTS = {
+    5: ['Officers are professional and always on time.', 'Very happy - the daily reports are exactly what we need.', null],
+    4: ['Good month overall. One late shift but it was covered quickly.', 'Solid service.', null],
+    3: ['Patrol reports were late a couple of mornings.', 'Fine, but we would like more visible patrols in the garage.'],
+    2: ['Officer was on his phone at the desk twice this week. Not the standard we pay for.'],
+  };
+  let feedback = 0;
+  for (const [k, pair] of pairs.entries()) {
+    for (let m = 5; m >= 0; m--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (m === 0 && k % 2 === 0) continue; // half the clients have not rated this month yet
+      // Mostly good, one poor month for one client, and the latest poor one unanswered.
+      const rating = k === 1 && m === 1 ? 2 : k === 2 && m <= 1 ? 3 : rand() < 0.6 ? 5 : 4;
+      const comment = pick(COMMENTS[rating]);
+      const replied = rating <= 3 && m > 1;
+      await db
+        .prepare(
+          `INSERT INTO client_feedback (client_user_id, site_id, period, rating, comment, response, responded_by, responded_at, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run(
+          pair.client_user_id, pair.site_id, period, rating, comment,
+          replied ? 'Thank you - we have spoken to the team and added a supervisor check.' : null,
+          replied ? sup.id : null, replied ? toSql(new Date(d.getTime() + 20 * 86400000)) : null,
+          toSql(new Date(d.getTime() + 15 * 86400000)), toSql(new Date(d.getTime() + 15 * 86400000))
+        );
+      feedback++;
+    }
+  }
+
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback };
 }

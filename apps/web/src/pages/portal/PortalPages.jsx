@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { clientApi } from '../../lib/api.js';
 import { fmtDate, fmtDateTime, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
 import {
-  Banner, Chip, Empty, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
+  Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
 import { AuthedImage } from '../../components/AuthedImage.jsx';
 import { InvoiceSheet, printInvoice } from '../../components/InvoiceSheet.jsx';
@@ -251,6 +251,228 @@ function BuildingIssues() {
 }
 const sitesLabel = (i) => (i.site_name ? ` · ${i.site_name}` : '');
 
+/* ------------------------------------------------------- feedback -- */
+
+/** A month's rating per property, and our replies to earlier ones. */
+function RateUs({ sites }) {
+  const { data, reload } = usePortal('/client/feedback', []);
+  const [siteId, setSiteId] = useState(sites[0]?.id);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const current = data?.feedback.find((f) => f.site_id === Number(siteId) && f.period === data.period);
+  useEffect(() => {
+    setRating(current?.rating || 0);
+    setComment(current?.comment || '');
+  }, [current?.id, current?.rating, current?.comment]);
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      await clientApi.post('/client/feedback', { siteId: Number(siteId), rating, comment: comment || null });
+      setMessage('Thank you - your account manager sees this straight away.');
+      reload();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const replies = data?.feedback.filter((f) => f.response).slice(0, 2) || [];
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>How are we doing this month?</h2>
+        {current && <Chip kind="ok">Rated</Chip>}
+      </div>
+      <form className="card-pad stack-sm" onSubmit={send}>
+        {sites.length > 1 && (
+          <select aria-label="Property" value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 360 }}>
+            {sites.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <div className="row" role="radiogroup" aria-label="Rating" style={{ gap: 4 }}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={rating === n}
+              aria-label={`${n} star${n === 1 ? '' : 's'}`}
+              className="star-btn"
+              onClick={() => setRating(n)}
+              style={{ color: n <= rating ? '#c98a00' : 'var(--line-2)' }}
+            >
+              ★
+            </button>
+          ))}
+          <span className="small muted" style={{ marginLeft: 8 }}>
+            {rating ? ['', 'Poor', 'Below what we expect', 'OK', 'Good', 'Excellent'][rating] : 'Choose a rating'}
+          </span>
+        </div>
+        <label className="small strong" htmlFor="feedback-comment">
+          {rating && rating <= 2 ? 'What went wrong? (needed)' : 'Anything to add? (optional)'}
+        </label>
+        <textarea id="feedback-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} />
+        <div className="row-between wrap">
+          <span className="small muted" aria-live="polite">{message}</span>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={busy || !rating || (rating <= 2 && comment.trim().length < 3)}>
+            {busy ? 'Sending...' : current ? 'Update rating' : 'Send rating'}
+          </button>
+        </div>
+        {replies.map((f) => (
+          <div key={f.id} className="small" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+            <strong>Our reply</strong> on your {f.period} rating for {f.site_name}: {f.response}
+          </div>
+        ))}
+      </form>
+    </section>
+  );
+}
+
+/* ---------------------------------------------------- site contacts -- */
+
+const BLANK_CONTACT = { name: '', role: '', phone: '', email: '', notes: '', afterHours: false };
+
+/** The people our officers call at the property - the client keeps it current. */
+function OfficerContacts() {
+  const { data, reload } = usePortal('/client/contacts', []);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(BLANK_CONTACT);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+
+  const open = (siteId, c) => {
+    setEditing({ siteId, id: c?.id });
+    setForm(c ? { name: c.name, role: c.role, phone: c.phone || '', email: c.email || '', notes: c.notes || '', afterHours: c.after_hours } : BLANK_CONTACT);
+    setError('');
+  };
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    const body = { ...form, phone: form.phone || null, email: form.email || null };
+    try {
+      if (editing.id) await clientApi.patch(`/client/contacts/${editing.id}`, body);
+      else await clientApi.post('/client/contacts', { ...body, siteId: editing.siteId });
+      setEditing(null);
+      reload();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (c) => {
+    try {
+      await clientApi.del(`/client/contacts/${c.id}`);
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (!data) return null;
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Who our officers call</h2>
+        <span className="small muted">Keep this current - officers see it on post</span>
+      </div>
+      {error && !editing && (
+        <div className="card-pad" style={{ paddingBottom: 0 }}>
+          <Banner kind="danger">{error}</Banner>
+        </div>
+      )}
+      {data.sites.map((site) => (
+        <div key={site.id}>
+          {data.sites.length > 1 && <div className="card-pad small strong" style={{ paddingBottom: 0 }}>{site.name}</div>}
+          <ul className="list">
+            {site.contacts.map((c) => (
+              <li key={c.id} className="list-item" style={{ cursor: 'default' }}>
+                <div className="grow">
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    <span className="strong small">{c.role}</span>
+                    {c.after_hours && <Chip kind="navy">After hours</Chip>}
+                  </div>
+                  <div className="small">
+                    {c.name}
+                    {c.phone ? ` · ${c.phone}` : ''}
+                    {c.email ? ` · ${c.email}` : ''}
+                  </div>
+                </div>
+                <button className="btn btn-sm btn-ghost" onClick={() => open(site.id, c)}>
+                  Edit
+                </button>
+                <button className="btn btn-sm btn-ghost" onClick={() => remove(c)} aria-label={`Remove ${c.name}`}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="card-pad" style={{ paddingTop: 8 }}>
+            <button className="btn btn-sm btn-ghost" onClick={() => open(site.id)}>
+              <Icon name="plus" size={15} /> Add a contact
+            </button>
+          </div>
+        </div>
+      ))}
+      {editing && (
+        <Modal
+          title={editing.id ? 'Edit contact' : 'Add a contact'}
+          onClose={() => setEditing(null)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={save} disabled={busy || form.name.trim().length < 2 || form.role.trim().length < 2}>
+                {busy ? 'Saving...' : 'Save'}
+              </button>
+            </>
+          }
+        >
+          <div className="stack">
+            {error && <Banner kind="danger">{error}</Banner>}
+            <div className="grid grid-2">
+              <Field label="Name" required>
+                <input value={form.name} onChange={set('name')} maxLength={120} />
+              </Field>
+              <Field label="Who they are" required hint="Property manager, maintenance.">
+                <input value={form.role} onChange={set('role')} maxLength={80} />
+              </Field>
+            </div>
+            <div className="grid grid-2">
+              <Field label="Phone">
+                <input type="tel" value={form.phone} onChange={set('phone')} maxLength={40} />
+              </Field>
+              <Field label="Email">
+                <input type="email" value={form.email} onChange={set('email')} maxLength={160} />
+              </Field>
+            </div>
+            <Field label="Notes for officers">
+              <input value={form.notes} onChange={set('notes')} maxLength={300} />
+            </Field>
+            <label className="row small">
+              <input type="checkbox" checked={form.afterHours} onChange={set('afterHours')} style={{ width: 'auto' }} />
+              Reachable after hours
+            </label>
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+}
+
 /* ---------------------------------------------------------- overview -- */
 
 export function PortalOverview({ sites }) {
@@ -338,6 +560,9 @@ export function PortalOverview({ sites }) {
                 {data.summary.supervisorVisits === 1 ? '' : 's'} in the last 7 days.
               </Banner>
             )}
+
+            <RateUs sites={sites} />
+            <OfficerContacts />
 
             <section className="card">
               <div className="card-head">

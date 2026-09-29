@@ -56,7 +56,7 @@ certificationsRouter.get(
   '/expiring',
   requireRole(ROLES.SUPERVISOR),
   wrap(async (req, res) => {
-    const days = Math.min(Number(req.query.days) || 60, 365);
+    const days = Math.min(Math.max(Number(req.query.days) || 60, 1), 365);
 
     const certs = (await db
       .prepare(

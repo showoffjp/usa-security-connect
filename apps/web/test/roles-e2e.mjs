@@ -231,6 +231,29 @@ for (const u of STAFF) {
   await context.close();
 }
 
+/* ----------------------- an officer signing in on a tab left at /admin --- */
+
+{
+  console.log('\n--- Officer signs in on a tab left at an admin address ---');
+  const { context, page, problems } = await watchedPage({ width: 1366, height: 900 });
+  // A supervisor's tab, signed out, still at /admin/live - then 1003 signs in.
+  await page.goto(WEB + '/admin/live', { waitUntil: 'networkidle' });
+  await page.fill('#employeeCode', '1003');
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.keypad', { timeout: 10000 });
+  for (const digit of '4812') await page.click(`.keypad button:text-is("${digit}")`);
+  await page.click('button:text-is("Sign in")');
+  await page.waitForTimeout(2500);
+  const body = await page.textContent('body');
+  log(new URL(page.url()).pathname === '/' && !/Admin access only/.test(body), 'the officer lands on their own home, not an admin dead end',
+    new URL(page.url()).pathname);
+  await page.goto(WEB + '/admin/payroll');
+  await settle(page);
+  log(new URL(page.url()).pathname === '/', 'and an admin link sends them home too', new URL(page.url()).pathname);
+  await checkScreen('officer: home after an admin address', page, problems);
+  await context.close();
+}
+
 /* ---------------------------------------------------------- phone width --- */
 
 {
@@ -459,6 +482,25 @@ for (const u of STAFF) {
   await settle(officer.page);
   log(await officer.page.locator('li.list-item', { hasText: issueText }).locator('text=replaced the bulb').count() === 1,
     "the officer on post sees the client's reply");
+  // The client rates the month; a supervisor sees it with the comment.
+  const praise = `E2E great month ${Date.now() % 100000}`;
+  await client.page.goto(WEB + '/portal');
+  await settle(client.page);
+  await client.page.click('[role="radio"][aria-label="4 stars"]');
+  await client.page.fill('#feedback-comment', praise);
+  await client.page.click('button:has-text("rating")');
+  await client.page.waitForTimeout(1500);
+  log(await client.page.locator('text=account manager sees this').count() === 1, 'the client rates the month from the portal');
+  await staff.page.goto(WEB + '/admin/feedback');
+  await settle(staff.page);
+  log(await staff.page.locator(`text=${praise}`).count() === 1, 'and a supervisor sees the rating and comment');
+  await checkScreen('supervisor: client feedback', staff.page, staff.problems);
+
+  // Site contacts, one tap from the officer's home screen.
+  await officer.page.goto(WEB + '/');
+  await settle(officer.page);
+  log(await officer.page.locator('a[href^="tel:"]').count() >= 2, 'the officer home has the site contacts, tap to call');
+
   await officer.page.goto(WEB + '/post-log?tab=visitors');
   await settle(officer.page);
 

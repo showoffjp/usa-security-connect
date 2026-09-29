@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/db.js';
-import { wrap, isoFields, toDateString, sqlToIso } from '../lib/http.js';
+import { wrap, isoFields, toDateString, sqlToIso, dateParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import { splitOvertime, toHours } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -14,8 +14,8 @@ scheduleRouter.use(requireAuth);
 scheduleRouter.get(
   '/',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 21 * 86400000);
+    const from = dateParam(req.query.from, new Date(Date.now() - 7 * 86400000));
+    const to = dateParam(req.query.to, new Date(Date.now() + 21 * 86400000));
 
     const shifts = (await db
       .prepare(

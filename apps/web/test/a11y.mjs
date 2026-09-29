@@ -60,6 +60,8 @@ const STAFF_PAGES = [
   ['Post logs: activity', '/admin/post-logs?tab=activity'],
   ['Post logs: building issues', '/admin/post-logs?tab=issues'],
   ['Post logs: lost and found', '/admin/post-logs?tab=found'],
+  ['Post logs: site contacts', '/admin/post-logs?tab=contacts'],
+  ['Client feedback', '/admin/feedback'],
   ['Officer scorecards', '/admin/scorecards'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],

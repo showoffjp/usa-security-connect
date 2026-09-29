@@ -101,7 +101,7 @@ merely see more or less of the same screen — they get different applications.
 | | Officer `1003` | Supervisor `1002` | Administrator `1001` |
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
-| **Navigation** | 5 tabs | 25 destinations | 26 destinations |
+| **Navigation** | 5 tabs | 26 destinations | 27 destinations |
 | **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
 | **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes |
@@ -204,6 +204,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
     towed). Look up any plate first: its violations at every site, the visits it
     came in with, and whether it is on the watchlist. Two or more in six months
     marks it a repeat offender, and each row says which offence it is.
+- **Site contacts** on the home screen: the property manager, maintenance, the alarm
+  company and the police non-emergency line for the site they are on, each a tap
+  to call, with who answers after hours.
 - **Messaging** with supervisors and dispatch.
 - **Supervisor visits** (supervisors only) — uniform, post orders, equipment and site
   checks, logged with GPS.
@@ -232,6 +235,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   out. It also keeps the **watchlist** (add, edit, lapse or remove entries, and
   see every sign-in that overrode a match) and **vehicles** (repeat offenders by
   plate, and every violation by site and period).
+- **Site contacts** (Post logs → Site contacts) — who officers call at each site,
+  kept by supervisors and by the client; each entry says who added it.
+- **Client feedback** — every client's monthly rating per property with their
+  comment. Two stars or fewer without a reply is counted on the dashboard and in
+  the sidebar. The reply goes back to the client's portal.
+- **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
+  issues, lost and found), the scorecards and client feedback. Any cell starting
+  with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
   ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
   25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
@@ -364,6 +375,10 @@ a PIN — and sees, for their own properties only:
 - **Building issues** — on the overview: whatever our officers found wrong with the
   property, urgent first. The client marks each one "seen, it's in hand" or "fixed",
   with a note for the officer on post. The officer who reported it stays internal.
+- **How are we doing?** — a one-to-five rating for the month per property, changeable
+  within the month; a low one needs a reason. Our reply appears underneath.
+- **Who our officers call** — the client keeps their property's contacts current,
+  and officers on post see the changes at once.
 - **Extra coverage requests** — the one thing a client can ask for: officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
@@ -514,7 +529,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs every suite and stops it:
+One command reseeds the database, starts the API, runs all 21 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -572,11 +587,25 @@ the server is running corrupts the data directory.
   the client acknowledges it, fixes it, and a fixed issue stays closed to them,
   while a supervisor can reopen it. Found items leave only with a name and a
   contact, and only supervisors dispose of property.
+- **`test/contacts.mjs`** — contacts from both sides: a client edits only their own
+  properties' contacts, and officers read those for the site they are on. Feedback
+  is one rating per contact, property and month; a low rating needs a reason, and
+  the reply reaches the client without our staff member's name. Every export
+  downloads as a real CSV, with formulas neutralised.
+- **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
+  included automatically. Every GET is called signed out, as an officer, a
+  supervisor, an administrator and a client, then again with nonsense in every
+  query parameter. Every POST, PATCH and DELETE is sent malformed bodies. Refusals
+  are fine; a 5xx fails the run. Nothing but the public endpoints may answer
+  without a session. Its first run found 14 endpoints that crashed on bad
+  parameters, a broadcast receipt that failed when a message was acknowledged
+  after being opened, and training progress that could never be saved on
+  Postgres. All are fixed and checked here.
 - **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 65 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 67 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright

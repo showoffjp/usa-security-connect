@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, idParam, limitParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import { toSql } from '../services/compliance.js';
 
@@ -20,7 +20,7 @@ toursRouter.get(
       )
       .get(req.user.id));
 
-    const siteId = Number(req.query.siteId) || open?.site_id || req.user.default_site_id;
+    const siteId = idParam(req.query.siteId, 'site') || open?.site_id || req.user.default_site_id;
     if (!siteId) return res.json({ tours: [], activeRun: null });
 
     const tours = (await db
@@ -287,7 +287,7 @@ toursRouter.post(
 toursRouter.get(
   '/runs',
   wrap(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 25, 100);
+    const limit = limitParam(req.query.limit, 25, 100);
     const rows = (await db
       .prepare(
         `SELECT tr.*, t.name AS tour_name, s.name AS site_name,

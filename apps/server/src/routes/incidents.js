@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, idParam, limitParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { INCIDENT_CATEGORIES, INCIDENT_SEVERITY, ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -139,7 +139,7 @@ incidentsRouter.get(
   '/',
   wrap(async (req, res) => {
     const mine = req.query.scope !== 'all' || !atLeast(req.user.role, ROLES.SUPERVISOR);
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = limitParam(req.query.limit, 50, 200);
 
     const where = [];
     const params = [];
@@ -157,7 +157,7 @@ incidentsRouter.get(
     }
     if (req.query.siteId) {
       where.push('i.site_id = ?');
-      params.push(Number(req.query.siteId));
+      params.push(idParam(req.query.siteId, 'site'));
     }
     if (req.query.search) {
       where.push('(i.what_happened LIKE ? OR i.ref_number LIKE ? OR i.location_text LIKE ?)');
@@ -328,7 +328,7 @@ visitsRouter.post(
 visitsRouter.get(
   '/',
   wrap(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = limitParam(req.query.limit, 50, 200);
     const supervisorOnly = !atLeast(req.user.role, ROLES.ADMIN);
     const rows = (await db
       .prepare(

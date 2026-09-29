@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, sqlToIso, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, sqlToIso, isoFields, limitParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import {
   RULES,
@@ -611,7 +611,7 @@ timeclockRouter.get(
 timeclockRouter.get(
   '/entries',
   wrap(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 30, 200);
+    const limit = limitParam(req.query.limit, 30, 200);
     const rows = (await db
       .prepare(
         `SELECT te.*, p.name AS post_name, s.name AS site_name

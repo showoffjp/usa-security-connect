@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit, demoInstance } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay, toDateString, idParam, limitParam, dateParam, sendCsv } from '../lib/http.js';
 import { requireAuth, requireRole, hashPin, generatePin, generateEmployeeCode, publicUser } from '../lib/auth.js';
 import {
   ROLES,
@@ -212,6 +212,11 @@ adminRouter.get(
       .prepare(`SELECT COUNT(*) AS n FROM lost_found WHERE status = 'held'`)
       .get()).n);
 
+    // A client who scored us two or under and has not heard back.
+    const unhappyClients = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM client_feedback WHERE rating <= 2 AND response IS NULL`)
+      .get()).n);
+
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
       .get(toDateString(new Date()))).n);
@@ -246,6 +251,7 @@ adminRouter.get(
         visitorsOnSite,
         openIssues,
         foundHeld,
+        unhappyClients,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -723,7 +729,7 @@ adminRouter.post(
 adminRouter.get(
   '/shifts/candidates',
   wrap(async (req, res) => {
-    const postId = Number(req.query.postId);
+    const postId = idParam(req.query.postId, 'post');
     const startsAt = new Date(String(req.query.startsAt || ''));
     const endsAt = new Date(String(req.query.endsAt || ''));
     const excludeShiftId = Number(req.query.excludeShiftId) || 0;
@@ -869,8 +875,8 @@ adminRouter.get(
 adminRouter.get(
   '/shifts',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 14 * 86400000);
+    const from = dateParam(req.query.from, new Date(Date.now() - 86400000));
+    const to = dateParam(req.query.to, new Date(Date.now() + 14 * 86400000));
 
     const rows = (await db
       .prepare(
@@ -890,8 +896,8 @@ adminRouter.get(
       .all(
         toSql(from),
         toSql(to),
-        ...(req.query.siteId ? [Number(req.query.siteId)] : []),
-        ...(req.query.userId ? [Number(req.query.userId)] : [])
+        ...(req.query.siteId ? [idParam(req.query.siteId, 'site')] : []),
+        ...(req.query.userId ? [idParam(req.query.userId, 'person')] : [])
       ));
 
     res.json({
@@ -1272,8 +1278,8 @@ adminRouter.delete(
 adminRouter.get(
   '/timesheets',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const from = dateParam(req.query.from, new Date(Date.now() - 14 * 86400000));
+    const to = dateParam(req.query.to, new Date());
 
     const rows = (await db
       .prepare(
@@ -1365,8 +1371,8 @@ adminRouter.get(
 adminRouter.get(
   '/time-entries',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const from = dateParam(req.query.from, new Date(Date.now() - 7 * 86400000));
+    const to = dateParam(req.query.to, new Date());
 
     const rows = (await db
       .prepare(
@@ -1381,7 +1387,7 @@ adminRouter.get(
          ${req.query.userId ? 'AND te.user_id = ?' : ''}
          ORDER BY te.clock_in_at DESC LIMIT 500`
       )
-      .all(toSql(from), toSql(to), ...(req.query.userId ? [Number(req.query.userId)] : [])));
+      .all(toSql(from), toSql(to), ...(req.query.userId ? [idParam(req.query.userId, 'person')] : [])));
 
     res.json({ entries: rows.map((r) => isoFields(r, ['clock_in_at', 'clock_out_at', 'created_at'])) });
   })
@@ -1461,7 +1467,7 @@ adminRouter.get(
       )
       .all(
         ...(req.query.type ? [req.query.type] : []),
-        ...(req.query.userId ? [Number(req.query.userId)] : [])
+        ...(req.query.userId ? [idParam(req.query.userId, 'person')] : [])
       ));
 
     res.json({
@@ -1715,7 +1721,7 @@ adminRouter.get(
          WHERE tr.started_at >= ?
          ORDER BY tr.started_at DESC LIMIT 200`
       )
-      .all(toSql(req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000))));
+      .all(toSql(dateParam(req.query.from, new Date(Date.now() - 14 * 86400000)))));
     res.json({ runs: rows.map((r) => isoFields(r, ['started_at', 'completed_at'])) });
   })
 );
@@ -1742,8 +1748,8 @@ adminRouter.get(
 adminRouter.get(
   '/export/timesheets.csv',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 14 * 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const from = dateParam(req.query.from, new Date(Date.now() - 14 * 86400000));
+    const to = dateParam(req.query.to, new Date());
 
     const rows = (await db
       .prepare(
@@ -1796,7 +1802,7 @@ adminRouter.get(
 adminRouter.get(
   '/emails',
   wrap(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    const limit = limitParam(req.query.limit, 100, 300);
     const rows = (await db
       .prepare(
         `SELECT id, to_email, to_name, subject, kind, entity, entity_id,
@@ -2015,6 +2021,15 @@ adminRouter.get(
       .filter((c) => c.shifts.due > 0 || c.hours > 0);
 
     cards.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `officer-scorecards-${days}-days`, [
+        ['Officer', 'name'], ['Code', 'employee_code'], ['Role', 'role'], ['Type', 'employment_type'], ['Score', 'score'],
+        ['Shifts due', (c) => c.shifts.due], ['Worked', (c) => c.shifts.worked], ['Missed', (c) => c.shifts.missed],
+        ['On time %', (c) => c.shifts.onTimePct], ['Avg minutes late', (c) => c.shifts.avgLateMin], ['Hours', 'hours'],
+        ['Check-ins answered %', (c) => c.checkIns.answeredPct], ['Check-ins missed', (c) => c.checkIns.missed],
+        ['Tours completed', (c) => c.tours.completed], ['Incidents', 'incidents'], ['Flags', (c) => c.flags.total],
+      ], cards);
+    }
     const scored = cards.filter((c) => c.score !== null);
     res.json({
       days,
@@ -2024,5 +2039,70 @@ adminRouter.get(
       averageScore: scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : null,
       cards,
     });
+  })
+);
+
+
+/* ------------------------------------------------------ client feedback --- */
+
+/**
+ * What clients think of the service: every rating from the last few months,
+ * the average per property, and anything scored two or under without a reply
+ * picked out, because that is a client thinking about leaving.
+ */
+adminRouter.get(
+  '/feedback',
+  wrap(async (req, res) => {
+    const months = Math.min(Math.max(Number(req.query.months) || 6, 1), 24);
+    const since = new Date();
+    since.setMonth(since.getMonth() - months + 1);
+    const from = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}`;
+    const rows = await db
+      .prepare(
+        `SELECT f.*, s.name AS site_name, c.name AS client_name, c.company AS client_company,
+                u.first_name || ' ' || u.last_name AS responded_by_name
+         FROM client_feedback f
+         JOIN sites s ON s.id = f.site_id
+         JOIN client_users c ON c.id = f.client_user_id
+         LEFT JOIN users u ON u.id = f.responded_by
+         WHERE f.period >= ?
+         ORDER BY f.period DESC, f.rating ASC, s.name`
+      )
+      .all(from);
+    const bySite = new Map();
+    for (const r of rows) {
+      const e = bySite.get(r.site_id) || { site_id: r.site_id, site_name: r.site_name, ratings: [] };
+      e.ratings.push(r.rating);
+      bySite.set(r.site_id, e);
+    }
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `client-feedback-${months}-months`, [
+        ['Month', 'period'], ['Site', 'site_name'], ['Client', 'client_name'], ['Company', 'client_company'], ['Rating', 'rating'],
+        ['Comment', 'comment'], ['Our reply', 'response'], ['Replied by', 'responded_by_name'], ['Replied', 'responded_at'],
+      ], rows);
+    }
+    const avg = (xs) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+    const byMonth = [...new Set(rows.map((r) => r.period))].sort().map((p) => ({ period: p, average: avg(rows.filter((r) => r.period === p).map((r) => r.rating)), count: rows.filter((r) => r.period === p).length }));
+    res.json({
+      feedback: rows.map((r) => isoFields(r, ['responded_at', 'created_at', 'updated_at'])),
+      sites: [...bySite.values()].map((e) => ({ site_id: e.site_id, site_name: e.site_name, average: avg(e.ratings), count: e.ratings.length })).sort((a, b) => a.average - b.average),
+      byMonth,
+      average: avg(rows.map((r) => r.rating)),
+      needsReply: rows.filter((r) => r.rating <= 2 && !r.response).length,
+    });
+  })
+);
+
+adminRouter.post(
+  '/feedback/:id/respond',
+  wrap(async (req, res) => {
+    const body = parse(z.object({ response: z.string().trim().min(5, 'Write a reply the client will read.').max(1000) }), req.body);
+    const row = await db.prepare(`SELECT * FROM client_feedback WHERE id = ?`).get(idParam(req.params.id, 'feedback'));
+    if (!row) throw new HttpError(404, 'Feedback not found.');
+    await db
+      .prepare(`UPDATE client_feedback SET response = ?, responded_by = ?, responded_at = now() WHERE id = ?`)
+      .run(body.response, req.user.id, row.id);
+    await audit(req.user.id, 'feedback.responded', 'client_feedback', row.id, null, req.ip);
+    res.json({ ok: true });
   })
 );

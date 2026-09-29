@@ -4,7 +4,7 @@ import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtTime, toDateInput } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
 import { WatchEntry, WATCH_ACTION, VIOLATION_LABEL, VIOLATION_ACTION } from '../officer/PostLogPage.jsx';
-import { ActivityAdmin, IssuesAdmin, FoundAdmin } from './SiteLogAdmin.jsx';
+import { ActivityAdmin, IssuesAdmin, FoundAdmin, ContactsAdmin, CsvButton } from './SiteLogAdmin.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
 
@@ -65,6 +65,10 @@ function Visitors({ siteId, setSiteId }) {
               </option>
             ))}
           </select>
+          <CsvButton
+            path={`/post-log/admin/visitors?${scope === 'inside' ? 'onSite=1' : `date=${day}`}${siteId ? `&siteId=${siteId}` : ''}`}
+            filename={scope === 'inside' ? 'visitors-on-site' : `visitors-${day}`}
+          />
         </div>
       </div>
       {!data ? (
@@ -494,6 +498,7 @@ function Vehicles({ siteId, sites, setSiteId }) {
                 </option>
               ))}
             </select>
+            <CsvButton path={`/post-log/admin/vehicles?days=${days}${siteId ? `&siteId=${siteId}` : ''}`} filename={`vehicle-violations-${days}-days`} />
           </div>
         </div>
         {!data ? null : data.violations.length === 0 ? (
@@ -549,7 +554,7 @@ function Vehicles({ siteId, sites, setSiteId }) {
 
 export default function PostLogsPage() {
   const [params, setParams] = useSearchParams();
-  const tab = ['passdown', 'watchlist', 'vehicles', 'activity', 'issues', 'found'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
+  const tab = ['passdown', 'watchlist', 'vehicles', 'activity', 'issues', 'found', 'contacts'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
   const [siteId, setSiteId] = useState('');
   const [sites, setSites] = useState([]);
   useEffect(() => {
@@ -575,9 +580,12 @@ export default function PostLogsPage() {
           { value: 'found', label: 'Lost & found' },
           { value: 'watchlist', label: 'Watchlist' },
           { value: 'vehicles', label: 'Vehicles' },
+          { value: 'contacts', label: 'Site contacts' },
         ]}
       />
-      {tab === 'activity' ? (
+      {tab === 'contacts' ? (
+        <ContactsAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
+      ) : tab === 'activity' ? (
         <ActivityAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
       ) : tab === 'issues' ? (
         <IssuesAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />

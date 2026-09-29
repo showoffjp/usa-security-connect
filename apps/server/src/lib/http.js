@@ -74,13 +74,85 @@ export function isoFields(row, fields) {
   return out;
 }
 
+/* ------------------------------------------------ query parameters --- */
+
+// Anything in a query string is whatever the address bar held: a bookmark
+// from last year, a hand-edited link, a probe. These read the common kinds
+// and refuse nonsense with a 422 rather than letting it reach the database.
+
+/** An id, or null when absent. Anything but a positive whole number is refused. */
+export function idParam(value, what = 'id') {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) throw new HttpError(422, `That ${what} is not valid.`);
+  return n;
+}
+
+/** A page size: the default when absent or silly, never more than the cap. */
+export function limitParam(value, fallback, max) {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
+}
+
+/** A date or date-time, or the fallback when absent. An unreadable one is refused. */
+export function dateParam(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) throw new HttpError(422, 'That date is not valid.');
+  return d;
+}
+
+/* --------------------------------------------------------------- CSV --- */
+
+/** One CSV cell. A leading = + - @ is neutralised so a spreadsheet does not run it. */
+export const csvCell = (v) => {
+  if (v == null) return '';
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  if (v instanceof Date) return v.toISOString();
+  const s = String(v);
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+
+/**
+ * Send rows as a CSV download. Columns are [header, key or row => value].
+ * The byte-order mark makes Excel read the file as UTF-8.
+ */
+export function sendCsv(res, filename, columns, rows) {
+  const lines = [columns.map(([label]) => csvCell(label)).join(',')];
+  for (const row of rows) {
+    lines.push(columns.map(([, get]) => csvCell(typeof get === 'function' ? get(row) : row[get])).join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/[^\w.-]/g, '-')}.csv"`);
+  res.send(`\uFEFF${lines.join('\r\n')}`);
+}
+
+/* ------------------------------------------------------------ errors --- */
+
+// Postgres codes that mean "a value in the request was the wrong shape" -
+// a word where a number goes, a date that is not one, a negative LIMIT.
+// The request was at fault, not the server, and the caller should hear so.
+const BAD_INPUT_CODES = new Set(['22P02', '22007', '22008', '22003', '2201W', '2201X', '22023']);
+
 export const errorHandler = (err, req, res, _next) => {
-  const status = err.status || 500;
-  if (status >= 500) console.error('[usc]', err);
-  res.status(status).json({
-    error: err.message || 'Something went wrong.',
-    details: err.details,
-  });
+  let status = err.status || 500;
+  let message = err.message || 'Something went wrong.';
+  if (!err.status && (BAD_INPUT_CODES.has(err.code) || (err instanceof RangeError && /time value/i.test(err.message)))) {
+    status = 422;
+    message = 'One of the values in that request is not valid.';
+  }
+  if (status >= 500) {
+    console.error('[usc]', err);
+    // An unexpected failure's message can carry the SQL statement and its
+    // parameters. That belongs in the server log, not in the response to
+    // whoever triggered it. A deliberate HttpError keeps its wording.
+    if (!(err instanceof HttpError) && process.env.NODE_ENV === 'production') {
+      message = 'Something went wrong on our side. It has been logged; please try again.';
+    }
+  }
+  res.status(status).json({ error: message, details: err.details });
 };
 
 /**

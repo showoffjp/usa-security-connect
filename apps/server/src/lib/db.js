@@ -247,6 +247,7 @@ const BOOLEAN_COLUMNS = [
   'equipment_ok',
   'site_secure',
   'client_visible',
+  'after_hours',
 ];
 
 const isInsert = (sql) => /^\s*insert\s+into/i.test(sql);

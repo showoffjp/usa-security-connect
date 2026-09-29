@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { db } from '../lib/db.js';
-import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
+import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString, limitParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import {
   ROLES,
@@ -526,7 +526,7 @@ punchesRouter.get(
   '/',
   wrap(async (req, res) => {
     const { from, to, punches } = await loadPunches(req.query);
-    const limit = Math.min(Number(req.query.limit) || 1000, 5000);
+    const limit = limitParam(req.query.limit, 1000, 5000);
     const counts = Object.fromEntries(PUNCH_TYPES.map((t) => [t, 0]));
     for (const p of punches) counts[p.type] += 1;
     res.json({
