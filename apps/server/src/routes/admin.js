@@ -200,6 +200,11 @@ adminRouter.get(
       )
       .get()).n);
 
+    // People signed in at a post and not yet signed out, across every site.
+    const visitorsOnSite = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM visitor_log WHERE departed_at IS NULL`)
+      .get()).n);
+
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
       .get(toDateString(new Date()))).n);
@@ -231,6 +236,7 @@ adminRouter.get(
         payrollDue,
         equipmentOut,
         coverageRequests,
+        visitorsOnSite,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -1815,5 +1821,56 @@ adminRouter.get(
     const row = (await db.prepare(`SELECT * FROM emails WHERE id = ?`).get(req.params.id));
     if (!row) throw new HttpError(404, 'Message not found.');
     res.json({ email: isoFields(row, ['created_at', 'sent_at']) });
+  })
+);
+
+/* ------------------------------------------------------------ quick search --- */
+
+/**
+ * The console's quick search (Ctrl+K): people by name, code or phone, sites by
+ * name or city, and incidents by reference. A handful of each, best first -
+ * it is for jumping somewhere, not for browsing.
+ */
+adminRouter.get(
+  '/search',
+  wrap(async (req, res) => {
+    const q = String(req.query.q || '').trim().slice(0, 60);
+    if (q.length < 2) return res.json({ employees: [], sites: [], incidents: [] });
+    const like = `%${q.toLowerCase().replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    const starts = `${q.toLowerCase().replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+
+    const employees = await db
+      .prepare(
+        `SELECT id, employee_code, first_name, last_name, role, status, employment_type
+         FROM users
+         WHERE lower(first_name || ' ' || last_name) LIKE ? OR employee_code LIKE ? OR lower(last_name) LIKE ?
+            OR regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') LIKE ?
+         ORDER BY CASE WHEN employee_code = ? THEN 0 WHEN lower(first_name) LIKE ? THEN 1 ELSE 2 END, last_name, first_name
+         LIMIT 8`
+      )
+      .all(like, starts, starts, /\d{3,}/.test(q) ? `%${q.replace(/\D/g, '')}%` : '-', q, starts);
+
+    const sites = await db
+      .prepare(
+        `SELECT id, name, city, state, client_name FROM sites
+         WHERE lower(name) LIKE ? OR lower(coalesce(city, '')) LIKE ? OR lower(coalesce(client_name, '')) LIKE ?
+         ORDER BY name LIMIT 6`
+      )
+      .all(like, starts, like);
+
+    const incidents = await db
+      .prepare(
+        `SELECT i.id, i.ref_number, i.category, i.severity, i.occurred_at, s.name AS site_name
+         FROM incidents i LEFT JOIN sites s ON s.id = i.site_id
+         WHERE lower(i.ref_number) LIKE ?
+         ORDER BY i.occurred_at DESC LIMIT 5`
+      )
+      .all(like);
+
+    res.json({
+      employees: employees.map((e) => ({ ...e, full_name: `${e.first_name} ${e.last_name}` })),
+      sites,
+      incidents: incidents.map((i) => isoFields(i, ['occurred_at'])),
+    });
   })
 );

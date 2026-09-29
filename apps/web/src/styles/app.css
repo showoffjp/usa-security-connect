@@ -71,6 +71,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * A slow wash of blue, green, yellow and red behind every screen. The tints
+ * are pale on purpose: muted text sits directly on this background in page
+ * headings, and each stop keeps it above 4.5:1 (the lowest, the red, is
+ * 4.68:1). It drifts over a minute, so it reads as calm rather than moving.
+ */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(115deg, #eaf1fc 0%, #e9f7ee 28%, #fdf7df 52%, #fcedea 76%, #eaf1fc 100%);
+  background-size: 300% 300%;
+  animation: usc-wash 60s ease-in-out infinite alternate;
+}
+@keyframes usc-wash {
+  0% { background-position: 0% 30%; }
+  50% { background-position: 100% 70%; }
+  100% { background-position: 30% 0%; }
+}
+
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; }
 h1 { font-size: 1.6rem; }
 h2 { font-size: 1.22rem; }
@@ -345,6 +363,15 @@ table.data tr.clickable { cursor: pointer; }
   background:
     radial-gradient(1100px 620px at 15% -10%, #0c3f72 0%, transparent 55%),
     linear-gradient(160deg, var(--navy-900) 0%, #01203f 48%, #2a0f08 140%);
+  position: relative; isolation: isolate;
+}
+/* The same four colours, deeper, over the navy of the sign-in screens. */
+.auth-screen::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(120deg, rgba(37, 99, 235, 0.34) 0%, rgba(22, 163, 74, 0.26) 30%,
+      rgba(234, 179, 8, 0.22) 55%, rgba(220, 38, 38, 0.32) 80%, rgba(37, 99, 235, 0.34) 100%);
+  background-size: 300% 300%;
+  animation: usc-wash 45s ease-in-out infinite alternate;
 }
 .auth-card {
   width: 100%; max-width: 400px; min-width: 0;
@@ -419,7 +446,7 @@ table.data tr.clickable { cursor: pointer; }
 .empty svg { opacity: 0.35; margin-bottom: 10px; }
 .empty h3 { color: var(--ink-3); margin-bottom: 4px; }
 
-.list { display: flex; flex-direction: column; }
+.list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
 .list-item > .grow { min-width: 0; overflow-wrap: anywhere; }
 .list-item {
   display: flex; align-items: center; gap: 13px;
@@ -429,7 +456,7 @@ table.data tr.clickable { cursor: pointer; }
 }
 .list-item:last-child { border-bottom: 0; }
 .list-item:hover { background: var(--surface-2); }
-.list-item .lead-icon {
+.list-item .lead-icon, .card > .lead-icon {
   width: 38px; height: 38px; border-radius: 10px; flex: none;
   display: grid; place-items: center; background: var(--navy-100); color: var(--navy-700);
 }
@@ -761,3 +788,28 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
   background: #fdf0df; color: #6b4000; border-bottom: 1px solid #f0d7ae;
 }
 body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
+
+/* ------------------------------------------------------- quick search -- */
+
+.qs-trigger { margin-right: 8px; }
+@media (min-width: 900px) {
+  .qs-trigger { width: auto; display: inline-flex; gap: 8px; padding: 0 12px; }
+}
+.qs-hint { font-size: 0.8rem; color: #dbe4ee; }
+.qs-hint kbd {
+  font: inherit; font-size: 0.7rem; margin-left: 6px; padding: 1px 6px; border-radius: 5px;
+  background: rgba(255, 255, 255, 0.16); color: #fff;
+}
+.qs-input {
+  display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  border: 1px solid var(--line-2); border-radius: var(--r-md); color: var(--muted);
+}
+.qs-input input { border: 0; padding: 12px 0; font-size: 1rem; outline: none; box-shadow: none; }
+.qs-input:focus-within { border-color: var(--navy-600); box-shadow: 0 0 0 3px rgba(12, 63, 114, 0.15); }
+.qs-results { list-style: none; margin: 10px 0 0; padding: 0; max-height: min(52vh, 420px); overflow-y: auto; }
+.qs-results li {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;
+  cursor: pointer; color: var(--ink-3);
+}
+.qs-results li.active { background: var(--navy-100); color: var(--navy-800); }
+.qs-results li .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -35,6 +35,7 @@ import { adminReportsRouter } from './routes/adminReports.js';
 import { payrollRouter } from './routes/payroll.js';
 import { ensureDemoInstance } from './services/demoInstance.js';
 import { coverageRequestsRouter } from './routes/coverageRequests.js';
+import { postLogRouter } from './routes/postLog.js';
 
 export const app = express();
 
@@ -133,6 +134,7 @@ app.use('/api/breaks', breaksRouter);
 app.use('/api/shifts', shiftRequestsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/equipment', equipmentRouter);
+app.use('/api/post-log', postLogRouter);
 app.use('/api/client', clientRouter);
 app.use('/api/invoices', invoicesRouter);
 // Mounted ahead of adminRouter so these prefixes reach their own routers.

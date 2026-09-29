@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
+import QuickSearch from './QuickSearch.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { api } from '../lib/api.js';
 import { Icon, Shield, Modal } from './ui.jsx';
@@ -53,7 +54,7 @@ function AccountMenu({ open, onClose }) {
   );
 }
 
-function TopBar({ onMenu, dutyState }) {
+function TopBar({ onMenu, dutyState, onSearch }) {
   const [menu, setMenu] = useState(false);
   const { user } = useAuth();
 
@@ -78,6 +79,14 @@ function TopBar({ onMenu, dutyState }) {
           <span className={`dot ${dutyState.onDuty ? 'dot-pulse' : ''}`} />
           {dutyState.onDuty ? 'On post' : 'Off duty'}
         </span>
+      )}
+      {onSearch && (
+        <button className="icon-btn qs-trigger" onClick={onSearch} aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)">
+          <Icon name="search" size={18} />
+          <span className="hide-mobile qs-hint" aria-hidden="true">
+            Search <kbd>Ctrl K</kbd>
+          </span>
+        </button>
       )}
       <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Account menu" title={user.full_name}>
         <Icon name="user" size={18} />
@@ -162,9 +171,26 @@ export function AdminShell() {
   const { isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState({});
+  const [searching, setSearching] = useState(false);
   const location = useLocation();
 
   useEffect(() => setOpen(false), [location.pathname]);
+
+  // Ctrl+K / Cmd+K anywhere, or "/" when not already typing in a field.
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) || e.target?.isContentEditable;
+      if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setSearching(true);
+      } else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -195,6 +221,7 @@ export function AdminShell() {
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
         { to: '/admin/tours', icon: 'route', label: 'Tours' },
         { to: '/admin/equipment', icon: 'clipboard', label: 'Keys & equipment', count: counts.equipmentOut },
+        { to: '/admin/post-logs', icon: 'users', label: 'Post logs', count: counts.visitorsOnSite },
       ],
     },
     {
@@ -245,7 +272,13 @@ export function AdminShell() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <TopBar onMenu={() => setOpen((v) => !v)} />
+      <TopBar onMenu={() => setOpen((v) => !v)} onSearch={() => setSearching(true)} />
+      {searching && (
+        <QuickSearch
+          pages={groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.title })))}
+          onClose={() => setSearching(false)}
+        />
+      )}
       <div className="admin-layout">
         {open && <div className="scrim" onClick={() => setOpen(false)} />}
         <nav className={`sidebar${open ? ' open' : ''}`} aria-label="Admin sections">

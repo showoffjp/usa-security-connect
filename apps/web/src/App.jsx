@@ -14,6 +14,7 @@ import ToursPage from './pages/officer/ToursPage.jsx';
 import TourRunPage from './pages/officer/TourRunPage.jsx';
 import UpdatesPage from './pages/officer/UpdatesPage.jsx';
 import ProfilePage from './pages/officer/ProfilePage.jsx';
+import PostLogPage from './pages/officer/PostLogPage.jsx';
 
 import DashboardPage from './pages/admin/DashboardPage.jsx';
 import EmployeesPage from './pages/admin/EmployeesPage.jsx';
@@ -43,6 +44,7 @@ import PayrollPage from './pages/admin/PayrollPage.jsx';
 import CoverageRequestsPage from './pages/admin/CoverageRequestsPage.jsx';
 import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
 import ReportsPage from './pages/admin/ReportsPage.jsx';
+import PostLogsPage from './pages/admin/PostLogsPage.jsx';
 
 /** Supervisors and admins only; officers get a plain explanation, not a crash. */
 function RequireSupervisor({ children }) {
@@ -79,6 +81,7 @@ export default function App() {
         <Route path="tours/:runId" element={<TourRunPage />} />
         <Route path="messages" element={<UpdatesPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="post-log" element={<PostLogPage />} />
       </Route>
 
       <Route path="change-pin" element={<ChangePinPage />} />
@@ -100,6 +103,7 @@ export default function App() {
         <Route path="coverage-requests" element={<CoverageRequestsPage />} />
         <Route path="payroll/:id" element={<PayrollPeriodPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="post-logs" element={<PostLogsPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/:id" element={<EmployeeDetailPage />} />
         <Route path="schedule" element={<AdminSchedulePage />} />
