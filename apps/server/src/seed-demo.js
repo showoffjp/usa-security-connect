@@ -44,7 +44,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
-      'passdown_acks', 'passdown_notes', 'visitor_log',
+      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -1178,6 +1178,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${(await db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get()).n} incidents, ${(await db.prepare(`SELECT COUNT(*) AS n FROM tours`).get()).n} tours
     ${flagCount} compliance flags
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
+    ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

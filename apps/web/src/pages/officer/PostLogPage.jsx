@@ -5,6 +5,42 @@ import { fmtTime, fmtDateTime, fmtRelative } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
+export const WATCH_ACTION = {
+  deny_entry: 'Do not let them in',
+  call_police: 'Call the police',
+  notify_supervisor: 'Call your supervisor',
+  escort: 'Escort only',
+};
+export const RISK_KIND = { high: 'danger', medium: 'warn', low: '' };
+export const VIOLATION_LABEL = {
+  fire_lane: 'Fire lane', no_permit: 'No permit', accessible: 'Accessible bay', blocking: 'Blocking',
+  abandoned: 'Abandoned', reserved: 'Reserved space', other: 'Other',
+};
+export const VIOLATION_ACTION = { warning: 'Warning', tagged: 'Tagged', booted: 'Booted', towed: 'Towed' };
+const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][(n % 100 >> 3) ^ 1 && n % 10] || 'th'}`;
+
+/** One watchlist entry, as the officer at the desk needs to read it. */
+export function WatchEntry({ w }) {
+  return (
+    <div className="stack-sm">
+      <div className="row wrap" style={{ gap: 6 }}>
+        <span className="strong">{w.full_name}</span>
+        <Chip kind={RISK_KIND[w.risk]}>{w.risk} risk</Chip>
+        <Chip kind="danger">{WATCH_ACTION[w.action] || w.action}</Chip>
+        {!w.site_id && <Chip kind="navy">All sites</Chip>}
+      </div>
+      {w.aliases && <div className="tiny muted">Also: {w.aliases}</div>}
+      {w.description && <div className="small">{w.description}</div>}
+      {w.vehicle_plate && (
+        <div className="small">
+          Vehicle: <span className="mono">{w.vehicle_plate}</span>
+        </div>
+      )}
+      <div className="small muted">{w.reason}</div>
+      {w.expires_on && <div className="tiny muted">Until {String(w.expires_on).slice(0, 10)}</div>}
+    </div>
+  );
+}
 
 /* -------------------------------------------------------- sign someone in -- */
 
@@ -15,22 +51,69 @@ function SignInDialog({ kinds, onClose, onDone }) {
   });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
+  const [matches, setMatches] = useState(null);
+  const [overrideReason, setOverrideReason] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = async (e) => {
+  const submit = async (e, override = null) => {
     e?.preventDefault();
     setBusy(true);
     setErrors({});
     try {
-      const { visitor } = await api.post('/post-log/visitors', form);
-      toast.success(`${visitor.full_name} signed in.`);
+      const { visitor } = await api.post('/post-log/visitors', { ...form, override });
+      toast.success(`${visitor.full_name} signed in${override ? ' - the override is on record' : ''}.`);
       onDone();
     } catch (err) {
-      setErrors(err.fieldErrors || {});
-      toast.error(err.message);
+      if (err.details?.code === 'watchlist_match') {
+        // Not a toast: this is the one message the officer must read in full.
+        setMatches(err.details.matches);
+      } else {
+        setErrors(err.fieldErrors || {});
+        toast.error(err.message);
+      }
       setBusy(false);
     }
   };
+
+  if (matches) {
+    return (
+      <Modal
+        title="Watchlist match"
+        onClose={onClose}
+        footer={
+          <>
+            <button className="btn btn-primary" onClick={onClose}>
+              Do not sign in
+            </button>
+            <button
+              className="btn btn-ghost"
+              disabled={busy || overrideReason.trim().length < 5}
+              onClick={() => submit(null, { watchlistId: matches[0].id, reason: overrideReason })}
+            >
+              Sign in anyway
+            </button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Banner kind="danger" title={`${form.fullName} matches the watchlist for this site`}>
+            Follow the instruction below. Check ID before deciding it is someone else.
+          </Banner>
+          {matches.map((w) => (
+            <div key={w.id} className="card card-pad">
+              <WatchEntry w={w} />
+            </div>
+          ))}
+          <Field
+            label="Only if it is a different person: why"
+            hint="For example the ID you checked. Your supervisor sees this with the sign-in."
+          >
+            <textarea rows={2} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} maxLength={300} />
+          </Field>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -102,6 +185,7 @@ function VisitorRow({ v, onDepart }) {
           <span className="strong">{v.full_name}</span>
           <Chip>{KIND_LABEL[v.kind] || v.kind}</Chip>
           {v.badge_number && <span className="tiny muted mono">{v.badge_number}</span>}
+          {v.watchlist_name && <Chip kind="danger">Watchlist override</Chip>}
         </div>
         <div className="small" style={{ marginTop: 2 }}>
           {v.purpose}
@@ -205,15 +289,197 @@ function NoteRow({ n, onAck }) {
   );
 }
 
+/* -------------------------------------------------------------- vehicles -- */
+
+function ViolationDialog({ data, onClose, onDone }) {
+  const toast = useToast();
+  const [form, setForm] = useState({ plate: '', plateState: 'FL', vehicleDesc: '', locationText: '', violation: 'fire_lane', action: 'warning', notes: '' });
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState({});
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const { violation } = await api.post('/post-log/vehicles', form);
+      toast.success(
+        violation.plate_count > 1
+          ? `Logged. That is the ${ordinal(violation.plate_count)} violation for ${violation.plate} in six months.`
+          : `Logged ${violation.plate}.`
+      );
+      onDone();
+    } catch (err) {
+      setErrors(err.fieldErrors || {});
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Log a vehicle violation"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy || form.plate.trim().length < 2}>
+            {busy ? 'Saving...' : 'Log violation'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="grid grid-2">
+          <Field label="Plate" required error={errors.plate}>
+            <input value={form.plate} onChange={set('plate')} maxLength={16} style={{ textTransform: 'uppercase' }} autoComplete="off" />
+          </Field>
+          <Field label="State">
+            <input value={form.plateState} onChange={set('plateState')} maxLength={4} style={{ textTransform: 'uppercase' }} />
+          </Field>
+        </div>
+        <div className="grid grid-2">
+          <Field label="Violation" required>
+            <select value={form.violation} onChange={set('violation')}>
+              {data.violations.map((v) => (
+                <option key={v} value={v}>
+                  {VIOLATION_LABEL[v] || v}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Action taken" required>
+            <select value={form.action} onChange={set('action')}>
+              {data.violationActions.map((v) => (
+                <option key={v} value={v}>
+                  {VIOLATION_ACTION[v] || v}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Vehicle">
+          <input value={form.vehicleDesc} onChange={set('vehicleDesc')} maxLength={80} placeholder="Grey Honda Accord" />
+        </Field>
+        <Field label="Where">
+          <input value={form.locationText} onChange={set('locationText')} maxLength={120} placeholder="Fire lane by the east entrance" />
+        </Field>
+        <Field label="Notes">
+          <textarea rows={2} value={form.notes} onChange={set('notes')} maxLength={500} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+function PlateLookup() {
+  const toast = useToast();
+  const [plate, setPlate] = useState('');
+  const [found, setFound] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const look = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      setFound(await api.get(`/post-log/vehicles/lookup?plate=${encodeURIComponent(plate)}`));
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card card-pad stack-sm">
+      <form className="row" onSubmit={look} style={{ gap: 8 }}>
+        <label className="sr-only" htmlFor="plate-lookup">
+          Look up a plate
+        </label>
+        <input
+          id="plate-lookup"
+          value={plate}
+          onChange={(e) => setPlate(e.target.value)}
+          placeholder="Look up a plate"
+          maxLength={16}
+          style={{ textTransform: 'uppercase' }}
+          autoComplete="off"
+        />
+        <button className="btn btn-navy" type="submit" disabled={busy || plate.trim().length < 2}>
+          <Icon name="search" size={15} /> Check
+        </button>
+      </form>
+      {found && (
+        <div className="stack-sm" aria-live="polite">
+          {found.watchlist.length > 0 && (
+            <Banner kind="danger" title="This plate is on the watchlist">
+              {found.watchlist.map((w) => `${w.full_name}: ${WATCH_ACTION[w.action]}`).join('; ')}
+            </Banner>
+          )}
+          <div className="row wrap" style={{ gap: 6 }}>
+            <span className="strong mono">{found.plate}</span>
+            {found.repeatOffender ? (
+              <Chip kind="danger">Repeat offender - {found.recentCount} in {Math.round(found.windowDays / 30)} months</Chip>
+            ) : found.violations.length ? (
+              <Chip kind="warn">{found.violations.length} earlier</Chip>
+            ) : (
+              <Chip kind="ok">No violations on record</Chip>
+            )}
+          </div>
+          {found.violations.slice(0, 5).map((v) => (
+            <div key={v.id} className="tiny muted">
+              {fmtDateTime(v.occurred_at)} · {VIOLATION_LABEL[v.violation]} · {VIOLATION_ACTION[v.action]} · {v.site_name}
+            </div>
+          ))}
+          {found.visits.length > 0 && (
+            <div className="tiny muted">
+              Came in with {found.visits[0].full_name}
+              {found.visits[0].company ? ` (${found.visits[0].company})` : ''} on {fmtDateTime(found.visits[0].arrived_at)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViolationRow({ v }) {
+  return (
+    <li className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+      <div className="grow">
+        <div className="row wrap" style={{ gap: 6 }}>
+          <span className="strong mono">{v.plate}</span>
+          <Chip kind={v.action === 'towed' || v.action === 'booted' ? 'danger' : v.action === 'tagged' ? 'warn' : ''}>
+            {VIOLATION_ACTION[v.action] || v.action}
+          </Chip>
+          {v.plate_count > 1 && <Chip kind="danger">{ordinal(v.plate_count)} offence</Chip>}
+        </div>
+        <div className="small" style={{ marginTop: 2 }}>
+          {VIOLATION_LABEL[v.violation] || v.violation}
+          {v.location_text ? ` · ${v.location_text}` : ''}
+        </div>
+        <div className="tiny muted" style={{ marginTop: 3 }}>
+          {fmtDateTime(v.occurred_at)}
+          {v.vehicle_desc ? ` · ${v.vehicle_desc}` : ''}
+          {v.logged_by_name ? ` · ${v.logged_by_name}` : ''}
+        </div>
+        {v.notes && <div className="tiny" style={{ marginTop: 3 }}>{v.notes}</div>}
+      </div>
+    </li>
+  );
+}
+
 /* ------------------------------------------------------------------ page -- */
 
 export default function PostLogPage() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'visitors' ? 'visitors' : 'passdown';
+  const tab = ['visitors', 'vehicles', 'watchlist'].includes(params.get('tab')) ? params.get('tab') : 'passdown';
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
+  const [citing, setCiting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -290,14 +556,61 @@ export default function PostLogPage() {
       <Segmented
         label="Log"
         value={tab}
-        onChange={(v) => setParams(v === 'visitors' ? { tab: 'visitors' } : {}, { replace: true })}
+        onChange={(v) => setParams(v === 'passdown' ? {} : { tab: v }, { replace: true })}
         options={[
           { value: 'passdown', label: `Pass-down${data.unacked ? ` (${data.unacked})` : ''}` },
           { value: 'visitors', label: `Visitors${onSite.length ? ` (${onSite.length})` : ''}` },
+          { value: 'vehicles', label: 'Vehicles' },
+          { value: 'watchlist', label: `Watchlist${data.watchlist?.length ? ` (${data.watchlist.length})` : ''}` },
         ]}
       />
 
-      {tab === 'passdown' ? (
+      {tab === 'watchlist' ? (
+        <div className="card">
+          <div className="card-head">
+            <h2 className="h3">Not to be let in</h2>
+            <span className="small muted">{data.post.site_name} and all sites</span>
+          </div>
+          {!data.watchlist?.length ? (
+            <Empty icon="shield" title="Nobody on the watchlist here" />
+          ) : (
+            <ul className="list">
+              {data.watchlist.map((w) => (
+                <li key={w.id} className="list-item" style={{ cursor: 'default' }}>
+                  <WatchEntry w={w} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : tab === 'vehicles' ? (
+        !data.onDuty ? (
+          <Empty icon="shield" title="Clock in to log vehicles">
+            Violations are logged at the post you are on.
+          </Empty>
+        ) : (
+          <>
+            <PlateLookup />
+            <div className="card">
+              <div className="card-head">
+                <h2 className="h3">Violations this week</h2>
+                <button className="btn btn-primary btn-sm" onClick={() => setCiting(true)}>
+                  <Icon name="plus" size={15} /> Log violation
+                </button>
+              </div>
+              {!data.vehicles?.length ? (
+                <Empty icon="shield" title="None logged at this site this week" />
+              ) : (
+                <ul className="list">
+                  {data.vehicles.map((v) => (
+                    <ViolationRow key={v.id} v={v} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )
+      ) : tab === 'passdown' ? (
         <>
           {data.onDuty && <NoteForm onSent={load} />}
           <div className="card">
@@ -362,6 +675,17 @@ export default function PostLogPage() {
             The client sees this log in their daily report. Updated {fmtDateTime(new Date())}.
           </p>
         </>
+      )}
+
+      {citing && (
+        <ViolationDialog
+          data={data}
+          onClose={() => setCiting(false)}
+          onDone={() => {
+            setCiting(false);
+            load();
+          }}
+        />
       )}
 
       {signingIn && (

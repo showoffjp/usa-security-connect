@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtTime, toDateInput } from '../../lib/format.js';
-import { Chip, Empty, LoadingPage, Segmented, useToast } from '../../components/ui.jsx';
+import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
+import { WatchEntry, WATCH_ACTION, VIOLATION_LABEL, VIOLATION_ACTION } from '../officer/PostLogPage.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
 
@@ -91,7 +92,9 @@ function Visitors({ siteId, setSiteId }) {
               {data.visitors.map((v) => (
                 <tr key={v.id}>
                   <td>
-                    <div className="strong">{v.full_name}</div>
+                    <div className="strong">
+                      {v.full_name} {v.watchlist_name && <Chip kind="danger">Watchlist override</Chip>}
+                    </div>
                     <div className="tiny muted">
                       {KIND_LABEL[v.kind] || v.kind}
                       {v.company ? ` · ${v.company}` : ''}
@@ -199,28 +202,386 @@ function Passdown({ siteId }) {
   );
 }
 
+/* ------------------------------------------------------------ watchlist -- */
+
+const BLANK = { siteId: '', fullName: '', aliases: '', description: '', vehiclePlate: '', reason: '', action: 'deny_entry', risk: 'medium', expiresOn: '' };
+
+function WatchDialog({ entry, sites, onClose, onDone }) {
+  const toast = useToast();
+  const [form, setForm] = useState(
+    entry
+      ? {
+          siteId: entry.site_id ?? '', fullName: entry.full_name, aliases: entry.aliases || '', description: entry.description || '',
+          vehiclePlate: entry.vehicle_plate || '', reason: entry.reason, action: entry.action, risk: entry.risk,
+          expiresOn: entry.expires_on ? String(entry.expires_on).slice(0, 10) : '',
+        }
+      : BLANK
+  );
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    setBusy(true);
+    const body = { ...form, siteId: form.siteId ? Number(form.siteId) : null, expiresOn: form.expiresOn || null };
+    try {
+      if (entry) await api.patch(`/post-log/admin/watchlist/${entry.id}`, body);
+      else await api.post('/post-log/admin/watchlist', body);
+      toast.success(entry ? 'Entry updated.' : `${form.fullName} added. Officers on post see it now.`);
+      onDone();
+    } catch (err) {
+      setErrors(err.fieldErrors || {});
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={entry ? 'Edit watchlist entry' : 'Add to the watchlist'}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || form.fullName.trim().length < 2 || form.reason.trim().length < 5}>
+            {busy ? 'Saving...' : entry ? 'Save' : 'Add'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="grid grid-2">
+          <Field label="Full name" required error={errors.fullName}>
+            <input value={form.fullName} onChange={set('fullName')} maxLength={120} />
+          </Field>
+          <Field label="Site" hint="Leave on All sites for a company-wide ban.">
+            <select value={form.siteId} onChange={set('siteId')}>
+              <option value="">All sites</option>
+              {sites.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Other names" hint="Comma-separated. Matching is exact, so add the spellings you expect.">
+          <input value={form.aliases} onChange={set('aliases')} maxLength={200} />
+        </Field>
+        <Field label="Description">
+          <input value={form.description} onChange={set('description')} maxLength={400} placeholder="Height, build, anything distinctive" />
+        </Field>
+        <Field label="Why" required error={errors.reason} hint="Officers read this at the desk.">
+          <textarea rows={2} value={form.reason} onChange={set('reason')} maxLength={500} />
+        </Field>
+        <div className="grid grid-2">
+          <Field label="Officers should">
+            <select value={form.action} onChange={set('action')}>
+              {Object.entries(WATCH_ACTION).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Risk">
+            <select value={form.risk} onChange={set('risk')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </Field>
+        </div>
+        <div className="grid grid-2">
+          <Field label="Vehicle plate">
+            <input value={form.vehiclePlate} onChange={set('vehiclePlate')} maxLength={16} style={{ textTransform: 'uppercase' }} />
+          </Field>
+          <Field label="Until" hint="Empty for no end date.">
+            <input type="date" value={form.expiresOn} onChange={set('expiresOn')} />
+          </Field>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Watchlist({ sites }) {
+  const toast = useToast();
+  const [showAll, setShowAll] = useState(false);
+  const [data, setData] = useState(null);
+  const [editing, setEditing] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get(`/post-log/admin/watchlist${showAll ? '?all=1' : ''}`));
+    } catch (err) {
+      toast.error(err.message);
+      setData((d) => d || { entries: [], overrides: [] });
+    }
+  }, [showAll, toast]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const remove = async (w) => {
+    try {
+      await api.patch(`/post-log/admin/watchlist/${w.id}`, { active: false });
+      toast.success(`${w.full_name} taken off the watchlist.`);
+      load();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <>
+      {data?.overrides?.length > 0 && (
+        <Banner kind="warn" title={`${data.overrides.length} recent sign-in${data.overrides.length === 1 ? '' : 's'} despite a watchlist match`}>
+          {data.overrides.slice(0, 3).map((v) => (
+            <div key={v.id} className="small">
+              {v.full_name} at {v.site_name}, {fmtDateTime(v.arrived_at)} by {v.logged_by_name}: {String(v.notes || '').replace(/^Watchlist match overridden: /, '')}
+            </div>
+          ))}
+        </Banner>
+      )}
+      <div className="card">
+        <div className="card-head wrap" style={{ gap: 10 }}>
+          <Segmented
+            label="Show"
+            value={showAll ? 'all' : 'active'}
+            onChange={(v) => setShowAll(v === 'all')}
+            options={[
+              { value: 'active', label: 'In force' },
+              { value: 'all', label: 'Including lapsed' },
+            ]}
+          />
+          <button className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>
+            <Icon name="plus" size={15} /> Add person
+          </button>
+        </div>
+        {!data ? (
+          <LoadingPage label="Loading the watchlist" />
+        ) : data.entries.length === 0 ? (
+          <Empty icon="shield" title="Nobody on the watchlist" />
+        ) : (
+          <ul className="list">
+            {data.entries.map((w) => (
+              <li key={w.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default', opacity: w.active && !w.expired ? 1 : 0.6 }}>
+                <div className="grow">
+                  <WatchEntry w={w} />
+                  <div className="tiny muted" style={{ marginTop: 4 }}>
+                    {w.site_name || 'All sites'} · added by {w.added_by_name || 'someone'}
+                    {w.overrides ? ` · ${w.overrides} override${w.overrides === 1 ? '' : 's'}` : ''}
+                    {!w.active ? ' · removed' : w.expired ? ' · lapsed' : ''}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setEditing(w)}>
+                    Edit
+                  </button>
+                  {w.active && (
+                    <button className="btn btn-sm btn-ghost" onClick={() => remove(w)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {editing && (
+        <WatchDialog
+          entry={editing === 'new' ? null : editing}
+          sites={sites}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------- vehicles -- */
+
+function Vehicles({ siteId, sites, setSiteId }) {
+  const toast = useToast();
+  const [days, setDays] = useState('30');
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const q = new URLSearchParams({ days });
+    if (siteId) q.set('siteId', siteId);
+    api.get(`/post-log/admin/vehicles?${q}`).then(
+      (d) => alive && setData(d),
+      (err) => {
+        toast.error(err.message);
+        alive && setData({ violations: [], repeatOffenders: [] });
+      }
+    );
+    return () => {
+      alive = false;
+    };
+  }, [siteId, days, toast]);
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-head wrap" style={{ gap: 10 }}>
+          <h2 className="h3">Repeat offenders</h2>
+          <span className="small muted">Two or more violations in {data ? Math.round(data.windowDays / 30) : 6} months</span>
+        </div>
+        {!data ? (
+          <LoadingPage label="Loading" />
+        ) : data.repeatOffenders.length === 0 ? (
+          <Empty icon="shield" title="No repeat offenders" />
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Plate</th>
+                  <th>Violations</th>
+                  <th>Kinds</th>
+                  <th>Towed</th>
+                  <th>Last</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.repeatOffenders.map((r) => (
+                  <tr key={r.plate}>
+                    <td className="mono strong">{r.plate}</td>
+                    <td>
+                      <Chip kind={r.n >= 3 ? 'danger' : 'warn'}>{r.n}</Chip>
+                    </td>
+                    <td className="small">
+                      {String(r.kinds || '')
+                        .split(',')
+                        .map((k) => VIOLATION_LABEL[k] || k)
+                        .join(', ')}
+                    </td>
+                    <td className="small">{r.towed || '--'}</td>
+                    <td className="small">{fmtDateTime(r.last_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-head wrap" style={{ gap: 10 }}>
+          <h2 className="h3">Violations</h2>
+          <div className="row wrap" style={{ gap: 8 }}>
+            <select aria-label="Period" value={days} onChange={(e) => setDays(e.target.value)} style={{ width: 'auto' }}>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <select aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ width: 'auto', maxWidth: 260 }}>
+              <option value="">All sites</option>
+              {sites.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {!data ? null : data.violations.length === 0 ? (
+          <Empty icon="shield" title="No violations in this period" />
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Plate</th>
+                  <th>Violation</th>
+                  <th>Action</th>
+                  <th>Where</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.violations.map((v) => (
+                  <tr key={v.id}>
+                    <td>
+                      <span className="mono strong">{v.plate}</span>
+                      {v.plate_count > 1 && (
+                        <div>
+                          <Chip kind="danger">x{v.plate_count}</Chip>
+                        </div>
+                      )}
+                      {v.vehicle_desc && <div className="tiny muted">{v.vehicle_desc}</div>}
+                    </td>
+                    <td className="small">{VIOLATION_LABEL[v.violation] || v.violation}</td>
+                    <td>
+                      <Chip kind={v.action === 'towed' || v.action === 'booted' ? 'danger' : v.action === 'tagged' ? 'warn' : ''}>
+                        {VIOLATION_ACTION[v.action] || v.action}
+                      </Chip>
+                    </td>
+                    <td className="small">
+                      {v.site_name}
+                      {v.location_text && <div className="tiny muted">{v.location_text}</div>}
+                    </td>
+                    <td className="small">
+                      {fmtDateTime(v.occurred_at)}
+                      {v.logged_by_name && <div className="tiny muted">{v.logged_by_name}</div>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function PostLogsPage() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'passdown' ? 'passdown' : 'visitors';
+  const tab = ['passdown', 'watchlist', 'vehicles'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
   const [siteId, setSiteId] = useState('');
+  const [sites, setSites] = useState([]);
+  useEffect(() => {
+    api.get('/post-log/admin/visitors?onSite=1').then((d) => setSites(d.sites || []), () => {});
+  }, []);
 
   return (
     <div className="page stack">
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="eyebrow">Operations</div>
         <h1>Post logs</h1>
-        <p className="lead">Who is inside each site, who came through, and what each shift left for the next.</p>
+        <p className="lead">Who is inside each site, who came through, who is not to be let in, and the vehicles causing trouble.</p>
       </div>
       <Segmented
         label="Log"
         value={tab}
-        onChange={(v) => setParams(v === 'passdown' ? { tab: 'passdown' } : {}, { replace: true })}
+        onChange={(v) => setParams(v === 'visitors' ? {} : { tab: v }, { replace: true })}
         options={[
           { value: 'visitors', label: 'Visitors' },
           { value: 'passdown', label: 'Pass-down' },
+          { value: 'watchlist', label: 'Watchlist' },
+          { value: 'vehicles', label: 'Vehicles' },
         ]}
       />
-      {tab === 'visitors' ? <Visitors siteId={siteId} setSiteId={setSiteId} /> : <Passdown siteId={siteId} />}
+      {tab === 'visitors' ? (
+        <Visitors siteId={siteId} setSiteId={setSiteId} />
+      ) : tab === 'passdown' ? (
+        <Passdown siteId={siteId} />
+      ) : tab === 'watchlist' ? (
+        <Watchlist sites={sites} />
+      ) : (
+        <Vehicles siteId={siteId} setSiteId={setSiteId} sites={sites} />
+      )}
     </div>
   );
 }

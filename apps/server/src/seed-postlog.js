@@ -155,5 +155,98 @@ export async function seedPostLog({ db }) {
     }
   }
 
-  return { visitors, notes };
+  /* ---------------------------------------------------------- watchlist -- */
+
+  const sites = await db.prepare(`SELECT id, name FROM sites ORDER BY id`).all();
+  const siteId = (re) => sites.find((x) => re.test(x.name))?.id || sites[0].id;
+  const sup = await db.prepare(`SELECT id FROM users WHERE role = 'supervisor' ORDER BY id LIMIT 1`).get();
+  const addWatch = (site, name, aliases, description, plate, reason, action, risk, expires) =>
+    db
+      .prepare(
+        `INSERT INTO watchlist (site_id, full_name, aliases, description, vehicle_plate, reason, action, risk, expires_on, added_by, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(site, name, aliases, description, plate, reason, action, risk, expires, sup.id, toSql(new Date(now.getTime() - 20 * 86400000)));
+  const inDays = (n) => new Date(now.getTime() + n * 86400000).toISOString().slice(0, 10);
+
+  await addWatch(null, 'Todd Reardon', 'T. Reardon, Tod Reardon', 'White male, about 45, grey beard, often in a Jaguars cap.',
+    null, 'Former employee terminated for theft of client property. Not permitted on any site we guard.', 'notify_supervisor', 'medium', null);
+  const riverfrontWatch = await addWatch(siteId(/Riverfront/), 'Kyle Banner', 'K. Banner', 'Tall, shaved head, tattoo on left forearm.',
+    'KBN 4471', 'Trespass warning issued by the property manager after a confrontation with a tenant. Police report JSO-26-118422.', 'call_police', 'high', inDays(300));
+  await addWatch(siteId(/Riverfront/), 'Dana Mills', null, 'Former tenant employee.', null,
+    'Access revoked by the tenant (Suite 310). May try to collect belongings - escort only, with the tenant present.', 'escort', 'low', inDays(30));
+  await addWatch(siteId(/Harborview/), 'Marcus Hale', null, 'Late 20s, frequently near the ED entrance.', null,
+    'Barred by hospital administration after repeated disturbances in the emergency department.', 'deny_entry', 'high', inDays(180));
+  await addWatch(siteId(/Palmetto/), 'Brian Castillo', 'B. Castillo', null, 'PLM 2210',
+    'Former resident evicted by the HOA. Gate access code revoked.', 'deny_entry', 'medium', inDays(90));
+  await addWatch(siteId(/Gulfport/), 'Rick Dawson', null, 'Truck driver, red Peterbilt.', 'FL 8812K',
+    'Banned from the yard by the client after a forklift incident.', 'deny_entry', 'medium', null);
+  // One that has lapsed, to show expiry.
+  await addWatch(siteId(/Riverfront/), 'Leon Price', null, null, null, 'Thirty-day ban after a parking dispute.', 'deny_entry', 'low', inDays(-3));
+
+  // A past override at Riverfront: the officer checked ID and it was a different Kyle Banner.
+  const rfEntry = entries.find((e) => e.site_id === siteId(/Riverfront/) && e.out);
+  if (rfEntry) {
+    const when = new Date(rfEntry.in.getTime() + 90 * 60000);
+    await db
+      .prepare(
+        `INSERT INTO visitor_log (site_id, post_id, full_name, company, purpose, host, kind, arrived_at, departed_at,
+           logged_by, departed_by, notes, watchlist_id, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(rfEntry.site_id, rfEntry.post_id, 'Kyle Banner', 'Banner Electric', 'Panel inspection, 2nd floor', 'Building engineer',
+        'contractor', toSql(when), toSql(new Date(when.getTime() + 50 * 60000)), rfEntry.user_id, rfEntry.user_id,
+        'Watchlist match overridden: Checked driver licence - different person (DOB 1991, entry is for a man in his 40s). Supervisor called.',
+        Number(riverfrontWatch.lastInsertRowid), toSql(when));
+    visitors++;
+  }
+
+  /* ---------------------------------------------------- vehicle violations -- */
+
+  const month = (
+    await db
+      .prepare(
+        `SELECT te.user_id, te.post_id, te.clock_in_at, te.clock_out_at, p.site_id
+         FROM time_entries te JOIN posts p ON p.id = te.post_id
+         WHERE te.clock_in_at >= ? AND te.clock_out_at IS NOT NULL ORDER BY te.clock_in_at`
+      )
+      .all(toSql(new Date(now.getTime() - 30 * 86400000)))
+  ).map((e) => ({ ...e, in: ts(e.clock_in_at), out: ts(e.clock_out_at) }));
+
+  const SPOTS = ['Fire lane by the east entrance', 'Visitor lot, row C', 'Loading dock bay 2', 'Accessible bay by the lobby',
+    'Reserved tenant space 14', 'North lot, by the dumpsters', 'Main drive, in front of the doors'];
+  const CARS = ['Grey Honda Accord', 'White Ford Transit', 'Black Chevy Tahoe', 'Red Nissan Altima', 'Silver Toyota Camry', 'Blue Jeep Wrangler'];
+  const KINDS = [
+    ['fire_lane', 'tagged'], ['no_permit', 'warning'], ['accessible', 'tagged'], ['blocking', 'warning'],
+    ['reserved', 'warning'], ['abandoned', 'tagged'], ['fire_lane', 'towed'],
+  ];
+  // Two plates that keep coming back, one of them at two different sites.
+  const REPEAT = ['GHT 4410', 'QRV 882', 'BTX 9921'];
+  const addViolation = (e, when, plate, [violation, action], spot, car, note) =>
+    db
+      .prepare(
+        `INSERT INTO vehicle_violations (site_id, post_id, plate, plate_state, vehicle_desc, location_text, violation, action,
+           notes, logged_by, occurred_at, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(e.site_id, e.post_id, plate.replace(/[^A-Z0-9]/g, ''), 'FL', car, spot, violation, action, note, e.user_id, toSql(when), toSql(when));
+
+  let violations = 0;
+  for (const e of month) {
+    if (rand() > 0.12) continue;
+    const when = new Date(e.in.getTime() + (e.out - e.in) * (0.2 + rand() * 0.6));
+    const plate = rand() < 0.3 ? pick(REPEAT) : `${String.fromCharCode(65 + Math.floor(rand() * 26))}${String.fromCharCode(65 + Math.floor(rand() * 26))}${String.fromCharCode(65 + Math.floor(rand() * 26))} ${100 + Math.floor(rand() * 900)}`;
+    await addViolation(e, when, plate, pick(KINDS), pick(SPOTS), pick(CARS), rand() < 0.3 ? 'Owner not located. Photo on file.' : null);
+    violations++;
+  }
+  // Make sure the first repeat plate really is a repeat at Riverfront, ending in a tow.
+  const rf = month.filter((e) => e.site_id === siteId(/Riverfront/));
+  for (const [i, e] of rf.slice(-3).entries()) {
+    const when = new Date(e.in.getTime() + 2 * 3600000);
+    await addViolation(e, when, REPEAT[0], i === 2 ? ['fire_lane', 'towed'] : ['fire_lane', 'tagged'], SPOTS[0], CARS[0],
+      i === 2 ? 'Third time this month. Towed by Coastal Towing, ticket 55821.' : null);
+    violations++;
+  }
+
+  return { visitors, notes, watchlist: 7, violations };
 }

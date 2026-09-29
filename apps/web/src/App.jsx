@@ -45,6 +45,7 @@ import CoverageRequestsPage from './pages/admin/CoverageRequestsPage.jsx';
 import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
 import ReportsPage from './pages/admin/ReportsPage.jsx';
 import PostLogsPage from './pages/admin/PostLogsPage.jsx';
+import ScorecardsPage from './pages/admin/ScorecardsPage.jsx';
 
 /** Supervisors and admins only; officers get a plain explanation, not a crash. */
 function RequireSupervisor({ children }) {
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="payroll/:id" element={<PayrollPeriodPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="post-logs" element={<PostLogsPage />} />
+        <Route path="scorecards" element={<ScorecardsPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/:id" element={<EmployeeDetailPage />} />
         <Route path="schedule" element={<AdminSchedulePage />} />

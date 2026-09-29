@@ -55,6 +55,9 @@ const STAFF_PAGES = [
   ['Client requests', '/admin/coverage-requests'],
   ['Post logs: visitors', '/admin/post-logs'],
   ['Post logs: pass-down', '/admin/post-logs?tab=passdown'],
+  ['Post logs: watchlist', '/admin/post-logs?tab=watchlist'],
+  ['Post logs: vehicles', '/admin/post-logs?tab=vehicles'],
+  ['Officer scorecards', '/admin/scorecards'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],
   ['Pay period, to approve', '/admin/payroll/2'],
@@ -202,6 +205,13 @@ await audit(page, 'Post log: visitors', '/post-log?tab=visitors');
 await page.click('text=Sign someone in');
 await page.waitForTimeout(300);
 await audit(page, 'Post log: sign-in dialog', null);
+await page.getByLabel('Full name').fill('Kyle Banner');
+await page.getByLabel('Here for').fill('Meeting');
+await page.click('[role="dialog"] button:has-text("Sign in")');
+await page.waitForSelector('text=matches the watchlist');
+await audit(page, 'Post log: watchlist match', null);
+await audit(page, 'Post log: vehicles', '/post-log?tab=vehicles');
+await audit(page, 'Post log: watchlist', '/post-log?tab=watchlist');
 
 // --- client portal --------------------------------------------------------
 console.log('\n--- client portal ---');
