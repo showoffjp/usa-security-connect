@@ -813,3 +813,9 @@ body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
 }
 .qs-results li.active { background: var(--navy-100); color: var(--navy-800); }
 .qs-results li .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------ star rating -- */
+.star-btn {
+  font-size: 1.7rem; line-height: 1; background: none; border: 0; padding: 2px 3px; cursor: pointer; border-radius: 6px;
+}
+.star-btn:focus-visible { outline: 2px solid var(--navy-600); outline-offset: 1px; }

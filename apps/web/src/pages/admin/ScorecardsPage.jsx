@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { Chip, Empty, LoadingPage, Segmented, Stat, useToast } from '../../components/ui.jsx';
+import { CsvButton } from './SiteLogAdmin.jsx';
 
 const band = (score) => (score === null ? '' : score >= 90 ? 'ok' : score >= 75 ? 'warn' : 'danger');
 const pctText = (v) => (v === null || v === undefined ? '--' : `${Math.round(v)}%`);
@@ -91,6 +92,7 @@ export default function ScorecardsPage() {
             { value: 'attention', label: `Needs attention${attention ? ` (${attention})` : ''}` },
           ]}
         />
+        <CsvButton path={`/admin/scorecards?days=${days}`} filename={`officer-scorecards-${days}-days`} />
       </div>
 
       {!data ? (

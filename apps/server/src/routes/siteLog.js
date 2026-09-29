@@ -17,7 +17,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, parseDay } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, parseDay, idParam, sendCsv } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -63,6 +63,37 @@ const foundSelect = `
   LEFT JOIN users cb ON cb.id = f.closed_by`;
 const presentFound = (f) => isoFields(f, ['found_at', 'closed_at', 'created_at']);
 
+/* --------------------------------------------------------------- contacts -- */
+
+export async function contactsFor(siteId) {
+  const rows = await db
+    .prepare(
+      `SELECT c.*, u.first_name || ' ' || u.last_name AS added_by_user_name, cu.name AS added_by_client_name
+       FROM site_contacts c
+       LEFT JOIN users u ON u.id = c.added_by_user
+       LEFT JOIN client_users cu ON cu.id = c.added_by_client
+       WHERE c.site_id = ? ORDER BY c.sort, c.id`
+    )
+    .all(siteId);
+  return rows.map((c) => ({ ...isoFields(c, ['created_at', 'updated_at']), after_hours: Boolean(c.after_hours) }));
+}
+
+export const contactSchema = z.object({
+  name: z.string().trim().min(2, 'Enter a name.').max(120),
+  role: z.string().trim().min(2, 'Say who they are - property manager, maintenance.').max(80),
+  phone: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .nullable()
+    .refine((v) => !v || (v.replace(/\D/g, '').length >= 7 && /^[\d\s()+.\-x]+$/i.test(v)), 'That is not a phone number.'),
+  email: z.string().trim().email('That is not an email address.').max(160).optional().nullable().or(z.literal('')),
+  notes: z.string().trim().max(300).optional().nullable(),
+  afterHours: z.boolean().default(false),
+  sort: z.number().int().min(0).max(999).default(0),
+});
+
 /* ================================================================ officer == */
 
 /** The officer's site: today's activity on the post, open issues, property held. */
@@ -87,6 +118,7 @@ siteLogRouter.get(
         `${foundSelect} WHERE f.site_id = ? AND (f.status = 'held' OR f.closed_at >= ?) ORDER BY f.status = 'held' DESC, f.found_at DESC LIMIT 50`
       )
       .all(post.site_id, toSql(new Date(Date.now() - 7 * 86400000)));
+    const contacts = await contactsFor(post.site_id);
     res.json({
       post,
       // The officer can take back their own entries from the shift they are on.
@@ -96,6 +128,7 @@ siteLogRouter.get(
       })),
       issues: issues.map(presentIssue),
       found: found.map(presentFound),
+      contacts,
       categories: { activity: ACTIVITY_CATEGORIES, issues: ISSUE_CATEGORIES, priorities: ISSUE_PRIORITIES, found: FOUND_CATEGORIES },
     });
   })
@@ -286,13 +319,19 @@ siteLogRouter.get(
     const start = parseDay(req.query.date);
     if (!start) throw new HttpError(422, 'That date is not valid.');
     const end = new Date(start.getTime() + 86400000);
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const rows = await db
       .prepare(
         `${activitySelect} WHERE a.occurred_at >= ? AND a.occurred_at < ? ${siteId ? 'AND a.site_id = ?' : ''}
          ORDER BY a.occurred_at DESC LIMIT 500`
       )
       .all(toSql(start), toSql(end), ...(siteId ? [siteId] : []));
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `activity-${req.query.date || 'today'}`, [
+        ['When', 'occurred_at'], ['Site', 'site_name'], ['Post', 'post_name'], ['Officer', 'officer_name'], ['Kind', 'category'],
+        ['Entry', 'body'], ['Client sees it', (r) => Boolean(r.client_visible)],
+      ], rows);
+    }
     res.json({ entries: rows.map(presentActivity) });
   })
 );
@@ -302,7 +341,7 @@ siteLogRouter.get(
   supervisor,
   wrap(async (req, res) => {
     const status = ['open', 'acknowledged', 'fixed', 'all', 'unresolved'].includes(req.query.status) ? req.query.status : 'unresolved';
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const where = [];
     const params = [];
     if (status === 'unresolved') where.push(`i.status <> 'fixed'`);
@@ -324,6 +363,13 @@ siteLogRouter.get(
     const counts = await db
       .prepare(`SELECT status, COUNT(*) AS n FROM site_issues GROUP BY status`)
       .all();
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `building-issues-${status}`, [
+        ['Reported', 'created_at'], ['Site', 'site_name'], ['Kind', 'category'], ['Priority', 'priority'], ['Where', 'location_text'],
+        ['What', 'description'], ['Status', 'status'], ['Reported by', 'reported_by_name'], ['Client note', 'client_note'],
+        ['Acknowledged', 'acknowledged_at'], ['Fixed', 'fixed_at'],
+      ], rows);
+    }
     res.json({ issues: rows.map(presentIssue), counts: Object.fromEntries(counts.map((c) => [c.status, Number(c.n)])) });
   })
 );
@@ -338,6 +384,83 @@ siteLogRouter.get(
       .all(...(status === 'all' ? [] : [status]));
     // Held more than 30 days: due for the disposal decision.
     const stale = rows.filter((f) => f.status === 'held' && new Date(f.found_at) < new Date(Date.now() - 30 * 86400000)).length;
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `lost-and-found-${status}`, [
+        ['Found', 'found_at'], ['Item', 'description'], ['Kind', 'category'], ['Site', 'site_name'], ['Found where', 'found_location'],
+        ['Kept where', 'stored_location'], ['Found by', 'found_by_name'], ['Status', 'status'], ['Returned to', 'returned_to'],
+        ['Contact / ID', 'returned_contact'], ['Closed', 'closed_at'], ['Closed by', 'closed_by_name'],
+      ], rows);
+    }
     res.json({ items: rows.map(presentFound), overdue: stale });
+  })
+);
+
+
+/* ----------------------------------------------- supervisors: contacts -- */
+
+siteLogRouter.get(
+  '/admin/contacts',
+  supervisor,
+  wrap(async (req, res) => {
+    const siteId = idParam(req.query.siteId, 'site');
+    if (!siteId) throw new HttpError(422, 'Choose a site.');
+    res.json({ contacts: await contactsFor(siteId) });
+  })
+);
+
+const reachable = (body) => {
+  if (!body.phone && !body.email) {
+    throw new HttpError(422, 'Give a phone number or an email address - officers need a way to reach them.', [
+      { field: 'phone', message: 'A phone number or an email is needed.' },
+    ]);
+  }
+};
+
+siteLogRouter.post(
+  '/admin/contacts',
+  supervisor,
+  wrap(async (req, res) => {
+    const body = parse(contactSchema.extend({ siteId: z.number().int().positive() }), req.body);
+    reachable(body);
+    if (!(await db.prepare(`SELECT id FROM sites WHERE id = ?`).get(body.siteId))) throw new HttpError(404, 'Site not found.');
+    const info = await db
+      .prepare(
+        `INSERT INTO site_contacts (site_id, name, role, phone, email, notes, after_hours, sort, added_by_user)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      )
+      .run(body.siteId, body.name, body.role, body.phone || null, body.email || null, body.notes || null, body.afterHours, body.sort, req.user.id);
+    await audit(req.user.id, 'contact.added', 'site_contact', info.lastInsertRowid, { siteId: body.siteId }, req.ip);
+    res.status(201).json({ contacts: await contactsFor(body.siteId) });
+  })
+);
+
+siteLogRouter.patch(
+  '/admin/contacts/:id',
+  supervisor,
+  wrap(async (req, res) => {
+    const row = await db.prepare(`SELECT * FROM site_contacts WHERE id = ?`).get(idParam(req.params.id, 'contact'));
+    if (!row) throw new HttpError(404, 'Contact not found.');
+    const body = parse(contactSchema, req.body);
+    reachable(body);
+    await db
+      .prepare(
+        `UPDATE site_contacts SET name = ?, role = ?, phone = ?, email = ?, notes = ?, after_hours = ?, sort = ?, updated_at = now()
+         WHERE id = ?`
+      )
+      .run(body.name, body.role, body.phone || null, body.email || null, body.notes || null, body.afterHours, body.sort, row.id);
+    await audit(req.user.id, 'contact.updated', 'site_contact', row.id, null, req.ip);
+    res.json({ contacts: await contactsFor(row.site_id) });
+  })
+);
+
+siteLogRouter.delete(
+  '/admin/contacts/:id',
+  supervisor,
+  wrap(async (req, res) => {
+    const row = await db.prepare(`SELECT * FROM site_contacts WHERE id = ?`).get(idParam(req.params.id, 'contact'));
+    if (!row) throw new HttpError(404, 'Contact not found.');
+    await db.prepare(`DELETE FROM site_contacts WHERE id = ?`).run(row.id);
+    await audit(req.user.id, 'contact.removed', 'site_contact', row.id, { name: row.name }, req.ip);
+    res.json({ contacts: await contactsFor(row.site_id) });
   })
 );

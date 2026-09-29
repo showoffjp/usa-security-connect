@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, parseDay, toDateString } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, parseDay, toDateString, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import {
   ROLES,
@@ -161,7 +161,7 @@ const exclusiveEnd = (end) => new Date(end.getFullYear(), end.getMonth(), end.ge
 invoicesRouter.get(
   '/preview',
   wrap(async (req, res) => {
-    const siteId = Number(req.query.siteId);
+    const siteId = idParam(req.query.siteId, 'site');
     if (!siteId) throw new HttpError(422, 'Choose a site to bill.');
 
     const site = await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(siteId);
@@ -291,7 +291,7 @@ invoicesRouter.get(
     }
     if (req.query.siteId) {
       filters.push('i.site_id = ?');
-      params.push(Number(req.query.siteId));
+      params.push(idParam(req.query.siteId, 'site'));
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 

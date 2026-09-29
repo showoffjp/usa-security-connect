@@ -47,6 +47,52 @@ function PostLogCard({ onDuty }) {
   );
 }
 
+/* --------------------------------------------------------- site contacts -- */
+
+/** Who to call at this site, one tap from the home screen. */
+function SiteContactsCard({ onDuty }) {
+  const [site, setSite] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.get('/post-log/site').then((d) => alive && setSite(d), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [onDuty]);
+  if (!site?.post || !site.contacts?.length) return null;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Site contacts</h3>
+        <span className="small muted">{site.post.site_name}</span>
+      </div>
+      <ul className="list">
+        {site.contacts.map((c) => (
+          <li key={c.id} className="list-item" style={{ cursor: 'default' }}>
+            <div className="grow">
+              <div className="row wrap" style={{ gap: 6 }}>
+                <span className="strong small">{c.role}</span>
+                {c.after_hours && <Chip kind="navy">After hours</Chip>}
+              </div>
+              <div className="small">{c.name}</div>
+              {c.notes && <div className="tiny muted">{c.notes}</div>}
+            </div>
+            {c.phone ? (
+              <a className="btn btn-sm btn-ghost" href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} aria-label={`Call ${c.role}, ${c.name}`}>
+                <Icon name="phone" size={15} /> {c.phone}
+              </a>
+            ) : c.email ? (
+              <a className="btn btn-sm btn-ghost" href={`mailto:${c.email}`}>
+                Email
+              </a>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /* ----------------------------------------------------- check-in prompt -- */
 
 function CheckInPrompt({ checkIn, onAnswered }) {
@@ -405,6 +451,7 @@ export default function HomePage() {
       </div>
 
       <PostLogCard onDuty={onDuty} />
+      <SiteContactsCard onDuty={onDuty} />
 
       {/* --------------------------------------------------- this week -- */}
       <div className="grid grid-3">

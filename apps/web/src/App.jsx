@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/auth.jsx';
-import { LoadingPage, Empty } from './components/ui.jsx';
+import { LoadingPage } from './components/ui.jsx';
 import { OfficerShell, AdminShell } from './components/Shells.jsx';
 
 import LoginPage from './pages/LoginPage.jsx';
@@ -46,19 +46,16 @@ import PayrollPeriodPage from './pages/admin/PayrollPeriodPage.jsx';
 import ReportsPage from './pages/admin/ReportsPage.jsx';
 import PostLogsPage from './pages/admin/PostLogsPage.jsx';
 import ScorecardsPage from './pages/admin/ScorecardsPage.jsx';
+import FeedbackPage from './pages/admin/FeedbackPage.jsx';
 
-/** Supervisors and admins only; officers get a plain explanation, not a crash. */
+/**
+ * Supervisors and admins only. An officer who lands on an admin address -
+ * signing in on a tab a supervisor left at /admin, or following an old link -
+ * is taken to their own home screen rather than shown a dead end.
+ */
 function RequireSupervisor({ children }) {
   const { isSupervisor } = useAuth();
-  if (!isSupervisor) {
-    return (
-      <div className="page">
-        <Empty icon="shield" title="Admin access only">
-          This area is limited to field supervisors and administrators.
-        </Empty>
-      </div>
-    );
-  }
+  if (!isSupervisor) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -106,6 +103,7 @@ export default function App() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="post-logs" element={<PostLogsPage />} />
         <Route path="scorecards" element={<ScorecardsPage />} />
+        <Route path="feedback" element={<FeedbackPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/:id" element={<EmployeeDetailPage />} />
         <Route path="schedule" element={<AdminSchedulePage />} />

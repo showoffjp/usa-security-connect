@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, EQUIPMENT_CATEGORIES, EQUIPMENT_STATUS, EQUIPMENT_CONDITIONS } from '../shared.js';
 import { issue, returnItem, inventory, history, heldBy, currentHolder } from '../services/equipment.js';
@@ -85,7 +85,7 @@ equipmentRouter.get(
   onlySupervisor,
   wrap(async (req, res) => {
     const rows = await inventory({
-      siteId: req.query.siteId ? Number(req.query.siteId) : null,
+      siteId: req.query.siteId ? idParam(req.query.siteId, 'site') : null,
       category: req.query.category || null,
       status: req.query.status || null,
     });

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, BROADCAST_PRIORITY } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -48,13 +48,20 @@ broadcastsRouter.post(
   '/:id/receipt',
   wrap(async (req, res) => {
     const acknowledge = req.body?.acknowledge === true;
+    const id = idParam(req.params.id, 'message');
+    if (!(await db.prepare(`SELECT id FROM broadcasts WHERE id = ?`).get(id))) {
+      throw new HttpError(404, 'That message no longer exists.');
+    }
+    // The existing row's columns are named in full: bare "read_at" in the
+    // update is ambiguous between the row and EXCLUDED, which made every
+    // second receipt - acknowledging a message already opened - fail.
     (await db.prepare(
       `INSERT INTO broadcast_receipts (broadcast_id, user_id, read_at, acknowledged_at)
        VALUES (?, ?, datetime('now'), ?)
        ON CONFLICT(broadcast_id, user_id) DO UPDATE SET
-         read_at = COALESCE(read_at, datetime('now')),
-         acknowledged_at = COALESCE(acknowledged_at, excluded.acknowledged_at)`
-    ).run(req.params.id, req.user.id, acknowledge ? toSql(new Date()) : null));
+         read_at = COALESCE(broadcast_receipts.read_at, datetime('now')),
+         acknowledged_at = COALESCE(broadcast_receipts.acknowledged_at, excluded.acknowledged_at)`
+    ).run(id, req.user.id, acknowledge ? toSql(new Date()) : null));
     res.json({ ok: true });
   })
 );
@@ -184,7 +191,7 @@ trainingRouter.post(
       `INSERT INTO training_progress (training_id, user_id, seconds_watched, completed_at)
        VALUES (?,?,?,?)
        ON CONFLICT(training_id, user_id) DO UPDATE SET
-         seconds_watched = MAX(training_progress.seconds_watched, excluded.seconds_watched),
+         seconds_watched = GREATEST(training_progress.seconds_watched, excluded.seconds_watched),
          completed_at = COALESCE(training_progress.completed_at, excluded.completed_at)`
     ).run(training.id, req.user.id, body.secondsWatched, completed ? toSql(new Date()) : null));
 

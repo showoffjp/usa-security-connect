@@ -244,6 +244,7 @@ export function AdminShell() {
       items: [
         { to: '/admin/invoices', icon: 'chart', label: 'Invoices', count: counts.overdueInvoices, urgent: true },
         { to: '/admin/clients', icon: 'users', label: 'Client portal' },
+        { to: '/admin/feedback', icon: 'message', label: 'Client feedback', count: counts.unhappyClients, urgent: true },
         { to: '/admin/emails', icon: 'megaphone', label: 'Outbox' },
       ],
     },

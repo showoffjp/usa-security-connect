@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/db.js';
-import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString } from '../lib/http.js';
+import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString, idParam, dateParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, toHours, minutesBetween } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -22,7 +22,7 @@ reportsRouter.get(
     if (!start) throw new HttpError(422, 'That date is not valid.');
     const end = new Date(start.getTime() + 86400000);
 
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const from = toSql(start);
     const to = toSql(end);
 
@@ -311,8 +311,8 @@ reportsRouter.get(
 reportsRouter.get(
   '/coverage',
   wrap(async (req, res) => {
-    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 86400000);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const from = dateParam(req.query.from, new Date(Date.now() - 30 * 86400000));
+    const to = dateParam(req.query.to, new Date());
 
     const rows = (await db
       .prepare(

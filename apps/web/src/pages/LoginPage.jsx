@@ -55,10 +55,11 @@ export default function LoginPage() {
     try {
       const res = await signIn(withCode, fullPin);
       // On success the router swaps this screen out. Supervisors and
-      // administrators start in the admin console rather than the officer view.
-      if (['admin', 'supervisor'].includes(res?.user?.role) && window.location.pathname === '/') {
-        navigate('/admin', { replace: true });
-      }
+      // administrators start in the admin console rather than the officer view;
+      // an officer signing in on a tab left at an admin address starts at home.
+      const staff = ['admin', 'supervisor'].includes(res?.user?.role);
+      if (staff && window.location.pathname === '/') navigate('/admin', { replace: true });
+      else if (!staff && window.location.pathname.startsWith('/admin')) navigate('/', { replace: true });
     } catch (err) {
       setError(err.message);
       setPin('');

@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit, demoInstance } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, rateLimit, parseDay, toDateString, sqlToIso } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, rateLimit, parseDay, toDateString, sqlToIso, idParam } from '../lib/http.js';
 import {
   authenticateClient,
   requireClient,
@@ -30,6 +30,7 @@ import {
 import { toHours, daysOverdue } from '../shared.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
+import { contactsFor, contactSchema } from './siteLog.js';
 
 export const clientRouter = Router();
 
@@ -852,6 +853,154 @@ clientRouter.post(
       )
       .get(issue.id);
     res.json({ issue: isoFields(row, ['created_at', 'acknowledged_at', 'fixed_at']) });
+  })
+);
+
+/* ---------------------------------------------------- site contacts ---- */
+
+/** The people our officers call at the client's properties, one list per site. */
+clientRouter.get(
+  '/contacts',
+  requireClient,
+  wrap(async (req, res) => {
+    const sites = [];
+    for (const id of req.clientSiteIds) {
+      const site = await db.prepare(`SELECT id, name FROM sites WHERE id = ?`).get(id);
+      if (site) sites.push({ ...site, contacts: (await contactsFor(id)).map(clientContact) });
+    }
+    res.json({ sites });
+  })
+);
+
+// Which of our staff added a contact is internal; the client sees whether it
+// was them or us.
+const clientContact = (c) => ({
+  id: c.id, site_id: c.site_id, name: c.name, role: c.role, phone: c.phone, email: c.email, notes: c.notes,
+  after_hours: c.after_hours, sort: c.sort, updated_at: c.updated_at, added_by: c.added_by_client ? 'you' : 'us',
+});
+
+const needsWayToReach = (body) => {
+  if (!body.phone && !body.email) {
+    throw new HttpError(422, 'Give a phone number or an email address so our officers can reach them.', [
+      { field: 'phone', message: 'A phone number or an email is needed.' },
+    ]);
+  }
+};
+
+clientRouter.post(
+  '/contacts',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(contactSchema.extend({ siteId: z.number().int().positive() }), req.body);
+    assertSite(req, body.siteId);
+    needsWayToReach(body);
+    const info = await db
+      .prepare(
+        `INSERT INTO site_contacts (site_id, name, role, phone, email, notes, after_hours, sort, added_by_client)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      )
+      .run(body.siteId, body.name, body.role, body.phone || null, body.email || null, body.notes || null, body.afterHours, body.sort, req.client.id);
+    await audit(null, 'client.contact_added', 'site_contact', info.lastInsertRowid, { clientUserId: req.client.id }, req.ip);
+    res.status(201).json({ contacts: (await contactsFor(body.siteId)).map(clientContact) });
+  })
+);
+
+async function ownContact(req) {
+  const row = await db.prepare(`SELECT * FROM site_contacts WHERE id = ?`).get(idParam(req.params.id, 'contact'));
+  if (!row || !req.clientSiteIds.includes(row.site_id)) throw new HttpError(404, 'Contact not found.');
+  return row;
+}
+
+clientRouter.patch(
+  '/contacts/:id',
+  requireClient,
+  wrap(async (req, res) => {
+    const row = await ownContact(req);
+    const body = parse(contactSchema, req.body);
+    needsWayToReach(body);
+    await db
+      .prepare(
+        `UPDATE site_contacts SET name = ?, role = ?, phone = ?, email = ?, notes = ?, after_hours = ?, sort = ?, updated_at = now()
+         WHERE id = ?`
+      )
+      .run(body.name, body.role, body.phone || null, body.email || null, body.notes || null, body.afterHours, body.sort, row.id);
+    await audit(null, 'client.contact_updated', 'site_contact', row.id, { clientUserId: req.client.id }, req.ip);
+    res.json({ contacts: (await contactsFor(row.site_id)).map(clientContact) });
+  })
+);
+
+clientRouter.delete(
+  '/contacts/:id',
+  requireClient,
+  wrap(async (req, res) => {
+    const row = await ownContact(req);
+    await db.prepare(`DELETE FROM site_contacts WHERE id = ?`).run(row.id);
+    await audit(null, 'client.contact_removed', 'site_contact', row.id, { clientUserId: req.client.id, name: row.name }, req.ip);
+    res.json({ contacts: (await contactsFor(row.site_id)).map(clientContact) });
+  })
+);
+
+/* ------------------------------------------------------- feedback ---- */
+
+const monthOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+/** This month's rating for each property, and the past year's with any reply. */
+clientRouter.get(
+  '/feedback',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = scope(req);
+    const rows = await db
+      .prepare(
+        `SELECT f.id, f.site_id, s.name AS site_name, f.period, f.rating, f.comment, f.response, f.responded_at, f.updated_at
+         FROM client_feedback f JOIN sites s ON s.id = f.site_id
+         WHERE f.client_user_id = ? AND f.site_id IN (${sc.sql})
+         ORDER BY f.period DESC, s.name LIMIT 60`
+      )
+      .all(req.client.id, ...sc.ids);
+    res.json({ period: monthOf(), feedback: rows.map((r) => isoFields(r, ['responded_at', 'updated_at'])) });
+  })
+);
+
+clientRouter.post(
+  '/feedback',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({
+        siteId: z.number().int().positive(),
+        rating: z.number().int().min(1, 'Choose from one to five stars.').max(5, 'Choose from one to five stars.'),
+        comment: z.string().trim().max(1000).optional().nullable(),
+      }),
+      req.body
+    );
+    assertSite(req, body.siteId);
+    if (body.rating <= 2 && !(body.comment || '').trim()) {
+      throw new HttpError(422, 'Tell us what went wrong so we can put it right.', [
+        { field: 'comment', message: 'A low rating needs a word on why.' },
+      ]);
+    }
+    const period = monthOf();
+    // One rating per contact, property and month: a change of mind replaces
+    // it, and clears any reply that was written to the old one.
+    await db
+      .prepare(
+        `INSERT INTO client_feedback (client_user_id, site_id, period, rating, comment)
+         VALUES (?,?,?,?,?)
+         ON CONFLICT (client_user_id, site_id, period) DO UPDATE SET
+           rating = excluded.rating, comment = excluded.comment, updated_at = now(),
+           response = NULL, responded_by = NULL, responded_at = NULL`
+      )
+      .run(req.client.id, body.siteId, period, body.rating, body.comment || null);
+    await audit(null, 'client.feedback', 'client_feedback', null, { clientUserId: req.client.id, siteId: body.siteId, rating: body.rating }, req.ip);
+    const row = await db
+      .prepare(
+        `SELECT f.id, f.site_id, s.name AS site_name, f.period, f.rating, f.comment, f.response, f.responded_at, f.updated_at
+         FROM client_feedback f JOIN sites s ON s.id = f.site_id
+         WHERE f.client_user_id = ? AND f.site_id = ? AND f.period = ?`
+      )
+      .get(req.client.id, body.siteId, period);
+    res.status(201).json({ feedback: isoFields(row, ['responded_at', 'updated_at']) });
   })
 );
 

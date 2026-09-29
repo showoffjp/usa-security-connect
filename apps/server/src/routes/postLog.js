@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields, parseDay } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, parseDay, idParam, sendCsv } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
@@ -433,7 +433,7 @@ postLogRouter.get(
   '/admin/visitors',
   supervisor,
   wrap(async (req, res) => {
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const onSite = req.query.onSite === '1' || req.query.onSite === 'true';
     const start = parseDay(req.query.date);
     if (!start) throw new HttpError(422, 'That date is not valid.');
@@ -464,6 +464,13 @@ postLogRouter.get(
       )
       .all();
 
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `visitors-${onSite ? 'on-site' : req.query.date || 'today'}`, [
+        ['Name', 'full_name'], ['Company', 'company'], ['Type', 'kind'], ['Here for', 'purpose'], ['Visiting', 'host'],
+        ['Plate', 'vehicle_plate'], ['Vehicle', 'vehicle_desc'], ['Badge', 'badge_number'], ['Site', 'site_name'], ['Post', 'post_name'],
+        ['Arrived', 'arrived_at'], ['Left', 'departed_at'], ['Signed in by', 'logged_by_name'], ['Watchlist override', 'watchlist_name'], ['Notes', 'notes'],
+      ], rows);
+    }
     res.json({
       visitors: rows.map(presentVisitor),
       sites: counts,
@@ -477,7 +484,7 @@ postLogRouter.get(
   '/admin/passdown',
   supervisor,
   wrap(async (req, res) => {
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 60);
     const since = toSql(new Date(Date.now() - days * 86400000));
     const notes = await db
@@ -533,7 +540,7 @@ postLogRouter.get(
   supervisor,
   wrap(async (req, res) => {
     const all = req.query.all === '1';
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const rows = await db
       .prepare(
         `SELECT w.*, s.name AS site_name, u.first_name || ' ' || u.last_name AS added_by_name,
@@ -618,7 +625,7 @@ postLogRouter.get(
   '/admin/vehicles',
   supervisor,
   wrap(async (req, res) => {
-    const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+    const siteId = req.query.siteId ? idParam(req.query.siteId, 'site') : null;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
     const since = toSql(new Date(Date.now() - days * 86400000));
     const rows = await db
@@ -638,6 +645,13 @@ postLogRouter.get(
          ORDER BY n DESC, last_at DESC LIMIT 20`
       )
       .all(toSql(new Date(Date.now() - REPEAT_WINDOW_DAYS * 86400000)), ...(siteId ? [siteId] : []));
+    if (req.query.format === 'csv') {
+      return sendCsv(res, `vehicle-violations-${days}-days`, [
+        ['Plate', 'plate'], ['State', 'plate_state'], ['Vehicle', 'vehicle_desc'], ['Violation', 'violation'], ['Action', 'action'],
+        ['Offence number', 'plate_count'], ['Site', 'site_name'], ['Where', 'location_text'], ['When', 'occurred_at'],
+        ['Officer', 'logged_by_name'], ['Notes', 'notes'],
+      ], rows);
+    }
     res.json({
       violations: rows.map(presentViolation),
       repeatOffenders: repeat.map((r) => ({ ...isoFields(r, ['last_at']), n: Number(r.n), towed: Number(r.towed) })),
