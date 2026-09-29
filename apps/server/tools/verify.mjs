@@ -76,7 +76,7 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/18  SQL dialect translation\n');
+console.log('1/19  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
@@ -85,16 +85,16 @@ if (dialect !== 0) {
 
 // Also runs before anything starts: it opens a throwaway database of its own,
 // and covers the one case no HTTP suite can reach because no route passes it.
-console.log('\n2/18  Flag detail encoding\n');
+console.log('\n2/19  Flag detail encoding\n');
 const flags = await run('test/flags.mjs');
 
-console.log('\n3/18  Seeding\n');
+console.log('\n3/19  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n4/18  Starting the API');
+console.log('\n4/19  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -123,51 +123,54 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('5/18  Core suite\n');
+console.log('5/19  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n6/18  Feature suite\n');
+console.log('\n6/19  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n7/18  Shift request suite\n');
+console.log('\n7/19  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n8/18  Client portal suite\n');
+console.log('\n8/19  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n9/18  Invoicing suite\n');
+console.log('\n9/19  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
-console.log('\n10/18  Email suite\n');
+console.log('\n10/19  Email suite\n');
 const email = await run('test/email.mjs');
 
-console.log('\n11/18  Security suite\n');
+console.log('\n11/19  Security suite\n');
 const security = await run('test/security.mjs');
 
-console.log('\n12/18  Role permission suite\n');
+console.log('\n12/19  Role permission suite\n');
 const roles = await run('test/roles.mjs');
 
-console.log('\n13/18  Tracking, pay rates and reports suite\n');
+console.log('\n13/19  Tracking, pay rates and reports suite\n');
 const tracking = await run('test/tracking.mjs');
 
-console.log('\n14/18  Keys and equipment suite\n');
+console.log('\n14/19  Keys and equipment suite\n');
 const equipment = await run('test/equipment.mjs');
 
-console.log('\n15/18  Payroll close suite\n');
+console.log('\n15/19  Payroll close suite\n');
 const payroll = await run('test/payroll.mjs');
 
-console.log('\n16/18  Client coverage requests and officer pay suite\n');
+console.log('\n16/19  Client coverage requests and officer pay suite\n');
 const requests = await run('test/requests.mjs');
 
-console.log('\n17/18  Visitor log, pass-down notes and quick search suite\n');
+console.log('\n17/19  Visitor log, pass-down notes and quick search suite\n');
 const postlog = await run('test/postlog.mjs');
 
-console.log('\n18/18  Watchlist, vehicle violations and scorecards suite\n');
+console.log('\n18/19  Watchlist, vehicle violations and scorecards suite\n');
 const watch = await run('test/watch.mjs');
+
+console.log('\n19/19  Activity log, building issues and lost and found suite\n');
+const sitelog = await run('test/sitelog.mjs');
 
 stop();
 
-const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0;
+const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0 || sitelog !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

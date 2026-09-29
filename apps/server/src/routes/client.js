@@ -754,6 +754,21 @@ clientRouter.get(
          ORDER BY occurred_at`
       )
       .all(siteId, from, to);
+    // The officers' running log, less anything they marked internal.
+    const activity = await db
+      .prepare(
+        `SELECT a.id, a.category, a.body, a.occurred_at, u.first_name || ' ' || u.last_name AS officer_name
+         FROM activity_entries a LEFT JOIN users u ON u.id = a.user_id
+         WHERE a.site_id = ? AND a.client_visible = true AND a.occurred_at >= ? AND a.occurred_at < ?
+         ORDER BY a.occurred_at`
+      )
+      .all(siteId, from, to);
+    const issuesReported = await db
+      .prepare(
+        `SELECT id, category, priority, location_text, description, status, created_at
+         FROM site_issues WHERE site_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at`
+      )
+      .all(siteId, from, to);
     const onSiteNow = await db
       .prepare(`SELECT COUNT(*) AS n FROM visitor_log WHERE site_id = ? AND departed_at IS NULL`)
       .get(siteId);
@@ -764,6 +779,8 @@ clientRouter.get(
       visitors: visitors.map((v) => isoFields(v, ['arrived_at', 'departed_at'])),
       visitorsOnSiteNow: Number(onSiteNow.n),
       vehicles: vehicles.map((v) => isoFields(v, ['occurred_at'])),
+      activity: activity.map((a) => isoFields(a, ['occurred_at'])),
+      issues: issuesReported.map((i) => isoFields(i, ['created_at'])),
       totalHours: toHours(coverage.reduce((sum, c) => sum + (c.minutes_worked || 0), 0)),
       coverage: coverage.map((c) => ({
         ...isoFields(c, ['clock_in_at', 'clock_out_at']),
@@ -777,6 +794,64 @@ clientRouter.get(
       incidents: incidents.map((i) => isoFields(i, ['occurred_at'])),
       visits: visits.map((v) => isoFields(v, ['visited_at'])),
     });
+  })
+);
+
+/* ------------------------------------------------ building issues ---- */
+
+const issueFields = `i.id, i.site_id, s.name AS site_name, i.category, i.priority, i.location_text, i.description, i.status,
+  i.client_note, i.created_at, i.acknowledged_at, i.fixed_at, c.name AS closed_by_name`;
+
+/**
+ * What the officers found wrong with the building: open ones first, and the
+ * ones fixed in the last month. The officer who reported it stays internal.
+ */
+clientRouter.get(
+  '/issues',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = scope(req);
+    const rows = await db
+      .prepare(
+        `SELECT ${issueFields}
+         FROM site_issues i JOIN sites s ON s.id = i.site_id LEFT JOIN client_users c ON c.id = i.closed_by_client
+         WHERE i.site_id IN (${sc.sql}) AND (i.status <> 'fixed' OR i.fixed_at >= ?)
+         ORDER BY CASE i.status WHEN 'fixed' THEN 1 ELSE 0 END, CASE i.priority WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, i.created_at DESC
+         LIMIT 100`
+      )
+      .all(...sc.ids, toSql(new Date(Date.now() - 30 * 86400000)));
+    res.json({ issues: rows.map((r) => isoFields(r, ['created_at', 'acknowledged_at', 'fixed_at'])) });
+  })
+);
+
+/** "We've seen it" or "It's fixed", with an optional note for the officers. */
+clientRouter.post(
+  '/issues/:id/status',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({ status: z.enum(['acknowledged', 'fixed']), note: z.string().trim().max(500).optional().nullable() }),
+      req.body
+    );
+    const issue = await db.prepare(`SELECT * FROM site_issues WHERE id = ?`).get(Number(req.params.id));
+    if (!issue || !req.clientSiteIds.includes(issue.site_id)) throw new HttpError(404, 'Issue not found.');
+    if (issue.status === 'fixed') throw new HttpError(409, 'That issue is already closed.');
+    const fixed = body.status === 'fixed';
+    await db
+      .prepare(
+        `UPDATE site_issues SET status = ?, acknowledged_at = COALESCE(acknowledged_at, now()), fixed_at = ?,
+           closed_by_client = ?, client_note = COALESCE(?, client_note)
+         WHERE id = ?`
+      )
+      .run(body.status, fixed ? new Date().toISOString() : null, fixed ? req.client.id : null, body.note || null, issue.id);
+    await audit(null, `client.issue_${body.status}`, 'site_issue', issue.id, { clientUserId: req.client.id }, req.ip);
+    const row = await db
+      .prepare(
+        `SELECT ${issueFields} FROM site_issues i JOIN sites s ON s.id = i.site_id
+         LEFT JOIN client_users c ON c.id = i.closed_by_client WHERE i.id = ?`
+      )
+      .get(issue.id);
+    res.json({ issue: isoFields(row, ['created_at', 'acknowledged_at', 'fixed_at']) });
   })
 );
 

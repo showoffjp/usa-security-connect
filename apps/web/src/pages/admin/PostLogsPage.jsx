@@ -4,6 +4,7 @@ import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtTime, toDateInput } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
 import { WatchEntry, WATCH_ACTION, VIOLATION_LABEL, VIOLATION_ACTION } from '../officer/PostLogPage.jsx';
+import { ActivityAdmin, IssuesAdmin, FoundAdmin } from './SiteLogAdmin.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
 
@@ -548,7 +549,7 @@ function Vehicles({ siteId, sites, setSiteId }) {
 
 export default function PostLogsPage() {
   const [params, setParams] = useSearchParams();
-  const tab = ['passdown', 'watchlist', 'vehicles'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
+  const tab = ['passdown', 'watchlist', 'vehicles', 'activity', 'issues', 'found'].includes(params.get('tab')) ? params.get('tab') : 'visitors';
   const [siteId, setSiteId] = useState('');
   const [sites, setSites] = useState([]);
   useEffect(() => {
@@ -560,7 +561,7 @@ export default function PostLogsPage() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="eyebrow">Operations</div>
         <h1>Post logs</h1>
-        <p className="lead">Who is inside each site, who came through, who is not to be let in, and the vehicles causing trouble.</p>
+        <p className="lead">Everything recorded on post: visitors, the activity log, pass-down, building issues, lost property, the watchlist and vehicles.</p>
       </div>
       <Segmented
         label="Log"
@@ -568,12 +569,21 @@ export default function PostLogsPage() {
         onChange={(v) => setParams(v === 'visitors' ? {} : { tab: v }, { replace: true })}
         options={[
           { value: 'visitors', label: 'Visitors' },
+          { value: 'activity', label: 'Activity' },
           { value: 'passdown', label: 'Pass-down' },
+          { value: 'issues', label: 'Building issues' },
+          { value: 'found', label: 'Lost & found' },
           { value: 'watchlist', label: 'Watchlist' },
           { value: 'vehicles', label: 'Vehicles' },
         ]}
       />
-      {tab === 'visitors' ? (
+      {tab === 'activity' ? (
+        <ActivityAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
+      ) : tab === 'issues' ? (
+        <IssuesAdmin sites={sites} siteId={siteId} setSiteId={setSiteId} />
+      ) : tab === 'found' ? (
+        <FoundAdmin />
+      ) : tab === 'visitors' ? (
         <Visitors siteId={siteId} setSiteId={setSiteId} />
       ) : tab === 'passdown' ? (
         <Passdown siteId={siteId} />

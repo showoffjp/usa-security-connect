@@ -205,6 +205,13 @@ adminRouter.get(
       .prepare(`SELECT COUNT(*) AS n FROM visitor_log WHERE departed_at IS NULL`)
       .get()).n);
 
+    const openIssues = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM site_issues WHERE status <> 'fixed'`)
+      .get()).n);
+    const foundHeld = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM lost_found WHERE status = 'held'`)
+      .get()).n);
+
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
       .get(toDateString(new Date()))).n);
@@ -237,6 +244,8 @@ adminRouter.get(
         equipmentOut,
         coverageRequests,
         visitorsOnSite,
+        openIssues,
+        foundHeld,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({

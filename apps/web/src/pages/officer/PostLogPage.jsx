@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtTime, fmtDateTime, fmtRelative } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
+import { ActivityTab, IssuesTab, FoundTab, useSiteLog } from './SiteLogTabs.jsx';
 
 const KIND_LABEL = { visitor: 'Visitor', contractor: 'Contractor', delivery: 'Delivery', vendor: 'Vendor', other: 'Other' };
 export const WATCH_ACTION = {
@@ -475,7 +476,8 @@ function ViolationRow({ v }) {
 export default function PostLogPage() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const tab = ['visitors', 'vehicles', 'watchlist'].includes(params.get('tab')) ? params.get('tab') : 'passdown';
+  const tab = ['activity', 'visitors', 'vehicles', 'issues', 'found', 'watchlist'].includes(params.get('tab')) ? params.get('tab') : 'passdown';
+  const site = useSiteLog();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
@@ -559,13 +561,25 @@ export default function PostLogPage() {
         onChange={(v) => setParams(v === 'passdown' ? {} : { tab: v }, { replace: true })}
         options={[
           { value: 'passdown', label: `Pass-down${data.unacked ? ` (${data.unacked})` : ''}` },
+          { value: 'activity', label: 'Activity' },
           { value: 'visitors', label: `Visitors${onSite.length ? ` (${onSite.length})` : ''}` },
           { value: 'vehicles', label: 'Vehicles' },
+          {
+            value: 'issues',
+            label: `Issues${site.data?.issues?.filter((i) => i.status !== 'fixed').length ? ` (${site.data.issues.filter((i) => i.status !== 'fixed').length})` : ''}`,
+          },
+          { value: 'found', label: 'Lost & found' },
           { value: 'watchlist', label: `Watchlist${data.watchlist?.length ? ` (${data.watchlist.length})` : ''}` },
         ]}
       />
 
-      {tab === 'watchlist' ? (
+      {tab === 'activity' ? (
+        <ActivityTab site={site} onDuty={data.onDuty} />
+      ) : tab === 'issues' ? (
+        <IssuesTab site={site} onDuty={data.onDuty} />
+      ) : tab === 'found' ? (
+        <FoundTab site={site} onDuty={data.onDuty} />
+      ) : tab === 'watchlist' ? (
         <div className="card">
           <div className="card-head">
             <h2 className="h3">Not to be let in</h2>

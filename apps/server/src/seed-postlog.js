@@ -248,5 +248,120 @@ export async function seedPostLog({ db }) {
     violations++;
   }
 
-  return { visitors, notes, watchlist: 7, violations };
+  /* ------------------------------------------------------ activity log -- */
+
+  const ACTIVITY = [
+    ['patrol', 'Exterior patrol complete. All perimeter doors secure, lot lighting working.'],
+    ['patrol', 'Interior rounds, floors 1-3. Stairwells clear, fire doors closed.'],
+    ['observation', 'Unfamiliar grey sedan circled the lot twice and left. Plate not visible.'],
+    ['access', 'Let the cleaning crew in at the loading dock; badges checked against the list.'],
+    ['alarm', 'Door-held alarm, east entrance. Tenant propping it for a delivery; reset and advised.'],
+    ['safety', 'Wet floor by the lobby entrance from the rain; cones placed, facilities notified.'],
+    ['customer_service', 'Escorted a tenant to her car in the north lot at her request.'],
+    ['observation', 'Group of teenagers skateboarding by the fountain; asked to leave, complied.'],
+    ['patrol', 'Parking garage patrol, all levels. Nothing to report.'],
+    ['access', 'Contractor arrived without an appointment; called the building engineer, who approved.'],
+  ];
+  const INTERNAL = ['Relief officer 15 minutes late; covered the gap.', 'Radio battery low - swapped for the spare in the key box.'];
+  let activity = 0;
+  for (const e of entries) {
+    const end = e.out || now;
+    for (let t = e.in.getTime() + 25 * 60000; t < end.getTime() - 10 * 60000; t += (50 + rand() * 70) * 60000) {
+      const internal = rand() < 0.08;
+      const [category, body] = internal ? ['other', pick(INTERNAL)] : pick(ACTIVITY);
+      await db
+        .prepare(
+          `INSERT INTO activity_entries (site_id, post_id, user_id, time_entry_id, category, body, client_visible, occurred_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?)`
+        )
+        .run(e.site_id, e.post_id, e.user_id, e.id, category, body, !internal, toSql(new Date(t)), toSql(new Date(t)));
+      activity++;
+    }
+  }
+
+  /* ------------------------------------------------------ building issues -- */
+
+  const ISSUES = [
+    ['lighting', 'normal', 'Parking garage level 2, northeast corner', 'Two overhead lights out; that corner is dark after sunset.'],
+    ['door_lock', 'urgent', 'East stairwell exit door', 'Door closes but does not latch. The building is not secure until it is fixed.'],
+    ['leak', 'urgent', 'Ceiling above the lobby elevators', 'Water dripping from a ceiling tile after the rain; bucket placed.'],
+    ['hazard', 'normal', 'Front walkway', 'Raised paving slab by the main entrance - a trip hazard. Coned off.'],
+    ['damage', 'low', 'North lot fence', 'Section of fence bent, probably by a vehicle. No gap yet.'],
+    ['equipment', 'normal', 'Gatehouse', 'Gate arm sticks halfway about one time in five; has to be lifted by hand.'],
+    ['cleanliness', 'low', 'Loading dock', 'Overflowing dumpster; bags on the ground attracting birds.'],
+    ['lighting', 'low', 'Rear entrance', 'Motion light over the rear door stays on all night.'],
+  ];
+  const clientOf = async (site) =>
+    (await db.prepare(`SELECT client_user_id AS id FROM client_sites WHERE site_id = ? ORDER BY client_user_id LIMIT 1`).get(site))?.id || null;
+  let issues = 0;
+  const reporters = entries.filter((e) => e.out);
+  for (let i = 0; i < ISSUES.length && reporters.length; i++) {
+    const e = reporters[Math.floor(rand() * reporters.length)];
+    const [category, priority, where, what] = ISSUES[i];
+    const reported = new Date(e.in.getTime() + (e.out - e.in) / 2);
+    // Some still open, some seen by the client, some fixed.
+    const state = i % 3 === 0 ? 'open' : i % 3 === 1 ? 'acknowledged' : 'fixed';
+    const client = await clientOf(e.site_id);
+    await db
+      .prepare(
+        `INSERT INTO site_issues (site_id, post_id, reported_by, category, priority, location_text, description, status,
+           client_note, acknowledged_at, fixed_at, closed_by_client, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        e.site_id, e.post_id, e.user_id, category, priority, where, what, state,
+        state === 'fixed' ? 'Facilities fixed this - thank you for flagging it.' : state === 'acknowledged' ? 'Work order raised with our contractor.' : null,
+        state !== 'open' ? toSql(new Date(reported.getTime() + 3 * 3600000)) : null,
+        state === 'fixed' ? toSql(new Date(reported.getTime() + 20 * 3600000)) : null,
+        state === 'fixed' ? client : null,
+        toSql(reported)
+      );
+    issues++;
+  }
+  // And one urgent, open issue at Riverfront from today, so the portal has one to act on.
+  const rfNow = entries.find((e) => e.site_id === siteId(/Riverfront/) && !e.out) || entries.find((e) => e.site_id === siteId(/Riverfront/));
+  if (rfNow) {
+    await db
+      .prepare(
+        `INSERT INTO site_issues (site_id, post_id, reported_by, category, priority, location_text, description, created_at)
+         VALUES (?,?,?,?,?,?,?,?)`
+      )
+      .run(rfNow.site_id, rfNow.post_id, rfNow.user_id, 'door_lock', 'urgent', 'Loading dock roll-up door',
+        'Roll-up door will not close the last two feet. Dock is open to the street; officer is standing by it.',
+        toSql(new Date(Math.max(rfNow.in.getTime() + 30 * 60000, now.getTime() - 50 * 60000))));
+    issues++;
+  }
+
+  /* --------------------------------------------------------- lost & found -- */
+
+  const FOUND = [
+    ['phone', 'Black iPhone in a clear case, cracked screen', 'Lobby seating area', 'Security desk drawer'],
+    ['keys', 'Key ring with a Toyota fob and three brass keys', 'North lot, space 41', 'Key box, hook 12'],
+    ['wallet', 'Brown leather wallet, driver licence inside (name on file)', 'Elevator 2', 'Office safe'],
+    ['bag', 'Navy backpack with a laptop', 'Cafe', 'Security office'],
+    ['clothing', 'Grey hooded sweatshirt, size M', 'Gym', 'Lost property bin'],
+    ['id', 'Employee badge, Suite 310', 'Parking garage stairwell', 'Security desk drawer'],
+    ['jewelry', 'Silver bracelet', 'Restroom, 2nd floor', 'Office safe'],
+  ];
+  let found = 0;
+  for (let i = 0; i < FOUND.length && reporters.length; i++) {
+    const e = reporters[Math.floor(rand() * reporters.length)];
+    const [category, description, where, stored] = FOUND[i];
+    const at = new Date(e.in.getTime() + (e.out - e.in) * 0.4);
+    const returned = i % 3 === 1;
+    await db
+      .prepare(
+        `INSERT INTO lost_found (site_id, post_id, found_by, description, category, found_location, stored_location, found_at,
+           status, returned_to, returned_contact, closed_at, closed_by, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        e.site_id, e.post_id, e.user_id, description, category, where, stored, toSql(at),
+        returned ? 'returned' : 'held', returned ? 'Owner - Alex Morgan' : null, returned ? 'FL DL checked, (904) 555-0142' : null,
+        returned ? toSql(new Date(at.getTime() + 5 * 3600000)) : null, returned ? e.user_id : null, toSql(at)
+      );
+    found++;
+  }
+
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found };
 }

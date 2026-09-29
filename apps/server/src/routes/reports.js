@@ -130,6 +130,24 @@ reportsRouter.get(
       )
       .all(from, to, ...siteParam));
 
+    const activity = (await db
+      .prepare(
+        `SELECT a.*, s.name AS site_name, u.first_name || ' ' || u.last_name AS officer_name
+         FROM activity_entries a
+         JOIN sites s ON s.id = a.site_id
+         LEFT JOIN users u ON u.id = a.user_id
+         WHERE a.occurred_at >= ? AND a.occurred_at < ? ${siteId ? 'AND a.site_id = ?' : ''}
+         ORDER BY a.occurred_at`
+      )
+      .all(from, to, ...siteParam));
+    const issues = (await db
+      .prepare(
+        `SELECT i.*, s.name AS site_name FROM site_issues i JOIN sites s ON s.id = i.site_id
+         WHERE i.created_at >= ? AND i.created_at < ? ${siteId ? 'AND i.site_id = ?' : ''}
+         ORDER BY i.created_at`
+      )
+      .all(from, to, ...siteParam));
+
     const totalMinutes = shifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0);
     const checkTotals = Object.fromEntries(checks.map((c) => [c.status, c.n]));
 
@@ -149,6 +167,8 @@ reportsRouter.get(
         exceptions: exceptions.length,
         visitors: visitors.length,
         vehicleViolations: vehicles.length,
+        activityEntries: activity.length,
+        issuesReported: issues.length,
       },
       shifts: shifts.map((s) => ({
         ...isoFields(s, ['clock_in_at', 'clock_out_at']),
@@ -160,6 +180,8 @@ reportsRouter.get(
       exceptions: exceptions.map((f) => isoFields(f, ['occurred_at'])),
       visitors: visitors.map((v) => isoFields(v, ['arrived_at', 'departed_at', 'created_at'])),
       vehicles: vehicles.map((v) => isoFields(v, ['occurred_at', 'created_at'])),
+      activity: activity.map((a) => ({ ...isoFields(a, ['occurred_at', 'created_at']), client_visible: Boolean(a.client_visible) })),
+      issues: issues.map((i) => isoFields(i, ['created_at', 'acknowledged_at', 'fixed_at'])),
     });
   })
 );

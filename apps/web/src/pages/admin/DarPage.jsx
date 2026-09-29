@@ -246,6 +246,56 @@ export default function DarPage() {
         )}
       </div>
 
+      {/* ----------------------------------------------------- activity -- */}
+      {data.activity?.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Activity log</h3>
+            <span className="small muted">{data.activity.length} entries</span>
+          </div>
+          <div className="list">
+            {data.activity.map((a) => (
+              <div key={a.id} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+                <div className="nowrap small strong" style={{ width: 62 }}>{fmtTime(a.occurred_at)}</div>
+                <div className="grow">
+                  <div className="small">
+                    {a.body}
+                    {!a.client_visible && <Chip kind="navy">Internal</Chip>}
+                  </div>
+                  <div className="tiny muted">
+                    {a.officer_name} · {a.site_name} · {a.category.replace('_', ' ')}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------- issues -- */}
+      {data.issues?.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Building issues reported</h3>
+            <span className="small muted">{data.issues.length}</span>
+          </div>
+          <div className="list">
+            {data.issues.map((i) => (
+              <div key={i.id} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+                <div className="grow">
+                  <div className="small strong">
+                    {i.category.replace('_', ' ')} - {i.site_name}
+                    {i.location_text ? `, ${i.location_text}` : ''}
+                  </div>
+                  <div className="tiny" style={{ color: 'var(--ink-3)' }}>{i.description}</div>
+                </div>
+                <Chip kind={i.status === 'fixed' ? 'ok' : i.priority === 'urgent' ? 'danger' : 'warn'}>{i.status}</Chip>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ----------------------------------------------------- visitors -- */}
       {data.visitors?.length > 0 && (
         <div className="card">
