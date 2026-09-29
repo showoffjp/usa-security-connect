@@ -108,10 +108,11 @@ export default function DarPage() {
         <Stat label="Incidents" value={s.incidents} foot={`${s.supervisorVisits} supervisor visits`} alert={s.incidents > 0} />
       </div>
 
-      <div className="grid grid-3">
+      <div className="grid grid-4">
         <Stat label="Check-ins answered" value={s.checkInsAnswered} foot="Proof of life" />
         <Stat label="Check-ins missed" value={s.checkInsMissed} foot="Followed up" alert={s.checkInsMissed > 0} />
         <Stat label="Exceptions" value={s.exceptions} foot="Late, no-show, geofence" alert={s.exceptions > 0} />
+        <Stat label="Visitors" value={s.visitors ?? 0} foot="Signed in at the post" />
       </div>
 
       {/* --------------------------------------------------------- posts -- */}
@@ -244,6 +245,37 @@ export default function DarPage() {
           </div>
         )}
       </div>
+
+      {/* ----------------------------------------------------- visitors -- */}
+      {data.visitors?.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Visitors</h3>
+            <span className="small muted">{data.visitors.length}</span>
+          </div>
+          <div className="list">
+            {data.visitors.map((v) => (
+              <div key={v.id} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+                <div className="grow">
+                  <div className="small strong">
+                    {v.full_name}
+                    {v.company ? ` (${v.company})` : ''} - {v.purpose}
+                  </div>
+                  <div className="tiny muted">
+                    {v.site_name}
+                    {v.host ? ` · for ${v.host}` : ''}
+                    {v.vehicle_plate ? ` · ${v.vehicle_plate}` : ''}
+                    {v.logged_by_name ? ` · logged by ${v.logged_by_name}` : ''}
+                  </div>
+                </div>
+                <div className="nowrap small muted">
+                  {fmtTime(v.arrived_at)} - {v.departed_at ? fmtTime(v.departed_at) : 'inside'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ------------------------------------------------------- visits -- */}
       {data.visits.length > 0 && (

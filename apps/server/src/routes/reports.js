@@ -108,6 +108,17 @@ reportsRouter.get(
       )
       .all(from, to));
 
+    const visitors = (await db
+      .prepare(
+        `SELECT v.*, s.name AS site_name, u.first_name || ' ' || u.last_name AS logged_by_name
+         FROM visitor_log v
+         JOIN sites s ON s.id = v.site_id
+         LEFT JOIN users u ON u.id = v.logged_by
+         WHERE v.arrived_at >= ? AND v.arrived_at < ? ${siteId ? 'AND v.site_id = ?' : ''}
+         ORDER BY v.arrived_at`
+      )
+      .all(from, to, ...siteParam));
+
     const totalMinutes = shifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0);
     const checkTotals = Object.fromEntries(checks.map((c) => [c.status, c.n]));
 
@@ -125,6 +136,7 @@ reportsRouter.get(
         checkInsAnswered: (checkTotals.ok || 0) + (checkTotals.late || 0),
         checkInsMissed: checkTotals.missed || 0,
         exceptions: exceptions.length,
+        visitors: visitors.length,
       },
       shifts: shifts.map((s) => ({
         ...isoFields(s, ['clock_in_at', 'clock_out_at']),
@@ -134,6 +146,7 @@ reportsRouter.get(
       incidents: incidents.map((i) => isoFields(i, ['occurred_at', 'created_at'])),
       visits: visits.map((v) => isoFields(v, ['visited_at'])),
       exceptions: exceptions.map((f) => isoFields(f, ['occurred_at'])),
+      visitors: visitors.map((v) => isoFields(v, ['arrived_at', 'departed_at', 'created_at'])),
     });
   })
 );

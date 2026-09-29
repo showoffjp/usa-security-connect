@@ -966,6 +966,48 @@ export function PortalReport({ sites }) {
               )}
             </section>
 
+            <section className="card">
+              <div className="card-head">
+                <h2>Visitors</h2>
+                <span className="small muted">
+                  {data.visitors?.length || 0} signed in
+                  {data.visitorsOnSiteNow ? ` · ${data.visitorsOnSiteNow} inside now` : ''}
+                </span>
+              </div>
+              {!data.visitors?.length ? (
+                <div className="card-pad">
+                  <Empty icon="users" title="No visitors logged on this date" />
+                </div>
+              ) : (
+                <ul className="list">
+                  {data.visitors.map((v) => (
+                    <li key={v.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                      <div className="grow">
+                        <div className="strong small">
+                          {v.full_name}
+                          {v.company ? <span className="muted"> · {v.company}</span> : null}
+                        </div>
+                        <div className="small">
+                          {v.purpose}
+                          {v.host ? ` · for ${v.host}` : ''}
+                        </div>
+                        {(v.vehicle_plate || v.vehicle_desc) && (
+                          <div className="tiny muted">
+                            {v.vehicle_plate ? <span className="mono">{v.vehicle_plate}</span> : null}
+                            {v.vehicle_desc ? ` ${v.vehicle_desc}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <div className="nowrap small muted" style={{ textAlign: 'right' }}>
+                        {fmtTime(v.arrived_at)}
+                        <div className="tiny">{v.departed_at ? `to ${fmtTime(v.departed_at)}` : 'still inside'}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
             {data.visits.length > 0 && (
               <section className="card">
                 <div className="card-head">

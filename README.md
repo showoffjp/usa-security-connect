@@ -101,7 +101,7 @@ merely see more or less of the same screen — they get different applications.
 | | Officer `1003` | Supervisor `1002` | Administrator `1001` |
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
-| **Navigation** | 5 tabs | 23 destinations | 24 destinations |
+| **Navigation** | 5 tabs | 24 destinations | 25 destinations |
 | **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
 | **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes |
@@ -173,6 +173,15 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   payments*, with no overtime.
 - **Broadcasts and training** — priority notices with read/acknowledge receipts, and
   required videos that cannot be marked complete until they have actually been watched.
+- **Post log** — the post's own two logs, opened from the home screen:
+  - **Visitors and vehicles**: sign people in at the post (name, company, visitor,
+    contractor, delivery or vendor, who they are seeing, plate, vehicle and badge) and
+    out again when they leave. Anyone on duty at the same site can sign them out,
+    because people leave by the other door. The client sees the log in their daily
+    report.
+  - **Pass-down notes**: what one shift tells the next, marked important when it is.
+    The next officer on the post sees the notes on their home screen, can read them
+    up to twelve hours before the shift starts, and acknowledges each one.
 - **Messaging** with supervisors and dispatch.
 - **Supervisor visits** (supervisors only) — uniform, post orders, equipment and site
   checks, logged with GPS.
@@ -188,6 +197,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 
 ### Admin console (web)
 
+- **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
+  the search button in the header. Find an officer by name, code or phone, a site by
+  name, city or client, an incident by its number, or any screen by name. Arrow keys
+  and Enter open the result.
+- **Post logs** — everyone signed in at a site right now, with a count per site and in
+  the sidebar; any day's visitor log; and every pass-down note with who has read it.
+  The daily activity report lists the day's visitors.
 - **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
   officers outside their geofence, unfilled shifts, and a strip counting who is off
   post or has not clocked in for a shift that has started.
@@ -305,7 +321,9 @@ a PIN — and sees, for their own properties only:
 - **Incidents** — the full report, including photographs, which are served through the
   API rather than handed out as storage URLs.
 - **Daily activity report** — the same document the account manager reviews, laid out to
-  print straight to PDF.
+  print straight to PDF, including who came through the building: every visitor,
+  contractor and delivery the officers signed in, when they arrived and left, and their
+  vehicle. The officer who logged them is not shown.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
   printable document they can save as a PDF.
 - **Extra coverage requests** — the one thing a client can ask for: officers beyond the
@@ -495,13 +513,23 @@ the server is running corrupts the data directory.
   administrator, a supervisor, a W-2 officer, a 1099 contractor, an officer who must
   change their PIN and a client, opens every screen each one is offered, and fails on
   any refused or broken request, script error, error message, blank page or sideways
-  scroll. Ends with a client requesting coverage and a supervisor scheduling it.
+  scroll. Ends with a client requesting coverage and a supervisor scheduling it. Then
+  an officer on post signs a visitor in, which the supervisor sees under Post logs and
+  the client sees in the day's report. The supervisor also finds the officer with
+  Ctrl+K.
+- **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
+  around them: an officer off duty cannot write to any post's log, cannot sign out a
+  visitor at another site, and cannot read or acknowledge another post's notes. A
+  client sees only their own building's visitors, without the officer's name. Also
+  checks the quick search: literal wildcards, and no PINs or pay in the results.
 - **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 46 screens
-through axe-core. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 52 screens
+and dialogs through axe-core, signed in as an administrator, an officer on post and a
+client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
+the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table

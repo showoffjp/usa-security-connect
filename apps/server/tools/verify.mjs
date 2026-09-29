@@ -76,7 +76,7 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/16  SQL dialect translation\n');
+console.log('1/17  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
@@ -85,16 +85,16 @@ if (dialect !== 0) {
 
 // Also runs before anything starts: it opens a throwaway database of its own,
 // and covers the one case no HTTP suite can reach because no route passes it.
-console.log('\n2/16  Flag detail encoding\n');
+console.log('\n2/17  Flag detail encoding\n');
 const flags = await run('test/flags.mjs');
 
-console.log('\n3/16  Seeding\n');
+console.log('\n3/17  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n4/16  Starting the API');
+console.log('\n4/17  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -123,45 +123,48 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('5/16  Core suite\n');
+console.log('5/17  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n6/16  Feature suite\n');
+console.log('\n6/17  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n7/16  Shift request suite\n');
+console.log('\n7/17  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n8/16  Client portal suite\n');
+console.log('\n8/17  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n9/16  Invoicing suite\n');
+console.log('\n9/17  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
-console.log('\n10/16  Email suite\n');
+console.log('\n10/17  Email suite\n');
 const email = await run('test/email.mjs');
 
-console.log('\n11/16  Security suite\n');
+console.log('\n11/17  Security suite\n');
 const security = await run('test/security.mjs');
 
-console.log('\n12/16  Role permission suite\n');
+console.log('\n12/17  Role permission suite\n');
 const roles = await run('test/roles.mjs');
 
-console.log('\n13/16  Tracking, pay rates and reports suite\n');
+console.log('\n13/17  Tracking, pay rates and reports suite\n');
 const tracking = await run('test/tracking.mjs');
 
-console.log('\n14/16  Keys and equipment suite\n');
+console.log('\n14/17  Keys and equipment suite\n');
 const equipment = await run('test/equipment.mjs');
 
-console.log('\n15/16  Payroll close suite\n');
+console.log('\n15/17  Payroll close suite\n');
 const payroll = await run('test/payroll.mjs');
 
-console.log('\n16/16  Client coverage requests and officer pay suite\n');
+console.log('\n16/17  Client coverage requests and officer pay suite\n');
 const requests = await run('test/requests.mjs');
+
+console.log('\n17/17  Visitor log, pass-down notes and quick search suite\n');
+const postlog = await run('test/postlog.mjs');
 
 stop();
 
-const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0;
+const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

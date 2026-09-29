@@ -21,6 +21,7 @@ import { TRAININGS, BROADCASTS, THREADS, CLIPS } from './seed-content.js';
 import { toSql, sweep, raiseFlag } from './services/compliance.js';
 import { seedExpansion } from './seed-expansion.js';
 import { seedPayroll } from './seed-payroll.js';
+import { seedPostLog } from './seed-postlog.js';
 
 /**
  * Load the demo company. With `reset`, every table is emptied first.
@@ -43,6 +44,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'shift_requests', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
+      'passdown_acks', 'passdown_notes', 'visitor_log',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -1162,6 +1164,9 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     }
   }
 
+  // Visitors and pass-down notes, from the shifts worked above.
+  const postLog = await seedPostLog({ db });
+
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
   log(`
@@ -1172,6 +1177,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${(await db.prepare(`SELECT COUNT(*) AS n FROM shifts`).get()).n} shifts, ${(await db.prepare(`SELECT COUNT(*) AS n FROM time_entries`).get()).n} time entries
     ${(await db.prepare(`SELECT COUNT(*) AS n FROM incidents`).get()).n} incidents, ${(await db.prepare(`SELECT COUNT(*) AS n FROM tours`).get()).n} tours
     ${flagCount} compliance flags
+    ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

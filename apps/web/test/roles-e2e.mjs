@@ -237,7 +237,7 @@ for (const u of STAFF) {
   console.log('\n--- Officer on a phone (1003) ---');
   const { context, page, problems } = await watchedPage({ width: 390, height: 844 });
   await staffSignIn(page, '1003', '4812');
-  for (const href of ['/', '/schedule', '/tours', '/incidents', '/messages', '/profile']) {
+  for (const href of ['/', '/schedule', '/tours', '/incidents', '/messages', '/profile', '/post-log']) {
     await page.goto(WEB + href);
     await checkScreen(`phone: ${href}`, page, problems);
   }
@@ -308,6 +308,75 @@ for (const u of STAFF) {
   await settle(client.page);
   const mine = client.page.locator('li.list-item', { hasText: reason });
   log(await mine.locator('text=Scheduled').count() > 0, 'and the client sees it scheduled');
+  await staff.context.close();
+  await client.context.close();
+}
+
+/* ------------------------ an officer logs a visitor; everyone sees it --- */
+
+{
+  console.log('\n--- An officer on post signs a visitor in; supervisor and client see it ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await settle(officer.page);
+  log(await officer.page.locator('a[href="/post-log"]').count() > 0, 'the officer home links to the post log');
+  await officer.page.goto(WEB + '/post-log');
+  await checkScreen('officer: post log', officer.page, officer.problems);
+  const gotIt = officer.page.locator('button:has-text("Got it")');
+  const unread = await gotIt.count();
+  if (unread > 0) {
+    await gotIt.first().click();
+    await officer.page.waitForTimeout(1200);
+    log(await gotIt.count() === unread - 1, 'acknowledging a pass-down note clears it', `${unread} -> ${await gotIt.count()}`);
+  } else {
+    log(true, 'no pass-down notes waiting (already read)');
+  }
+
+  await officer.page.goto(WEB + '/post-log?tab=visitors');
+  await settle(officer.page);
+  const visitor = `E2E Visitor ${Date.now() % 100000}`;
+  await officer.page.click('button:has-text("Sign someone in")');
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.fill('[role="dialog"] input >> nth=0', visitor);
+  await officer.page.getByLabel('Here for').fill('Elevator inspection');
+  await officer.page.getByLabel('Plate').fill('e2e 123');
+  await officer.page.click('[role="dialog"] button:has-text("Sign in")');
+  await officer.page.waitForTimeout(1500);
+  log(await officer.page.locator('li.list-item', { hasText: visitor }).count() === 1, 'the visitor shows as on site');
+  await checkScreen('officer: visitor log', officer.page, officer.problems);
+
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await staff.page.goto(WEB + '/admin/post-logs');
+  await settle(staff.page);
+  log(await staff.page.locator('tr', { hasText: visitor }).count() === 1, 'the supervisor sees them inside, under Post logs');
+
+  // Quick search: Ctrl+K, a surname, Enter.
+  await staff.page.keyboard.press('Control+k');
+  await staff.page.fill('[role="combobox"]', 'bell');
+  await staff.page.waitForSelector('[role="option"]:has-text("Marcus Bell")');
+  await staff.page.keyboard.press('Enter');
+  await settle(staff.page);
+  log(/\/admin\/employees\/\d+/.test(staff.page.url()) && (await staff.page.locator('h1').textContent()).includes('Marcus'),
+    'quick search finds an officer and opens their record', new URL(staff.page.url()).pathname);
+
+  const client = await watchedPage({ width: 1366, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal/report');
+  await settle(client.page);
+  log(await client.page.locator('li.list-item', { hasText: visitor }).count() === 1, "the client sees the visitor in today's daily report");
+
+  // Sign them back out so a rerun starts clean.
+  await officer.page.locator('li.list-item', { hasText: visitor }).locator('button:has-text("Sign out")').click();
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('li.list-item', { hasText: visitor }).locator('button:has-text("Sign out")').count() === 0,
+    'and the officer signs them out');
+  officer.problems.splice(0);
+  await officer.context.close();
   await staff.context.close();
   await client.context.close();
 }

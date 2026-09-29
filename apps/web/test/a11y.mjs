@@ -53,6 +53,8 @@ const STAFF_PAGES = [
   ['Pay rates', '/admin/pay-rates'],
   ['Payroll', '/admin/payroll'],
   ['Client requests', '/admin/coverage-requests'],
+  ['Post logs: visitors', '/admin/post-logs'],
+  ['Post logs: pass-down', '/admin/post-logs?tab=passdown'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],
   ['Pay period, to approve', '/admin/payroll/2'],
@@ -112,8 +114,10 @@ async function launch() {
  * a missing label, an unnamed control, a bad role - is a defect.
  */
 async function audit(page, label, path) {
-  await page.goto(`${WEB}${path}`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400); // let a data fetch settle
+  if (path !== null) {
+    await page.goto(`${WEB}${path}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(400); // let a data fetch settle
+  }
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -157,14 +161,47 @@ await audit(page, 'Set password (bad link)', '/portal/set-password?token=nope');
 
 // --- staff ----------------------------------------------------------------
 console.log('\n--- officer and admin ---');
-await page.goto(WEB, { waitUntil: 'networkidle' });
-await page.fill('#employeeCode', '1001');
-await page.click('button[type="submit"]');
-await page.waitForTimeout(300);
-for (const digit of '2468') await page.keyboard.press(digit);
-await page.waitForTimeout(1200);
+/**
+ * Sign in through the real screen. A four-digit PIN needs the Sign in press
+ * (PINs may be up to six), and the audit refuses to go on if it is still
+ * looking at the sign-in screen - otherwise every "staff" page below would
+ * quietly be the sign-in page again, audited forty times over.
+ */
+async function staffSignIn(code, pin) {
+  await page.goto(WEB, { waitUntil: 'networkidle' });
+  await page.fill('#employeeCode', code);
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.keypad', { timeout: 10000 });
+  for (const digit of pin) await page.keyboard.press(digit);
+  if (pin.length < 6) await page.click('button:text-is("Sign in")');
+  await page.waitForTimeout(1500);
+  if (await page.locator('#employeeCode, .keypad').count()) {
+    console.error(`Could not sign in as ${code}; stopping rather than auditing the sign-in screen.`);
+    process.exit(1);
+  }
+}
+
+await staffSignIn('1001', '2468');
 
 for (const [label, path] of STAFF_PAGES) await audit(page, label, path);
+
+// The quick search is a dialog over whatever screen is open; audit it as it
+// stands with results showing. A null path audits the page as it is.
+await page.goto(`${WEB}/admin`, { waitUntil: 'networkidle' });
+await page.waitForSelector('.sidebar');
+await page.keyboard.press('Control+k');
+await page.fill('[role="combobox"]', 'bell');
+await page.waitForTimeout(800);
+await audit(page, 'Quick search, with results', null);
+
+// An officer on post, for the post log with visitors and notes in it.
+await page.evaluate(() => localStorage.removeItem('usc.token'));
+await staffSignIn('1003', '4812');
+await audit(page, 'Post log: pass-down', '/post-log');
+await audit(page, 'Post log: visitors', '/post-log?tab=visitors');
+await page.click('text=Sign someone in');
+await page.waitForTimeout(300);
+await audit(page, 'Post log: sign-in dialog', null);
 
 // --- client portal --------------------------------------------------------
 console.log('\n--- client portal ---');

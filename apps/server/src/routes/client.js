@@ -735,9 +735,26 @@ clientRouter.get(
       )
       .all(siteId, from, to);
 
+    // Who came through the building that day, as the officers logged them.
+    // The officer who signed them in stays internal.
+    const visitors = await db
+      .prepare(
+        `SELECT id, full_name, company, purpose, host, kind, vehicle_plate, vehicle_desc, badge_number,
+                arrived_at, departed_at
+         FROM visitor_log
+         WHERE site_id = ? AND arrived_at >= ? AND arrived_at < ?
+         ORDER BY arrived_at`
+      )
+      .all(siteId, from, to);
+    const onSiteNow = await db
+      .prepare(`SELECT COUNT(*) AS n FROM visitor_log WHERE site_id = ? AND departed_at IS NULL`)
+      .get(siteId);
+
     res.json({
       date: toDateString(start),
       site,
+      visitors: visitors.map((v) => isoFields(v, ['arrived_at', 'departed_at'])),
+      visitorsOnSiteNow: Number(onSiteNow.n),
       totalHours: toHours(coverage.reduce((sum, c) => sum + (c.minutes_worked || 0), 0)),
       coverage: coverage.map((c) => ({
         ...isoFields(c, ['clock_in_at', 'clock_out_at']),

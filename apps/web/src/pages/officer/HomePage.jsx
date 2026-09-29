@@ -11,6 +11,42 @@ import {
 import { formatDuration, toHours } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
 
+/* ------------------------------------------------------------ post log -- */
+
+/**
+ * The post's pass-down and visitors at a glance. Shown before the shift too,
+ * so the officer can read what the last shift left before they arrive.
+ */
+function PostLogCard({ onDuty }) {
+  const [log, setLog] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.get('/post-log').then((d) => alive && setLog(d), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [onDuty]);
+  if (!log?.post) return null;
+  const inside = log.visitors?.onSite?.length || 0;
+  const urgent = log.passdown.some((n) => !n.mine && !n.acked_at && n.priority === 'important');
+  return (
+    <Link className="card card-pad row" to="/post-log" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div className="lead-icon" style={urgent ? { background: 'var(--danger-bg)', color: 'var(--danger)' } : undefined}>
+        <Icon name="clipboard" size={19} />
+      </div>
+      <div className="grow">
+        <div className="strong small">Post log</div>
+        <div className="tiny muted">
+          {log.unacked ? `${log.unacked} pass-down note${log.unacked === 1 ? '' : 's'} to read` : 'Pass-down all read'}
+          {log.onDuty ? ` · ${inside} visitor${inside === 1 ? '' : 's'} on site` : ''}
+        </div>
+      </div>
+      {log.unacked > 0 && <Chip kind={urgent ? 'danger' : 'warn'}>{log.unacked} new</Chip>}
+      <Icon name="chevron" size={16} />
+    </Link>
+  );
+}
+
 /* ----------------------------------------------------- check-in prompt -- */
 
 function CheckInPrompt({ checkIn, onAnswered }) {
@@ -367,6 +403,8 @@ export default function HomePage() {
           <Icon name="chevron" size={16} />
         </Link>
       </div>
+
+      <PostLogCard onDuty={onDuty} />
 
       {/* --------------------------------------------------- this week -- */}
       <div className="grid grid-3">
