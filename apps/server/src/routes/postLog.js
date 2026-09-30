@@ -20,6 +20,7 @@ import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast } from '../shared.js';
 import { toSql } from '../services/compliance.js';
 import { currentOrders, reviseOrders, ordersForOfficer } from '../services/postOrders.js';
+import { notifyOrderRequestAnswered } from '../services/email.js';
 
 export const postLogRouter = Router();
 postLogRouter.use(requireAuth);
@@ -701,10 +702,18 @@ postLogRouter.get(
     const since = toSql(new Date(Date.now() - 30 * 86400000));
     const until = toSql(new Date(Date.now() + 14 * 86400000));
     const out = [];
+    const openRequests = await db
+      .prepare(
+        `SELECT r.id, r.post_id, r.body, r.created_at, c.name AS client_name, c.company AS client_company
+         FROM post_order_requests r LEFT JOIN client_users c ON c.id = r.client_user_id
+         WHERE r.status = 'open' ORDER BY r.created_at`
+      )
+      .all();
+    const requestsFor = (postId) => openRequests.filter((r) => r.post_id === postId).map((r) => isoFields(r, ['created_at']));
     for (const p of posts) {
       const order = await currentOrders(p.id);
       if (!order?.body.trim()) {
-        out.push({ ...p, order: null, acked: [], outstanding: [] });
+        out.push({ ...p, order: null, acked: [], outstanding: [], requests: requestsFor(p.id) });
         continue;
       }
       const crew = await db
@@ -730,9 +739,14 @@ postLogRouter.get(
         order: isoFields(order, ['created_at']),
         acked: acks.map((a) => isoFields(a, ['acked_at'])),
         outstanding: crew.filter((c) => !ackedIds.has(c.id)),
+        requests: requestsFor(p.id),
       });
     }
-    res.json({ posts: out, outstandingTotal: out.reduce((n, p) => n + p.outstanding.length, 0) });
+    res.json({
+      posts: out,
+      outstandingTotal: out.reduce((n, p) => n + p.outstanding.length, 0),
+      requestsTotal: out.reduce((n, p) => n + p.requests.length, 0),
+    });
   })
 );
 
@@ -764,14 +778,62 @@ postLogRouter.post(
         postId: z.number().int().positive(),
         body: z.string().trim().min(10, 'Post orders need to say what the officer does.').max(5000),
         changeNote: z.string().trim().max(300).optional().nullable(),
+        // The client's request this version answers, if it does.
+        requestId: z.number().int().positive().optional().nullable(),
+        response: z.string().trim().max(1000).optional().nullable(),
       }),
       req.body
     );
     if (!(await db.prepare(`SELECT id FROM posts WHERE id = ?`).get(body.postId))) throw new HttpError(404, 'Post not found.');
+    const request = body.requestId ? await openRequest(body.requestId) : null;
+    if (request && request.post_id !== body.postId) throw new HttpError(422, 'That request is for a different post.');
     await currentOrders(body.postId);
     const { order, created } = await reviseOrders(body.postId, body.body, req.user.id, body.changeNote || null);
     if (!created) throw new HttpError(409, 'Those are the orders already in force.');
-    await audit(req.user.id, 'post_orders.revised', 'post_order', order.id, { postId: body.postId, version: order.version }, req.ip);
+    await audit(req.user.id, 'post_orders.revised', 'post_order', order.id, { postId: body.postId, version: order.version, requestId: request?.id }, req.ip);
+    if (request) await answerRequest(request, 'applied', req.user.id, body.response || null, order.id);
     res.status(201).json({ order: isoFields(order, ['created_at']) });
+  })
+);
+
+/* ------------------------------------------------ client change requests -- */
+
+async function openRequest(id) {
+  const row = await db.prepare(`SELECT * FROM post_order_requests WHERE id = ?`).get(id);
+  if (!row) throw new HttpError(404, 'Request not found.');
+  if (row.status !== 'open') throw new HttpError(409, 'That request has already been answered or withdrawn.');
+  return row;
+}
+
+/** Close a client's request and tell them, in the portal and by email. */
+async function answerRequest(request, status, userId, response, orderId = null) {
+  await db
+    .prepare(
+      `UPDATE post_order_requests SET status = ?, response = ?, applied_order_id = ?, resolved_by = ?, resolved_at = now()
+       WHERE id = ? AND status = 'open'`
+    )
+    .run(status, response, orderId, userId, request.id);
+  await audit(userId, `post_order_request.${status}`, 'post_order_request', request.id, { postId: request.post_id }, null);
+  const full = await db
+    .prepare(
+      `SELECT r.*, p.name AS post_name, s.name AS site_name
+       FROM post_order_requests r JOIN posts p ON p.id = r.post_id JOIN sites s ON s.id = p.site_id WHERE r.id = ?`
+    )
+    .get(request.id);
+  await notifyOrderRequestAnswered(full).catch((err) => console.error('[usc] post orders email failed', err.message));
+}
+
+/** Decline a client's requested change, with the reason they will read. */
+postLogRouter.post(
+  '/admin/order-requests/:id/decline',
+  supervisor,
+  wrap(async (req, res) => {
+    const request = await openRequest(idParam(req.params.id, 'request'));
+    const body = parse(
+      z.object({ response: z.string().trim().min(5, 'Tell the client why, in a sentence.').max(1000) }),
+      req.body
+    );
+    await answerRequest(request, 'declined', req.user.id, body.response);
+    res.json({ ok: true });
   })
 );

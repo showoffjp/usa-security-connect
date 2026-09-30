@@ -277,3 +277,41 @@ export async function notifyCoverageRequestAnswered(request) {
   });
   return 1;
 }
+
+/** A client's requested change to a post's orders, applied or declined. */
+export async function notifyOrderRequestAnswered(request) {
+  const contact = request.client_user_id
+    ? await db
+        .prepare(`SELECT id, email, name FROM client_users WHERE id = ? AND status = 'active'`)
+        .get(request.client_user_id)
+    : null;
+  if (!contact) return 0;
+
+  const applied = request.status === 'applied';
+  await send({
+    to: contact.email,
+    name: contact.name,
+    kind: applied ? 'post_orders_changed' : 'post_orders_declined',
+    entity: 'post_order_request',
+    entityId: request.id,
+    subject: applied
+      ? `Post orders updated - ${request.post_name}, ${request.site_name}`
+      : `Your post orders request - ${request.post_name}, ${request.site_name}`,
+    body: [
+      `Dear ${contact.name},`,
+      '',
+      applied
+        ? `We have changed the orders for ${request.post_name} at ${request.site_name} as you asked. Every officer who works the post is asked to read and acknowledge the new version.`
+        : `We have not changed the orders for ${request.post_name} at ${request.site_name} as you asked.`,
+      '',
+      `  You asked  ${request.body}`,
+      request.response ? `  Our reply  ${request.response}` : null,
+      '',
+      'The orders in force are in your portal under Post orders.',
+      signOff(),
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
+  });
+  return 1;
+}

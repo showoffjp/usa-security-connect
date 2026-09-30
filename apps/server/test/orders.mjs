@@ -170,4 +170,85 @@ log(manual.status === 200 && manual.data.checkpoints.find((c) => c.name === 'No 
   'marking a checkpoint visited without a tag is recorded as manual, not as a scan');
 await call(`/tours/runs/${runId}/complete`, { token: marcus, method: 'POST' });
 
+/* ================================================ client change requests === */
+section('post orders: clients asking for changes');
+
+const clientSignIn = async (email, password) =>
+  (await call('/client/login', { method: 'POST', body: { email, password } })).data?.token;
+const gulfport = await clientSignIn('alicia.grant@gulfportfreight.com', 'gulfport-portal-03');
+const pensacola = await clientSignIn('rpike@emeraldcoastlogistics.com', 'pensacola-portal-05');
+log(Boolean(gulfport && pensacola), 'signed in as two client contacts');
+
+const theirs = await call('/client/post-orders', { token: gulfport });
+const gpSite = theirs.data.sites[0];
+const gpPost = gpSite?.posts.find((p) => p.order);
+log(theirs.status === 200 && theirs.data.sites.length >= 1 && gpPost, 'a client reads the orders in force at their posts', gpPost?.name);
+log(theirs.data.sites.every((x) => x.posts.every((p) => !p.order || (!('created_by' in p.order) && !('author_name' in p.order)))),
+  'without which of our staff wrote them');
+const other = await call('/client/post-orders', { token: pensacola });
+log(!other.data.sites.some((x) => x.id === gpSite.id), "and cannot see another client's property");
+
+const ask = (token, body) => call('/client/post-orders/requests', { token, method: 'POST', body });
+log((await ask(gulfport, { postId: gpPost.id, body: 'More' })).status === 422, 'a request has to say what should change');
+log((await ask(pensacola, { postId: gpPost.id, body: 'Please check the north gate every hour.' })).status === 404,
+  "a client cannot ask about another client's post");
+log((await ask(gulfport, { postId: 999999, body: 'Please check the north gate every hour.' })).status === 404, 'nor a post that is not there');
+const asked = await ask(gulfport, { postId: gpPost.id, body: 'Please check the north gate chain and padlock every hour after dark.' });
+const askedRow = asked.data.sites?.flatMap((x) => x.posts).find((p) => p.id === gpPost.id)?.requests[0];
+log(asked.status === 201 && askedRow?.status === 'open' && askedRow.mine === true, 'a client asks for a change');
+const second = await ask(gulfport, { postId: gpPost.id, body: 'Please also log every truck that parks overnight.' });
+await ask(gulfport, { postId: gpPost.id, body: 'And confirm the yard lights are on at dusk.' });
+log((await ask(gulfport, { postId: gpPost.id, body: 'A fourth request while three are waiting.' })).status === 409,
+  'no more than three waiting at once for one post');
+const secondId = second.data.sites.flatMap((x) => x.posts).find((p) => p.id === gpPost.id).requests.find((r) => /truck/.test(r.body)).id;
+log((await call(`/client/post-orders/requests/${secondId}/withdraw`, { token: pensacola, method: 'POST' })).status === 404,
+  'another client cannot withdraw it');
+const withdrawn = await call(`/client/post-orders/requests/${secondId}/withdraw`, { token: gulfport, method: 'POST' });
+log(withdrawn.status === 200 && withdrawn.data.sites.flatMap((x) => x.posts).flatMap((p) => p.requests).find((r) => r.id === secondId).status === 'withdrawn',
+  'the client withdraws one of theirs');
+
+const staffView = await call('/post-log/admin/orders', { token: supervisor });
+const staffPost = staffView.data.posts.find((p) => p.id === gpPost.id);
+const openReq = staffPost.requests.find((r) => r.id === askedRow.id);
+log(openReq && openReq.client_name && staffPost.requests.every((r) => r.id !== secondId), 'supervisors see the open requests, with who asked');
+log(staffView.data.requestsTotal >= 2, 'and how many are waiting', `${staffView.data.requestsTotal}`);
+const inboxNow = await call('/admin/alerts', { token: supervisor });
+log(inboxNow.data.alerts.some((a) => a.key === `order-request:${askedRow.id}` && a.link === '/admin/post-logs?tab=orders'),
+  'each request is in the alerts inbox');
+log(inboxNow.data.alerts.some((a) => a.kind === 'tour'), 'as are patrols finished with required checkpoints skipped');
+
+const lobbyPostId = postId;
+log((await issue(supervisor, { postId: lobbyPostId, body: `${gpPost.order.body} (wrong post)`, requestId: askedRow.id })).status === 422,
+  'a request can only be applied to its own post');
+const applied = await issue(supervisor, {
+  postId: gpPost.id, body: `${gpPost.order.body}\nAfter dark: check the north gate chain and padlock every hour.`,
+  changeNote: 'North gate checked hourly after dark', requestId: askedRow.id, response: 'Added from tonight.',
+});
+log(applied.status === 201, 'a supervisor applies it as a new version');
+log((await issue(supervisor, { postId: gpPost.id, body: `${gpPost.order.body} again`, requestId: askedRow.id })).status === 409,
+  'an answered request cannot be applied twice');
+const clientAfter = await call('/client/post-orders', { token: gulfport });
+const done = clientAfter.data.sites.flatMap((x) => x.posts).flatMap((p) => p.requests).find((r) => r.id === askedRow.id);
+log(done.status === 'applied' && done.applied_version === applied.data.order.version && done.response === 'Added from tonight.',
+  'the client sees it changed, in which version, with the reply');
+log(clientAfter.data.sites.flatMap((x) => x.posts).find((p) => p.id === gpPost.id).order.version === applied.data.order.version,
+  'and reads the new orders');
+
+const lights = clientAfter.data.sites.flatMap((x) => x.posts).flatMap((p) => p.requests).find((r) => /yard lights/.test(r.body));
+const decline = (token, id, body) => call(`/post-log/admin/order-requests/${id}/decline`, { token, method: 'POST', body });
+log((await decline(marcus, lights.id, { response: 'Officers cannot do this.' })).status === 403, 'officers cannot answer client requests');
+log((await decline(supervisor, lights.id, { response: 'No' })).status === 422, 'declining needs a reason the client can read');
+log((await decline(supervisor, lights.id, { response: 'The yard lights are on a timer the landlord controls; we report any that are out.' })).status === 200,
+  'a supervisor declines with a reason');
+log((await decline(supervisor, lights.id, { response: 'Changed my mind about this one.' })).status === 409, 'and cannot answer it twice');
+log((await decline(supervisor, 'abc', { response: 'Junk id in the path.' })).status === 422, 'a junk request id is refused');
+const declined = (await call('/client/post-orders', { token: gulfport })).data.sites.flatMap((x) => x.posts).flatMap((p) => p.requests).find((r) => r.id === lights.id);
+log(declined.status === 'declined' && /timer/.test(declined.response), 'the client sees it declined, with the reason');
+const outbox = await call('/admin/emails', { token: admin });
+log(['post_orders_changed', 'post_orders_declined'].every((k) => outbox.data.emails.some((e) => e.kind === k && /gulfport/.test(e.to_email))),
+  'and is emailed both answers');
+const inboxAfter = await call('/admin/alerts', { token: supervisor });
+log(!inboxAfter.data.alerts.some((a) => a.key === `order-request:${askedRow.id}` || a.key === `order-request:${lights.id}`),
+  'answered requests leave the alerts inbox');
+
 finish('Post orders, alerts and QR tags');

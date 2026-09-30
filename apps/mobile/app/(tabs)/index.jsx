@@ -11,6 +11,7 @@ import {
 } from '../../src/ui.jsx';
 import { PanicButton, BreakControl } from '../../src/SafetyBar.jsx';
 import { LocationCard } from '../../src/LocationCard.jsx';
+import { PostLogCards, SiteContactsCard, usePostLog } from '../../src/PostLogCards.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -71,6 +72,9 @@ export default function HomeScreen() {
   const [fix, setFix] = useState(null);
   const [override, setOverride] = useState(null);
   const [reason, setReason] = useState('');
+  const [pulls, setPulls] = useState(0);
+  // Post orders, pass-down and contacts reload on pull-to-refresh and when duty changes.
+  const postLog = usePostLog(`${status?.onDuty}-${pulls}`);
 
   const load = useCallback(async () => {
     try {
@@ -157,6 +161,7 @@ export default function HomeScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
+              setPulls((n) => n + 1);
               load();
             }}
             tintColor={C.brand600}
@@ -171,6 +176,9 @@ export default function HomeScreen() {
         </View>
 
         {checkIn?.is_open && <CheckInCard checkIn={checkIn} onAnswered={load} notify={notify} />}
+
+        {/* Changed orders and unread pass-down come before anything else on post. */}
+        <PostLogCards postLog={postLog} notify={notify} />
 
         {/* Breaks only make sense while the clock is running. */}
         {onDuty && <BreakControl notify={notify} onChanged={load} />}
@@ -257,6 +265,8 @@ export default function HomeScreen() {
         </Card>
 
         <LocationCard status={status} />
+
+        <SiteContactsCard site={postLog.site} />
 
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Pressable style={[S.card, S.grow]} onPress={() => router.push('/incident-new')}>

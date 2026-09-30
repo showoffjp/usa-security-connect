@@ -81,6 +81,7 @@ const PORTAL_PAGES = [
   ['Portal daily report', '/portal/report'],
   ['Portal invoices', '/portal/invoices'],
   ['Portal coverage requests', '/portal/requests'],
+  ['Portal post orders', '/portal/orders'],
 ];
 
 let failures = 0;
