@@ -6,9 +6,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../lib/api.js';
-import { fmtDate, fmtDateTime, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
+import { fmtDate, fmtDateTime, fmtDay, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
@@ -605,7 +605,109 @@ export function PortalOverview({ sites }) {
 
 /* ---------------------------------------------------------- coverage -- */
 
+/** Worked shifts, or the schedule ahead. */
 export function PortalCoverage({ sites }) {
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'upcoming' ? 'upcoming' : 'worked';
+  const switcher = (
+    <Segmented
+      label="Coverage view"
+      value={view}
+      onChange={(v) => setParams(v === 'upcoming' ? { view: v } : {}, { replace: true })}
+      options={[
+        { value: 'worked', label: 'Worked' },
+        { value: 'upcoming', label: 'Coming up' },
+      ]}
+    />
+  );
+  return view === 'upcoming' ? <UpcomingCoverage sites={sites} switcher={switcher} /> : <CoverageRecord sites={sites} switcher={switcher} />;
+}
+
+/** The next week or two at their properties, day by day. */
+function UpcomingCoverage({ sites, switcher }) {
+  const [siteId, setSiteId] = useState(null);
+  const [days, setDays] = useState(7);
+  const qs = new URLSearchParams({ days: String(days) });
+  if (siteId) qs.set('siteId', String(siteId));
+  const { data, error, loading, reload } = usePortal(`/client/schedule?${qs}`, [siteId, days]);
+  const byDay = [];
+  for (const s of data?.shifts || []) {
+    const key = new Date(s.starts_at).toDateString();
+    const last = byDay[byDay.length - 1];
+    if (last && last.key === key) last.shifts.push(s);
+    else byDay.push({ key, day: s.starts_at, shifts: [s] });
+  }
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Coming up</h1>
+          <p className="muted">Who is booked on each post over the days ahead, and anything we are still arranging.</p>
+        </div>
+      </div>
+      <div className="row wrap" style={{ gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+        {switcher}
+        <SitePicker sites={sites} value={siteId} onChange={setSiteId} />
+        <Segmented
+          label="How far ahead"
+          value={days}
+          onChange={setDays}
+          options={[
+            { value: 7, label: 'Next 7 days' },
+            { value: 14, label: 'Next 14 days' },
+          ]}
+        />
+      </div>
+
+      <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading the schedule">
+        {data &&
+          (data.shifts.length === 0 ? (
+            <div className="card card-pad">
+              <Empty icon="calendar" title="Nothing scheduled in this period" />
+            </div>
+          ) : (
+            <div className="stack">
+              <p className="small muted" style={{ margin: 0 }}>
+                {data.summary.assigned} of {data.summary.total} shift{data.summary.total === 1 ? '' : 's'} booked
+                {data.summary.total > data.summary.assigned ? `; ${data.summary.total - data.summary.assigned} still being arranged` : ''}.
+              </p>
+              {byDay.map((d) => (
+                <section key={d.key} className="card" aria-label={fmtDay(d.day)}>
+                  <div className="card-head">
+                    <h2 className="small strong" style={{ margin: 0 }}>{fmtDay(d.day)}</h2>
+                  </div>
+                  <ul className="list">
+                    {d.shifts.map((s) => (
+                      <li key={s.id} className="list-item" style={{ cursor: 'default' }}>
+                        <div className="grow">
+                          <div className="strong small">
+                            {s.post_name}
+                            {sites.length > 1 ? <span className="muted"> &middot; {s.site_name}</span> : null}
+                          </div>
+                          <div className="tiny muted">
+                            {fmtRange(s.starts_at, s.ends_at)}
+                            {s.armed ? ' · armed' : ''}
+                          </div>
+                        </div>
+                        {s.assigned ? (
+                          <span className="small">{s.officer_name}</span>
+                        ) : (
+                          <Chip kind="warn">Being arranged</Chip>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          ))}
+      </Loaded>
+    </div>
+  );
+}
+
+function CoverageRecord({ sites, switcher }) {
   const [siteId, setSiteId] = useState(null);
   const [days, setDays] = useState(30);
   const narrow = useNarrow();
@@ -621,6 +723,7 @@ export function PortalCoverage({ sites }) {
       </div>
 
       <div className="row wrap" style={{ gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+        {switcher}
         <SitePicker sites={sites} value={siteId} onChange={setSiteId} />
         <DaysPicker value={days} onChange={setDays} />
       </div>

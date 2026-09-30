@@ -840,6 +840,61 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* --------------------------------- round 13: client notices, schedule ahead --- */
+{
+  console.log('\n--- Client notices and the schedule ahead ---');
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await staff.page.goto(WEB + '/admin/clients?tab=notices');
+  await settle(staff.page);
+  await checkScreen('supervisor: client notices', staff.page, staff.problems);
+  const title = `E2E notice ${Date.now() % 100000}`;
+  await staff.page.click('button:has-text("New notice")');
+  await staff.page.getByLabel('Title').fill(title);
+  await staff.page.getByLabel('Message').fill('The visitor car park is closed for resurfacing on Saturday; visitors use level 2.');
+  await staff.page.getByLabel('Every property').uncheck();
+  await staff.page.getByLabel('Harborview Medical Center').check();
+  await checkScreen('supervisor: new notice', staff.page, staff.problems);
+  await staff.page.click('[role="dialog"] button:has-text("Post notice")');
+  await staff.page.waitForTimeout(1200);
+  log(await staff.page.locator('li.list-item', { hasText: title }).locator('text=Live').count() === 1, 'a supervisor posts a notice to one property');
+
+  const client = await watchedPage({ width: 1280, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'carla.mendez@harborviewhealth.org');
+  await client.page.fill('input[type="password"]', 'harborview-portal-04');
+  await client.page.click('button[type="submit"]');
+  await settle(client.page);
+  const banner = client.page.locator('.notices-bar .banner', { hasText: title });
+  await banner.waitFor({ timeout: 10000 });
+  log(await banner.count() === 1, "the property's contact sees it at the top of the portal");
+  await checkScreen('client: notice banner', client.page, client.problems);
+  await banner.locator('button:has-text("Got it")').click();
+  await client.page.waitForTimeout(800);
+  await client.page.reload();
+  await settle(client.page);
+  log(await client.page.locator('.notices-bar .banner', { hasText: title }).count() === 0, 'and once read it stays out of the way');
+
+  await client.page.goto(WEB + '/portal/coverage');
+  await settle(client.page);
+  await client.page.click('[role="radio"]:has-text("Coming up")');
+  await client.page.waitForTimeout(1200);
+  log(await client.page.locator('h1:has-text("Coming up")').count() === 1 && await client.page.locator('section.card li.list-item').count() > 0,
+    'a client sees who is booked on their posts in the days ahead');
+  await checkScreen('client: coverage coming up', client.page, client.problems);
+
+  await staff.page.reload();
+  await settle(staff.page);
+  const row = staff.page.locator('li.list-item', { hasText: title });
+  log(await row.locator('text=read by 1 of').count() === 1, 'the office sees it has been read');
+  staff.page.once('dialog', (d) => d.accept());
+  await row.locator('button:has-text("Withdraw")').click();
+  await staff.page.waitForTimeout(1000);
+  log(await staff.page.locator('li.list-item', { hasText: title }).locator('text=Withdrawn').count() === 1, 'and withdraws it');
+  await staff.context.close();
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

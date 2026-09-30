@@ -287,6 +287,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   with **Apply as a new version** (the reply goes with it) or **Decline**.
 - **Site contacts** (Post logs → Site contacts) — who officers call at each site,
   kept by supervisors and by the client; each entry says who added it.
+- **Client notices** (Client portal → Notices) — post a notice to every property or to
+  chosen ones, as information, important or urgent, from now or scheduled up to 60 days
+  ahead, until a date or until withdrawn, and optionally email it to every contact who
+  can see it. Each shows whether it is live, scheduled, ended or withdrawn, and how many
+  of its contacts have read it.
 - **Client feedback** — every client's monthly rating per property with their
   comment. Two stars or fewer without a reply is counted on the dashboard and in
   the sidebar. The reply goes back to the client's portal.
@@ -440,7 +445,12 @@ a PIN — and sees, for their own properties only:
   hours on site, patrols walked and incidents.
 - **Coverage record** — every scheduled shift with who stood it and when they clocked in
   and out. A shift reads *Scheduled*, then *Awaiting clock-in*, and only becomes *Not
-  covered* once it has ended with nobody on it.
+  covered* once it has ended with nobody on it. **Coming up** shows the next 7 or 14
+  days, day by day: who is booked on each post, and any shift we are still arranging.
+- **Notices from us** — a hurricane plan, holiday coverage, a lobby moving: shown at the
+  top of every page until the contact marks it read, most urgent first. A notice for
+  one property is seen only by that property's contacts, and never names the other
+  properties it went to.
 - **Patrol proof** — each round walked, with every checkpoint scanned, skipped or
   missed, and the time it was reached.
 - **Incidents** — the full report, including photographs, which are served through the
@@ -657,7 +667,11 @@ the server is running corrupts the data directory.
   licence rule from both sides.
 - **`test/portal.mjs`** — client scoping, mostly negatively: that one client cannot see
   another's property, that a client token cannot reach a staff endpoint and vice versa,
-  and that no pay or personnel field appears in any response.
+  and that no pay or personnel field appears in any response. The schedule ahead covers
+  only their own posts, at most 14 days, without pay or staff ids. Notices reach only
+  the properties they were posted to, validate their audience, level and dates, can be
+  scheduled, are marked read once per contact and counted, email only their own
+  contacts, and leave the portal the moment they are withdrawn.
 - **`test/invoices.mjs`** — the billing arithmetic, recomputed from the hours rather
   than trusted; status transitions; and that cost and margin never reach the portal.
   Client questions: only about their own issued invoices and lines on them, three
@@ -749,11 +763,13 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 97 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 99 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
-the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
+the sign-in screen in place of the real ones. It also fails any screen showing a table
+without one of our table classes, which renders with the browser's defaults; several
+screens shipped that way before the check existed. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table

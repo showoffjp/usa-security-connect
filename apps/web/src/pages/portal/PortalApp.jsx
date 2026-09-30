@@ -219,6 +219,53 @@ function AccountMenu({ onClose }) {
 
 /* -------------------------------------------------------------- shell -- */
 
+/* ------------------------------------------------------------ notices -- */
+
+const NOTICE_KIND = { urgent: 'danger', important: 'warn', info: 'info' };
+
+/** Notices from us the contact has not yet marked read, above every page. */
+function NoticesBar() {
+  const [notices, setNotices] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    clientApi.get('/client/notices').then(
+      (d) => alive && setNotices(d.notices.filter((n) => !n.read)),
+      () => {}
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const dismiss = async (n) => {
+    setNotices((list) => list.filter((x) => x.id !== n.id));
+    try {
+      await clientApi.post(`/client/notices/${n.id}/read`);
+    } catch {
+      /* it shows again next time, which is the right failure */
+    }
+  };
+  if (!notices.length) return null;
+  return (
+    <div className="notices-bar stack-sm" role="region" aria-label="Notices from us">
+      {notices.map((n) => (
+        <Banner
+          key={n.id}
+          kind={NOTICE_KIND[n.level] || 'info'}
+          title={n.title}
+          action={
+            <button className="btn btn-sm" onClick={() => dismiss(n)}>
+              Got it
+            </button>
+          }
+        >
+          <span style={{ whiteSpace: 'pre-wrap' }}>{n.body}</span>
+          {n.sites.length > 0 && <div className="tiny" style={{ marginTop: 4 }}>{n.sites.join(', ')}</div>}
+        </Banner>
+      ))}
+    </div>
+  );
+}
+
 function PortalShell() {
   const { client, sites } = useClientAuth();
   const [menu, setMenu] = useState(false);
@@ -259,6 +306,7 @@ function PortalShell() {
       </header>
 
       <main className="main" id="main" tabIndex={-1}>
+        <NoticesBar />
         <Outlet />
       </main>
 

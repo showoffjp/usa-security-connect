@@ -80,6 +80,7 @@ const STAFF_PAGES = [
   ['Field visits: problems', '/admin/visits?issues=1'],
   ['Report: supervisor visits', '/admin/reports?report=visits-by-site'],
   ['Invoices: client questions', '/admin/invoices?tab=questions'],
+  ['Client portal: notices', '/admin/clients?tab=notices'],
 ];
 
 const PORTAL_PAGES = [
@@ -87,6 +88,7 @@ const PORTAL_PAGES = [
   ['Portal coverage', '/portal/coverage'],
   ['Portal patrols', '/portal/patrols'],
   ['Portal incidents', '/portal/incidents'],
+  ['Portal coverage: coming up', '/portal/coverage?view=upcoming'],
   ['Portal daily report', '/portal/report'],
   ['Portal invoices', '/portal/invoices'],
   ['Portal coverage requests', '/portal/requests'],
@@ -145,6 +147,15 @@ async function audit(page, label, path, { strictContrast = false } = {}) {
     .analyze();
 
   audited += 1;
+  // Not an axe rule, but a regression it would never catch: a table without
+  // one of our table classes renders with the browser's defaults. Several
+  // screens shipped that way before this check existed.
+  const bare = await page.evaluate(() =>
+    [...document.querySelectorAll('table')].filter((t) => !t.className && t.offsetParent !== null).length
+  );
+  if (bare) {
+    results.violations.push({ id: 'unstyled-table', help: 'A table has no class, so it renders unstyled', nodes: [{ html: '<table>' }] });
+  }
   const serious = results.violations.filter((v) => strictContrast || v.id !== 'color-contrast');
   const contrast = results.violations.filter((v) => v.id === 'color-contrast');
 

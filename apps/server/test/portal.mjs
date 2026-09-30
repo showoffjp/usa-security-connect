@@ -402,10 +402,86 @@ const unlocked = await call(
   { token: admin, method: 'POST' }
 );
 log(unlocked.status === 200, 'a supervisor can unlock it');
-log(
-  Boolean(await portalSignIn('marcus.reyes@palmettoridgehoa.org', 'palmetto-portal-02')),
-  'and the contact can sign in again'
-);
+// Kept for the notices checks below: the per-email sign-in allowance is fixed,
+// and the later suites sign this contact in too.
+const hoa = await portalSignIn('marcus.reyes@palmettoridgehoa.org', 'palmetto-portal-02');
+log(Boolean(hoa), 'and the contact can sign in again');
+
+/* ============================================================ schedule === */
+section('the schedule ahead');
+
+const ahead = await call('/client/schedule', { token: dana });
+const nowMs = Date.now();
+log(ahead.status === 200 && ahead.data.days === 7 && ahead.data.shifts.length > 0, 'a client sees the week ahead at their property', `${ahead.data.shifts?.length}`);
+log(ahead.data.shifts.every((x) => new Date(x.ends_at).getTime() > nowMs && new Date(x.starts_at).getTime() < nowMs + 7 * 86400000),
+  'only shifts still to finish in the next seven days');
+log(ahead.data.shifts.every((x) => x.site_name === 'Riverfront Commerce Center'), 'at their own property only');
+log(ahead.data.shifts.every((x) => (x.assigned ? Boolean(x.officer_name) : x.officer_name === null))
+  && ahead.data.summary.assigned === ahead.data.shifts.filter((x) => x.assigned).length, 'with who is booked, and the count adds up');
+log(ahead.data.shifts.every((x) => !('pay_rate_cents' in x) && !('bill_rate_cents' in x) && !('user_id' in x)), 'and nothing about pay or staff ids');
+log((await call('/client/schedule?days=90', { token: dana })).data.days === 14, 'no more than fourteen days ahead');
+log((await call('/client/schedule?siteId=999999', { token: dana })).status === 404, "and never another client's property");
+
+/* ============================================================= notices === */
+section('notices to clients');
+
+const supervisorToken = await signIn('1002', '3571');
+const staffNotices = await call('/admin/client-notices', { token: supervisorToken });
+log(staffNotices.status === 200 && staffNotices.data.live >= 2, 'supervisors see the notices they have posted', `${staffNotices.data.live} live`);
+log((await call('/admin/client-notices', { token: officer })).status === 403, 'officers do not');
+const danaNotices = await call('/client/notices', { token: dana });
+const hoaNotices = await call('/client/notices', { token: hoa });
+const lobbyNotice = danaNotices.data.notices.find((n) => n.title.startsWith('Lobby desk'));
+log(danaNotices.data.notices.some((n) => n.all_sites) && lobbyNotice?.sites.join() === 'Riverfront Commerce Center',
+  'a client sees the notices for every property and their own');
+log(!hoaNotices.data.notices.some((n) => n.id === lobbyNotice.id), "but not one meant for another client's property");
+log(hoaNotices.data.notices.every((n) => n.sites.every((name) => name !== 'Riverfront Commerce Center')), 'nor the names of the other properties a notice went to');
+
+const post = (body, token = supervisorToken) => call('/admin/client-notices', { token, method: 'POST', body });
+const soon = (days) => new Date(Date.now() + days * 86400000).toISOString();
+log((await post({ title: 'Hi', body: 'Short title check here.', allSites: true })).status === 422, 'a notice needs a title');
+log((await post({ title: 'Office closed Friday', body: 'Short', allSites: true })).status === 422, 'and a message');
+log((await post({ title: 'Office closed Friday', body: 'Our office is closed on Friday for the holiday.' })).status === 422,
+  'and has to say which properties');
+log((await post({ title: 'Office closed Friday', body: 'Our office is closed on Friday for the holiday.', siteIds: [999999] })).status === 422,
+  'real ones');
+log((await post({ title: 'Office closed Friday', body: 'Our office is closed on Friday for the holiday.', allSites: true, startsAt: soon(2), endsAt: soon(1) })).status === 422,
+  'ending after it starts');
+log((await post({ title: 'Office closed Friday', body: 'Our office is closed on Friday for the holiday.', allSites: true, level: 'panic' })).status === 422,
+  'at a known level');
+log((await post({ title: 'Office closed Friday', body: 'Our office is closed on Friday for the holiday.', allSites: true }, officer)).status === 403,
+  'officers cannot post one');
+
+const hoaSite = (await call('/client/me', { token: hoa })).data.sites[0];
+const made = await post({
+  title: 'Gate code changes Monday', body: 'The resident gate code changes on Monday. Officers will have the new code.',
+  level: 'urgent', siteIds: [hoaSite.id], email: true,
+});
+log(made.status === 201 && made.data.notice.state === 'live' && made.data.notice.sites.length === 1 && made.data.emailed >= 1,
+  'a supervisor posts one to a single property, and emails it', `emailed ${made.data.emailed}`);
+const mailed = ((await call('/admin/emails?limit=300', { token: admin })).data.emails || []).filter((e) => e.kind === 'client_notice' && e.subject.includes('Gate code'));
+log(mailed.length === made.data.emailed && mailed.every((e) => /palmettoridgehoa/.test(e.to_email)) && mailed[0].subject.startsWith('Urgent:'),
+  'only the contacts for that property are emailed');
+const theirs = (await call('/client/notices', { token: hoa })).data;
+log(theirs.notices[0]?.id === made.data.notice.id && theirs.notices[0].read === false && theirs.unread >= 1, 'it is first in their portal, unread');
+log(!(await call('/client/notices', { token: dana })).data.notices.some((n) => n.id === made.data.notice.id), 'and nowhere else');
+log((await call(`/client/notices/${made.data.notice.id}/read`, { token: dana, method: 'POST' })).status === 404, "another client cannot mark it read");
+log((await call(`/client/notices/${made.data.notice.id}/read`, { token: hoa, method: 'POST' })).status === 200, 'the contact marks it read');
+log((await call(`/client/notices/${made.data.notice.id}/read`, { token: hoa, method: 'POST' })).status === 200, 'twice does no harm');
+log((await call('/client/notices', { token: hoa })).data.notices.find((n) => n.id === made.data.notice.id)?.read === true, 'and it reads as read');
+const counted = (await call('/admin/client-notices', { token: supervisorToken })).data.notices.find((n) => n.id === made.data.notice.id);
+log(counted.reads === 1 && counted.audience >= 1, 'the office sees who has read it', `${counted.reads} of ${counted.audience}`);
+
+const later = await post({ title: 'Holiday coverage', body: 'Holiday coverage details will follow next week.', allSites: true, startsAt: soon(3) });
+log(later.status === 201 && later.data.notice.state === 'scheduled', 'a notice can be scheduled');
+log(!(await call('/client/notices', { token: dana })).data.notices.some((n) => n.id === later.data.notice.id), 'and stays out of the portal until then');
+
+const withdrawn = await call(`/admin/client-notices/${made.data.notice.id}/withdraw`, { token: supervisorToken, method: 'POST' });
+log(withdrawn.status === 200 && withdrawn.data.notice.state === 'withdrawn', 'a supervisor withdraws a notice');
+log(!(await call('/client/notices', { token: hoa })).data.notices.some((n) => n.id === made.data.notice.id), 'and it leaves the portal at once');
+log((await call(`/admin/client-notices/${made.data.notice.id}/withdraw`, { token: supervisorToken, method: 'POST' })).status === 409, 'it cannot be withdrawn twice');
+log((await call('/admin/client-notices/abc/withdraw', { token: supervisorToken, method: 'POST' })).status === 422, 'a junk id is refused');
+await call(`/admin/client-notices/${later.data.notice.id}/withdraw`, { token: supervisorToken, method: 'POST' });
 
 /* ================================================================ audit === */
 section('audit trail');
@@ -416,5 +492,6 @@ log(actions.has('client.login'), 'a portal sign-in is audited');
 log(actions.has('client.created'), 'creating a login is audited');
 log(actions.has('client.password_reset'), 'a password reset is audited');
 log(actions.has('client.deleted'), 'deleting a login is audited');
+log(actions.has('client_notice.posted') && actions.has('client_notice.withdrawn'), 'posting and withdrawing a notice are audited');
 
 finish('portal');
