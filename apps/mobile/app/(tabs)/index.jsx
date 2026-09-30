@@ -13,6 +13,7 @@ import { PanicButton, BreakControl } from '../../src/SafetyBar.jsx';
 import { LocationCard } from '../../src/LocationCard.jsx';
 import { PostLogCards, SiteContactsCard, usePostLog } from '../../src/PostLogCards.jsx';
 import { ShiftWrapUp } from '../../src/ShiftWrapUp.jsx';
+import { ExpiryReminder } from '../../src/ExpiryReminder.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -182,6 +183,7 @@ export default function HomeScreen() {
 
         {/* Changed orders and unread pass-down come before anything else on post. */}
         <PostLogCards postLog={postLog} notify={notify} />
+        <ExpiryReminder user={user} />
 
         {/* Breaks only make sense while the clock is running. */}
         {onDuty && <BreakControl notify={notify} onChanged={load} />}

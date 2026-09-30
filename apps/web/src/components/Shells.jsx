@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import QuickSearch from './QuickSearch.jsx';
 import AlertsBell from './AlertsBell.jsx';
 import ThemeChoice from './ThemeChoice.jsx';
@@ -101,6 +101,53 @@ function TopBar({ onMenu, dutyState, onSearch, alerts = false }) {
   );
 }
 
+/* ---------------------------------------------------- keyboard shortcuts -- */
+
+/** "g" then a letter jumps to a screen, the way mail and issue trackers do it. */
+const GO_TO = [
+  ['d', '/admin', 'Dashboard'],
+  ['l', '/admin/live', 'Live tracking'],
+  ['f', '/admin/flags', 'Flags'],
+  ['i', '/admin/incidents', 'Incidents'],
+  ['p', '/admin/post-logs', 'Post logs'],
+  ['s', '/admin/schedule', 'Schedule'],
+  ['e', '/admin/employees', 'Employees'],
+  ['t', '/admin/timesheets', 'Timesheets & pay'],
+  ['r', '/admin/reports', 'Reports'],
+  ['h', '/admin/site-health', 'Site health'],
+  ['c', '/admin/clients', 'Client portal'],
+];
+
+function ShortcutsHelp({ onClose }) {
+  return (
+    <Modal title="Keyboard shortcuts" onClose={onClose}>
+      <div className="stack">
+        <table className="shortcuts">
+          <tbody>
+            <tr>
+              <td><kbd>Ctrl</kbd> <kbd>K</kbd> or <kbd>/</kbd></td>
+              <td>Search officers, sites, incidents and screens</td>
+            </tr>
+            <tr>
+              <td><kbd>?</kbd></td>
+              <td>This list</td>
+            </tr>
+            {GO_TO.map(([key, , label]) => (
+              <tr key={key}>
+                <td>
+                  <kbd>g</kbd> then <kbd>{key}</kbd>
+                </td>
+                <td>{label}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="tiny muted">Shortcuts are off while you are typing in a field.</div>
+      </div>
+    </Modal>
+  );
+}
+
 /* -------------------------------------------------------- officer shell -- */
 
 export function OfficerShell() {
@@ -177,25 +224,46 @@ export function AdminShell() {
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState({});
   const [searching, setSearching] = useState(false);
+  const [help, setHelp] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => setOpen(false), [location.pathname]);
 
-  // Ctrl+K / Cmd+K anywhere, or "/" when not already typing in a field.
+  // Ctrl+K / Cmd+K anywhere, or "/" when not already typing in a field;
+  // "?" for the list of shortcuts, and "g" then a letter to jump to a screen.
   useEffect(() => {
+    let goPending = 0;
     const onKey = (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) || e.target?.isContentEditable;
+      const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+      const inDialog = Boolean(document.querySelector('[role="dialog"]'));
       if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setSearching(true);
-      } else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        return;
+      }
+      if (typing || !plain || inDialog) return;
+      if (e.key === '/') {
         e.preventDefault();
         setSearching(true);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setHelp(true);
+      } else if (e.key === 'g') {
+        goPending = Date.now();
+      } else if (goPending && Date.now() - goPending < 1500) {
+        goPending = 0;
+        const target = GO_TO.find(([key]) => key === e.key.toLowerCase());
+        if (target) {
+          e.preventDefault();
+          navigate(target[1]);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     let alive = true;
@@ -281,6 +349,7 @@ export function AdminShell() {
         Skip to content
       </a>
       <TopBar onMenu={() => setOpen((v) => !v)} onSearch={() => setSearching(true)} alerts />
+      {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
       {searching && (
         <QuickSearch
           pages={groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.title })))}

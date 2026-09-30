@@ -8,6 +8,7 @@ import { INCIDENT_CATEGORIES, INCIDENT_SEVERITY, ROLES, atLeast } from '../share
 import { toSql } from '../services/compliance.js';
 import * as storage from '../services/storage.js';
 import { generateFilename } from '../services/storage.js';
+import { notifySeriousIncident } from '../services/clientNotify.js';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(requireAuth);
@@ -127,6 +128,8 @@ incidentsRouter.post(
     }
 
     await audit(req.user.id, 'incident.created', 'incident', incidentId, { ref, severity: body.severity }, req.ip);
+    // A serious incident is emailed to the property's contacts straight away.
+    await notifySeriousIncident(incidentId).catch((err) => console.error('[usc] incident alert failed', err.message));
 
     const row = (await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incidentId));
     res.status(201).json({ incident: isoFields(row, TIMES), refNumber: ref, photos: (req.files || []).length });
@@ -266,6 +269,8 @@ incidentsRouter.patch(
     ).run(body.status, body.reviewNotes ?? null, body.severity ?? null, req.user.id, incident.id));
 
     await audit(req.user.id, 'incident.reviewed', 'incident', incident.id, { status: body.status }, req.ip);
+    // Raised to serious on review: the client hears about it now, once.
+    await notifySeriousIncident(incident.id).catch((err) => console.error('[usc] incident alert failed', err.message));
     res.json({ incident: isoFields((await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incident.id)), TIMES) });
   })
 );

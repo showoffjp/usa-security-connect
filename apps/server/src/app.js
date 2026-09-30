@@ -12,6 +12,7 @@ import { migrate, db, demoInstance } from './lib/db.js';
 import { errorHandler, wrap, HttpError } from './lib/http.js';
 import { requireAuth } from './lib/auth.js';
 import { sweep } from './services/compliance.js';
+import { sendDailyReports } from './services/clientNotify.js';
 
 import { authRouter } from './routes/auth.js';
 import { timeclockRouter } from './routes/timeclock.js';
@@ -111,6 +112,12 @@ const sweepHandler = wrap(async (req, res) => {
   if (offered !== secret) throw new HttpError(401, 'Not authorised.');
 
   const result = await sweep();
+  // The morning's daily report emails ride the same timer, after the sweep.
+  try {
+    result.dailyReports = await sendDailyReports();
+  } catch (err) {
+    console.error('[usc] daily report emails failed', err.message);
+  }
   res.json({ ok: true, ...result });
 });
 

@@ -637,6 +637,52 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* ------------------------------------------------ round 9: small things --- */
+{
+  console.log('\n--- Shortcuts, licence reminders and client email settings ---');
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await settle(staff.page);
+  await staff.page.keyboard.press('?');
+  log(await staff.page.locator('[role="dialog"]:has-text("Keyboard shortcuts")').count() === 1, '? shows the keyboard shortcuts');
+  await staff.page.keyboard.press('Escape');
+  await staff.page.waitForTimeout(200);
+  await staff.page.keyboard.press('g');
+  await staff.page.keyboard.press('h');
+  await staff.page.waitForTimeout(800);
+  log(new URL(staff.page.url()).pathname === '/admin/site-health', 'g then h goes to site health');
+  await checkScreen('supervisor: reached by shortcut', staff.page, staff.problems);
+
+  const armed = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(armed.page, '1005', '6174');
+  await settle(armed.page);
+  log(await armed.page.locator('.expiry-list li').count() >= 1, "an officer's home warns of a licence or certificate about to lapse");
+  await checkScreen('officer: licence reminder', armed.page, armed.problems);
+
+  const client = await watchedPage({ width: 1280, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'carla.mendez@harborviewhealth.org');
+  await client.page.fill('input[type="password"]', 'harborview-portal-04');
+  await client.page.click('button[type="submit"]');
+  await settle(client.page);
+  await client.page.click('button[aria-label="Account menu"]');
+  await client.page.waitForSelector('text=Email me');
+  const daily = client.page.locator('label:has-text("The daily report") input');
+  await daily.check();
+  await client.page.waitForTimeout(800);
+  await client.page.keyboard.press('Escape');
+  await client.page.reload();
+  await settle(client.page);
+  await client.page.click('button[aria-label="Account menu"]');
+  await client.page.waitForSelector('text=Email me');
+  log(await client.page.locator('label:has-text("The daily report") input').isChecked(), 'a client turns on the daily report email, and it stays on');
+  await client.page.locator('label:has-text("The daily report") input').uncheck();
+  await client.page.waitForTimeout(600);
+  await staff.context.close();
+  await armed.context.close();
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

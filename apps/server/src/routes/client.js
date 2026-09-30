@@ -1204,3 +1204,35 @@ clientRouter.get(
     res.json(await siteMonth(siteId, req.query.month ? String(req.query.month) : monthKey()));
   })
 );
+
+/* ======================================================== email settings === */
+
+const notificationSettings = (c) => ({ seriousIncidents: Boolean(c.notify_serious_incidents), dailyReport: Boolean(c.notify_daily_report) });
+
+/** Which emails this contact gets: serious incident alerts, and the daily report. */
+clientRouter.get(
+  '/notifications',
+  requireClient,
+  wrap(async (req, res) => {
+    const c = await db.prepare(`SELECT notify_serious_incidents, notify_daily_report FROM client_users WHERE id = ?`).get(req.client.id);
+    res.json({ notifications: notificationSettings(c) });
+  })
+);
+
+clientRouter.patch(
+  '/notifications',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(z.object({ seriousIncidents: z.boolean().optional(), dailyReport: z.boolean().optional() }).strict(), req.body);
+    if (body.seriousIncidents === undefined && body.dailyReport === undefined) throw new HttpError(422, 'Say which email to turn on or off.');
+    if (body.seriousIncidents !== undefined) {
+      await db.prepare(`UPDATE client_users SET notify_serious_incidents = ? WHERE id = ?`).run(body.seriousIncidents, req.client.id);
+    }
+    if (body.dailyReport !== undefined) {
+      await db.prepare(`UPDATE client_users SET notify_daily_report = ? WHERE id = ?`).run(body.dailyReport, req.client.id);
+    }
+    await audit(null, 'client.notifications_changed', 'client_user', req.client.id, body, req.ip);
+    const c = await db.prepare(`SELECT notify_serious_incidents, notify_daily_report FROM client_users WHERE id = ?`).get(req.client.id);
+    res.json({ notifications: notificationSettings(c) });
+  })
+);

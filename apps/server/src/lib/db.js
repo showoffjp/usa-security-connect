@@ -229,6 +229,8 @@ export function toPostgres(sql) {
  */
 const BOOLEAN_COLUMNS = [
   'active',
+  'notify_serious_incidents',
+  'notify_daily_report',
   'required',
   'requires_gps',
   'armed',
@@ -254,7 +256,7 @@ const isInsert = (sql) => /^\s*insert\s+into/i.test(sql);
 const hasReturning = (sql) => /\breturning\b/i.test(sql);
 
 /** Join tables keyed by a composite primary key, so there is no `id` to return. */
-const TABLES_WITHOUT_ID = new Set(['thread_participants', 'client_sites', 'passdown_acks', 'post_order_acks', 'alert_reads']);
+const TABLES_WITHOUT_ID = new Set(['thread_participants', 'client_sites', 'passdown_acks', 'post_order_acks', 'alert_reads', 'client_digests']);
 
 /** SQLite gave us `lastInsertRowid` for free; Postgres needs RETURNING. */
 function withReturning(sql) {

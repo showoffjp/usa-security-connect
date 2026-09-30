@@ -189,4 +189,56 @@ log(Boolean(notMine) && (await call(`/timeclock/shift-summary?entryId=${notMine.
   "an officer cannot read another officer's shift");
 log((await call('/timeclock/shift-summary?entryId=abc', { token: marcus })).status === 422, 'a junk entry id is refused');
 
+/* ====================================================== client email alerts === */
+section('client email alerts');
+
+const prefsOf = async (token) => (await call('/client/notifications', { token })).data?.notifications;
+const setPrefs = (token, body) => call('/client/notifications', { token, method: 'PATCH', body });
+const defaults = await prefsOf(capital);
+log(defaults?.seriousIncidents === true && defaults?.dailyReport === false, 'serious incident alerts are on by default, the daily report off');
+log((await setPrefs(capital, {})).status === 422, 'changing nothing is refused');
+log((await setPrefs(capital, { everything: true })).status === 422, 'and so is a setting that does not exist');
+log([401, 403].includes((await call('/client/notifications', { token: marcus })).status), 'staff tokens cannot read client settings');
+const optedIn = await setPrefs(capital, { dailyReport: true });
+log(optedIn.status === 200 && optedIn.data.notifications.dailyReport === true, 'a contact opts in to the daily report');
+
+const outbox = async () => (await call('/admin/emails?limit=300', { token: admin })).data.emails || [];
+const alertsFor = async (ref) => (await outbox()).filter((e) => e.kind === 'incident_alert' && e.subject.includes(ref));
+const file = async (severity) => {
+  const form = new FormData();
+  form.append('siteId', String(capitalSite.id));
+  form.append('category', 'Disturbance');
+  form.append('severity', severity);
+  form.append('occurredAt', new Date().toISOString());
+  form.append('whatHappened', `Test ${severity} incident for the client alert checks.`);
+  const res = await fetch(`${BASE}/incidents`, { method: 'POST', headers: { authorization: `Bearer ${marcus}` }, body: form });
+  return res.json();
+};
+const serious = await file('critical');
+const sent = await alertsFor(serious.refNumber);
+log(sent.length === 1 && /dfaulkner@/.test(sent[0].to_email), 'a critical incident emails the property contact at once', sent[0]?.subject);
+const full = (await call(`/admin/emails/${sent[0].id}`, { token: admin })).data.email;
+log(full && !/Marcus|Bell|review/i.test(full.body) && full.body.includes(serious.refNumber), 'with the reference, and without the officer or any internal note');
+const minor = await file('low');
+log((await alertsFor(minor.refNumber)).length === 0, 'a low incident does not');
+await call(`/incidents/${minor.incident.id}/review`, { token: supervisor, method: 'PATCH', body: { status: 'under_review', severity: 'high' } });
+log((await alertsFor(minor.refNumber)).length === 1, 'raising it to high on review sends the alert then');
+await call(`/incidents/${minor.incident.id}/review`, { token: supervisor, method: 'PATCH', body: { status: 'closed', severity: 'critical' } });
+log((await alertsFor(minor.refNumber)).length === 1, 'and only once');
+await setPrefs(capital, { seriousIncidents: false });
+const quiet = await file('high');
+log((await alertsFor(quiet.refNumber)).length === 0, 'a contact who turned alerts off is not emailed');
+await setPrefs(capital, { seriousIncidents: true });
+
+const cronToken = process.env.CRON_SECRET || 'verify-only-cron-secret';
+const first = await call('/cron/sweep', { token: cronToken });
+const daily = (await outbox()).filter((e) => e.kind === 'daily_report' && /dfaulkner@/.test(e.to_email));
+log(first.status === 200 && daily.length === 1, 'the morning sweep sends the daily report to a contact who asked for it', daily[0]?.subject);
+const dailyBody = (await call(`/admin/emails/${daily[0].id}`, { token: admin })).data.email?.body || '';
+log(/On site/.test(dailyBody) && /Patrols/.test(dailyBody) && !/\$|pay rate|bill/i.test(dailyBody), 'with the day at their property and nothing about money');
+const secondSweep = await call('/cron/sweep', { token: cronToken });
+log(secondSweep.status === 200 && secondSweep.data.dailyReports === 0, 'a second sweep the same day sends nothing again');
+log(!(await outbox()).some((e) => e.kind === 'daily_report' && /rpike@/.test(e.to_email)), 'contacts who did not ask get no daily report');
+await setPrefs(capital, { dailyReport: false });
+
 finish('Contacts, feedback and exports');

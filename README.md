@@ -177,6 +177,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   sign someone in with the same watchlist check as the web (a match stops it; letting
   them in anyway needs a reason), and log patrols, alarms and observations, marked
   internal when the client should not see them.
+- **Licence reminders** — the home screen (web and mobile) warns when the officer's
+  licence or any certification lapses within 30 days, or already has, listing each
+  with its date.
 - **Before you go** — sliding to clock out (web and mobile) first shows what the shift
   did: time on post, check-ins answered and missed, patrols and checkpoints, visitors
   in and out, activity entries and incident reports. If the officer has not left a
@@ -247,6 +250,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 
 ### Admin console (web)
 
+- **Keyboard shortcuts** — **?** lists them; **g** then a letter jumps to a screen
+  (d dashboard, l live tracking, f flags, i incidents, p post logs, s schedule,
+  e employees, t timesheets, r reports, h site health, c client portal). Off while
+  typing in a field.
 - **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
   the search button in the header. Find an officer by name, code or phone, a site by
   name, city or client, an incident by its number, or any screen by name. Arrow keys
@@ -436,6 +443,13 @@ a PIN — and sees, for their own properties only:
   supervisor visits and lost property; building issues reported, fixed and still open;
   and their own rating. The current month runs to today. Laid out to print or save as a
   PDF.
+- **Email me** (account menu) — each contact chooses their emails. **Serious incident
+  alerts** (on by default): a high or critical incident at their property is emailed
+  once, when it is filed or when a supervisor raises it to serious on review, with the
+  reference, category, time and place but never the officer's name or an internal
+  note. **The daily report** (opt-in): each morning's sweep emails yesterday at each
+  of their properties (officers and hours, patrols and checkpoints, incidents,
+  visitors, activity, open building issues), once per contact, site and day.
 - **Extra coverage requests** — officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
@@ -654,7 +668,10 @@ the server is running corrupts the data directory.
   consistent, the month is validated, and it carries no pay, rate or staff detail.
   Site health is worst first, its numbers match each client's report, and only
   supervisors see it. The end-of-shift summary counts the officer's own shift only,
-  and knows when they have left a pass-down note.
+  and knows when they have left a pass-down note. Client email alerts go only to the
+  property's contacts who want them, once per incident (a later review does not
+  repeat it), without the officer's name; the daily report goes once a day however
+  often the sweep runs.
 - **`test/orders.mjs`** — post orders, the alerts inbox and QR tags. An officer can
   acknowledge only the version in force, for their own post; a new version, from the
   orders screen or the Sites screen, has to be read again, and the supervisor's list of
@@ -677,7 +694,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 85 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 87 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
