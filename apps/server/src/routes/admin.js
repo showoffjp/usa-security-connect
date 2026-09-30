@@ -26,6 +26,7 @@ import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
 import { assertHoursOpen } from '../services/payPeriods.js';
 import { currentOrders, reviseOrders } from '../services/postOrders.js';
+import { siteMonth, monthKey } from '../services/siteMonth.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 
@@ -2289,5 +2290,55 @@ adminRouter.post(
     }
     const alerts = await buildAlerts(req.user.id);
     res.json({ unread: alerts.filter((a) => !a.read).length });
+  })
+);
+
+/* ------------------------------------------------------- site health --- */
+
+/**
+ * Every site's month side by side, worst first, with the reasons spelled
+ * out: shifts that went uncovered, checkpoints not scanned, serious
+ * incidents, building issues left open and an unhappy client. The numbers
+ * are the same ones the client sees in their monthly report.
+ */
+adminRouter.get(
+  '/site-health',
+  wrap(async (req, res) => {
+    const month = req.query.month ? String(req.query.month) : monthKey();
+    const sites = await db.prepare(`SELECT id, client_name FROM sites WHERE active = true ORDER BY name`).all();
+    const rows = [];
+    for (const site of sites) {
+      const m = await siteMonth(site.id, month);
+      const serious = (m.incidents.bySeverity.high || 0) + (m.incidents.bySeverity.critical || 0);
+      const concerns = [];
+      if (m.coverage.pct !== null && m.coverage.pct < 95) concerns.push(`${m.coverage.scheduled - m.coverage.covered} shift${m.coverage.scheduled - m.coverage.covered === 1 ? '' : 's'} not covered`);
+      if (m.patrols.pct !== null && m.patrols.pct < 90) concerns.push(`only ${m.patrols.pct}% of checkpoints scanned`);
+      if (serious) concerns.push(`${serious} serious incident${serious === 1 ? '' : 's'}`);
+      if (m.issues.open) concerns.push(`${m.issues.open} building issue${m.issues.open === 1 ? '' : 's'} open`);
+      if (m.rating && m.rating.average <= 3) concerns.push(`client rated us ${m.rating.average} of 5`);
+      // Out of 100: coverage and patrols carry most of it, the rest comes off for what went wrong.
+      let score = 100;
+      if (m.coverage.pct !== null) score -= Math.min(40, (100 - m.coverage.pct) * 2);
+      if (m.patrols.pct !== null) score -= Math.min(25, (100 - m.patrols.pct));
+      score -= Math.min(15, serious * 5) + Math.min(10, m.issues.open * 2);
+      if (m.rating) score -= Math.min(10, Math.max(0, (4 - m.rating.average) * 5));
+      rows.push({
+        id: site.id, name: m.site.name, client_name: site.client_name, city: m.site.city,
+        score: Math.max(0, Math.round(score)),
+        coverage: m.coverage, patrols: m.patrols, incidents: { total: m.incidents.total, serious },
+        issuesOpen: m.issues.open, visitors: m.visitors, rating: m.rating, concerns,
+      });
+    }
+    rows.sort((a, b) => a.score - b.score || b.concerns.length - a.concerns.length || a.name.localeCompare(b.name));
+    res.json({ month, sites: rows, needAttention: rows.filter((r) => r.concerns.length).length });
+  })
+);
+
+/** One site's month in full, as the client sees it. */
+adminRouter.get(
+  '/sites/:id/monthly',
+  wrap(async (req, res) => {
+    const id = idParam(req.params.id, 'site');
+    res.json(await siteMonth(id, req.query.month ? String(req.query.month) : monthKey()));
   })
 );

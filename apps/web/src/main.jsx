@@ -36,3 +36,14 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Installable to a phone's home screen, with an offline page when the signal
+// drops. Production only: in development a service worker would get in the
+// way of hot reload.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* the app works the same without it */
+    });
+  });
+}

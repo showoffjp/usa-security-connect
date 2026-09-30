@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, sqlToIso, isoFields, limitParam } from '../lib/http.js';
+import { HttpError, wrap, parse, sqlToIso, isoFields, limitParam, idParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import {
   RULES,
@@ -638,6 +638,66 @@ timeclockRouter.get(
         ...isoFields(r, ENTRY_TIMES),
         checks: byEntry[r.id] || { missed: 0, answered: 0 },
       })),
+    });
+  })
+);
+
+/* --------------------------------------------------------- shift summary -- */
+
+/**
+ * What one shift did, for the officer: shown before they clock out (so far,
+ * with a nudge to leave a pass-down note) and after (the whole shift).
+ * Defaults to the shift they are on, or the last one they worked.
+ */
+timeclockRouter.get(
+  '/shift-summary',
+  wrap(async (req, res) => {
+    const entryId = idParam(req.query.entryId, 'entry');
+    const entry = entryId
+      ? await db.prepare(`SELECT * FROM time_entries WHERE id = ? AND user_id = ?`).get(entryId, req.user.id)
+      : await db
+          .prepare(`SELECT * FROM time_entries WHERE user_id = ? ORDER BY (clock_out_at IS NULL) DESC, clock_in_at DESC LIMIT 1`)
+          .get(req.user.id);
+    if (!entry) throw new HttpError(404, 'No shift to summarise yet.');
+    const post = await db
+      .prepare(`SELECT p.name AS post_name, s.name AS site_name, s.id AS site_id FROM posts p JOIN sites s ON s.id = p.site_id WHERE p.id = ?`)
+      .get(entry.post_id);
+    const from = entry.clock_in_at;
+    const to = entry.clock_out_at || toSql(new Date());
+    const n = async (sql, ...params) => Number((await db.prepare(sql).get(...params))?.n || 0);
+    const uid = req.user.id;
+
+    const checks = await db
+      .prepare(
+        `SELECT SUM(CASE WHEN status IN ('ok','late') THEN 1 ELSE 0 END) AS answered,
+                SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS missed
+         FROM status_checks WHERE time_entry_id = ?`
+      )
+      .get(entry.id);
+    const tours = await db
+      .prepare(
+        `SELECT COUNT(DISTINCT tr.id) AS runs,
+                COUNT(DISTINCT CASE WHEN tr.status = 'completed' THEN tr.id END) AS completed,
+                SUM(CASE WHEN trc.status = 'done' THEN 1 ELSE 0 END) AS scanned
+         FROM tour_runs tr LEFT JOIN tour_run_checkpoints trc ON trc.tour_run_id = tr.id
+         WHERE tr.user_id = ? AND tr.started_at >= ? AND tr.started_at <= ?`
+      )
+      .get(uid, from, to);
+    const minutes = Math.max(0, Math.round((new Date(sqlToIso(to)) - new Date(sqlToIso(from))) / 60000));
+
+    res.json({
+      entry: {
+        id: entry.id, post_name: post?.post_name, site_name: post?.site_name, open: !entry.clock_out_at, minutes,
+        ...isoFields({ clock_in_at: entry.clock_in_at, clock_out_at: entry.clock_out_at }, ['clock_in_at', 'clock_out_at']),
+      },
+      visitorsIn: await n(`SELECT COUNT(*) AS n FROM visitor_log WHERE logged_by = ? AND arrived_at >= ? AND arrived_at <= ?`, uid, from, to),
+      visitorsOut: await n(`SELECT COUNT(*) AS n FROM visitor_log WHERE departed_by = ? AND departed_at >= ? AND departed_at <= ?`, uid, from, to),
+      activity: await n(`SELECT COUNT(*) AS n FROM activity_entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?`, uid, from, to),
+      violations: await n(`SELECT COUNT(*) AS n FROM vehicle_violations WHERE logged_by = ? AND occurred_at >= ? AND occurred_at <= ?`, uid, from, to),
+      incidents: await n(`SELECT COUNT(*) AS n FROM incidents WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?`, uid, from, to),
+      tours: { runs: Number(tours.runs || 0), completed: Number(tours.completed || 0), checkpoints: Number(tours.scanned || 0) },
+      checkIns: { answered: Number(checks.answered || 0), missed: Number(checks.missed || 0) },
+      passdownWritten: await n(`SELECT COUNT(*) AS n FROM passdown_notes WHERE author_id = ? AND time_entry_id = ?`, uid, entry.id),
     });
   })
 );
