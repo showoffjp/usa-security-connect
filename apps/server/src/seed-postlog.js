@@ -485,5 +485,10 @@ export async function seedPostLog({ db }) {
     orderRequests++;
   }
 
+  // The incidents seeded above are history: their clients were told at the time.
+  await db.prepare(`UPDATE incidents SET client_notified_at = occurred_at WHERE severity IN ('high', 'critical')`).run();
+  // One contact takes the daily report email, so the morning sweep has someone to send it to.
+  await db.prepare(`UPDATE client_users SET notify_daily_report = true WHERE email = ?`).run('dana.whitfield@riverfrontholdings.com');
+
   return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests };
 }

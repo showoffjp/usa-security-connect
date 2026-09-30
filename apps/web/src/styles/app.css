@@ -958,3 +958,20 @@ body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
 /* ---------------------------------------------------------- site health -- */
 .concern-list { margin: 0; padding-left: 16px; }
 .concern-list li { margin: 1px 0; }
+
+/* ------------------------------------------------------ email settings -- */
+.email-settings { border: 0; margin: 0; padding: 0; min-width: 0; }
+.email-settings legend { padding: 0; margin-bottom: 6px; }
+
+/* ---------------------------------------------------- keyboard shortcuts -- */
+.shortcuts { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.shortcuts td { padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.shortcuts td:first-child { white-space: nowrap; width: 1%; padding-right: 18px; color: var(--muted); }
+kbd {
+  display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 5px; text-align: center;
+  font: 600 0.78rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--surface-3); color: var(--ink); border: 1px solid var(--line-2); box-shadow: 0 1px 0 var(--line-2);
+}
+
+.expiry-list { margin: 4px 0 6px; padding-left: 18px; }
+.email-settings legend { text-transform: none; letter-spacing: normal; color: var(--ink); font-size: 0.85rem; font-weight: 700; }

@@ -8,8 +8,55 @@ import {
   Icon, Banner, Chip, StatusChip, Modal, Field, SlideToAction,
   LoadingPage, useToast, Empty,
 } from '../../components/ui.jsx';
-import { formatDuration, toHours } from '@shared/domain.js';
+import { formatDuration, toHours, expiryState } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
+
+/* ------------------------------------------------------ expiry reminder -- */
+
+/**
+ * A licence or certification that lapses within 30 days, or has lapsed. An
+ * armed post cannot be worked on a lapsed licence, so it is better the
+ * officer hears it here than at the gate.
+ */
+function ExpiryReminder({ user }) {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    const soon = (days) => days !== null && days <= 30;
+    const list = [];
+    if (user?.license_expires_on) {
+      const days = expiryState(user.license_expires_on).days;
+      if (soon(days)) list.push({ key: 'licence', name: `${user.license_type || 'Security'} licence`, days, on: user.license_expires_on });
+    }
+    api.get('/certifications').then(
+      (d) => {
+        for (const c of d.certifications || []) {
+          if (soon(c.expiry?.days)) list.push({ key: `cert-${c.id}`, name: c.type, days: c.expiry.days, on: c.expires_on });
+        }
+        if (alive) setItems([...list].sort((a, b) => a.days - b.days));
+      },
+      () => alive && setItems(list)
+    );
+    return () => {
+      alive = false;
+    };
+  }, [user?.license_expires_on, user?.license_type]);
+  if (!items.length) return null;
+  const lapsed = items.some((i) => i.days < 0);
+  return (
+    <Banner kind={lapsed ? 'danger' : 'warn'} title={lapsed ? 'A licence or certificate has lapsed' : 'Renewal due soon'}>
+      <ul className="expiry-list">
+        {items.map((i) => (
+          <li key={i.key}>
+            <strong>{i.name}</strong>{' '}
+            {i.days < 0 ? `lapsed ${fmtDay(i.on)}` : i.days === 0 ? 'expires today' : `expires in ${i.days} day${i.days === 1 ? '' : 's'} (${fmtDay(i.on)})`}
+          </li>
+        ))}
+      </ul>
+      <Link to="/profile">Your record</Link> · speak to the office about renewal.
+    </Banner>
+  );
+}
 
 /* ------------------------------------------------------ end of shift -- */
 
@@ -472,6 +519,7 @@ export default function HomePage() {
 
       {/* Changed orders come before anything else on post. */}
       <PostOrdersCard onDuty={onDuty} />
+      <ExpiryReminder user={user} />
 
       {/* -------------------------------------------------- post card -- */}
       <div className="card">

@@ -9,7 +9,8 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
-import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../components/ui.jsx';
+import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield, useToast } from '../../components/ui.jsx';
+import { clientApi } from '../../lib/api.js';
 import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
 import PortalRequests from './PortalRequests.jsx';
@@ -121,6 +122,51 @@ function PasswordDialog({ onClose }) {
   );
 }
 
+/** Which emails this contact gets. Each switch saves as it changes. */
+function EmailSettings() {
+  const toast = useToast();
+  const [prefs, setPrefs] = useState(null);
+  useEffect(() => {
+    clientApi.get('/client/notifications').then((d) => setPrefs(d.notifications), () => setPrefs(false));
+  }, []);
+  const change = async (key, value) => {
+    setPrefs((p) => ({ ...p, [key]: value }));
+    try {
+      setPrefs((await clientApi.patch('/client/notifications', { [key]: value })).notifications);
+      toast.success(value ? 'You will get this email.' : 'That email is off.');
+    } catch (err) {
+      setPrefs((p) => ({ ...p, [key]: !value }));
+      toast.error(err.message);
+    }
+  };
+  if (prefs === false) return null;
+  return (
+    <fieldset className="stack-sm email-settings">
+      <legend className="small strong">Email me</legend>
+      {!prefs ? (
+        <div className="tiny muted">Loading...</div>
+      ) : (
+        <>
+          <label className="check">
+            <input type="checkbox" checked={prefs.seriousIncidents} onChange={(e) => change('seriousIncidents', e.target.checked)} />
+            <span>
+              When a serious incident is reported
+              <span className="tiny muted" style={{ display: 'block' }}>High or critical, as soon as our officer files it.</span>
+            </span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={prefs.dailyReport} onChange={(e) => change('dailyReport', e.target.checked)} />
+            <span>
+              The daily report, each morning
+              <span className="tiny muted" style={{ display: 'block' }}>Yesterday at each of your properties, in one short email.</span>
+            </span>
+          </label>
+        </>
+      )}
+    </fieldset>
+  );
+}
+
 function AccountMenu({ onClose }) {
   const { client, sites, signOut } = useClientAuth();
   const [password, setPassword] = useState(false);
@@ -153,6 +199,8 @@ function AccountMenu({ onClose }) {
             ))}
           </ul>
         </div>
+
+        <EmailSettings />
 
         <ThemeChoice />
 

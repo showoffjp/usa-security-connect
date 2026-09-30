@@ -214,6 +214,11 @@ await page.click('.bell-btn');
 await page.waitForSelector('.alerts-list');
 await audit(page, 'Alerts inbox', null);
 await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+await page.keyboard.press('?');
+await page.waitForSelector('text=Keyboard shortcuts');
+await audit(page, 'Keyboard shortcuts', null);
+await page.keyboard.press('Escape');
 
 // An officer on post, for the post log with visitors and notes in it.
 await page.evaluate(() => localStorage.removeItem('usc.token'));
@@ -252,6 +257,11 @@ await page.click('button[type="submit"]');
 await page.waitForTimeout(1200);
 
 for (const [label, path] of PORTAL_PAGES) await audit(page, label, path);
+await page.goto(`${WEB}/portal`, { waitUntil: 'networkidle' });
+await page.click('button[aria-label="Account menu"]');
+await page.waitForSelector('text=Email me');
+await audit(page, 'Portal account menu, with email settings', null);
+await page.keyboard.press('Escape');
 
 // --- night mode ------------------------------------------------------------
 // The dark palette is ours, not the client's brand, so here colour contrast

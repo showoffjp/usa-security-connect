@@ -139,7 +139,7 @@ export default function QuickSearch({ pages, onClose }) {
           ))}
         </ul>
         <div className="tiny muted" aria-live="polite" style={{ marginTop: 8 }}>
-          {searching ? 'Searching...' : results.length === 0 ? 'Nothing matches that.' : 'Up and down to move, Enter to open, Esc to close.'}
+          {searching ? 'Searching...' : results.length === 0 ? 'Nothing matches that.' : 'Up and down to move, Enter to open, Esc to close. Press ? on any screen for every shortcut.'}
         </div>
       </div>
     </Modal>

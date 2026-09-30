@@ -904,6 +904,23 @@ CREATE INDEX IF NOT EXISTS idx_violations_site ON vehicle_violations(site_id, oc
 -- so the log shows it and the supervisor can follow it up.
 ALTER TABLE visitor_log ADD COLUMN IF NOT EXISTS watchlist_id integer REFERENCES watchlist(id) ON DELETE SET NULL;
 
+-- What each client contact wants by email. Serious incident alerts are on
+-- unless they turn them off; the daily report is opt-in.
+ALTER TABLE client_users ADD COLUMN IF NOT EXISTS notify_serious_incidents boolean NOT NULL DEFAULT true;
+ALTER TABLE client_users ADD COLUMN IF NOT EXISTS notify_daily_report boolean NOT NULL DEFAULT false;
+-- Set when the client has been told about a serious incident, so a later
+-- review that keeps it serious does not tell them twice.
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS client_notified_at timestamptz;
+
+-- One daily report email per contact, site and day, however often the sweep runs.
+CREATE TABLE IF NOT EXISTS client_digests (
+  client_user_id integer NOT NULL REFERENCES client_users(id) ON DELETE CASCADE,
+  site_id        integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  day            date NOT NULL,
+  sent_at        timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (client_user_id, site_id, day)
+);
+
 -- The officer's running log through the shift: rounds walked, doors found
 -- open, alarms answered. The backbone of a daily activity report, and read by
 -- the client unless the officer marks an entry internal.
