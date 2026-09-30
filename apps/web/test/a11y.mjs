@@ -73,6 +73,9 @@ const STAFF_PAGES = [
   ['Reports', '/admin/reports'],
   ['Report: payroll register', '/admin/reports?report=payroll'],
   ['Report: daily hours', '/admin/reports?report=daily'],
+  ['Incident follow-ups', '/admin/incidents?tab=follow-ups'],
+  ['Report: incidents by site', '/admin/reports?report=incidents-by-site'],
+  ['Report: incidents by day', '/admin/reports?report=incidents-daily'],
 ];
 
 const PORTAL_PAGES = [

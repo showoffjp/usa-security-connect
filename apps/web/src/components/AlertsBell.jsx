@@ -6,7 +6,7 @@ import { Chip, Empty, Icon, LoadingPage, Modal, Segmented, useToast } from './ui
 
 const SEVERITY = { critical: ['danger', 'Critical'], warning: ['warn', 'Warning'], info: ['', 'Info'] };
 const KIND_ICON = {
-  duress: 'shield', flag: 'flag', watchlist: 'eye', issue: 'building', feedback: 'message', coverage: 'plus', licence: 'book', tour: 'route', orders: 'clipboard',
+  duress: 'shield', flag: 'flag', watchlist: 'eye', issue: 'building', feedback: 'message', coverage: 'plus', licence: 'book', tour: 'route', orders: 'clipboard', followup: 'check',
 };
 
 /**

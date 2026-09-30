@@ -332,12 +332,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
   1099 separately.
-- **Reports** — eight reports over any period, site, officer or classification, each
+- **Reports** — eleven reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
   1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
-  where officers worked, daily hours, attendance &amp; punctuality, and GPS &amp; geofence
-  compliance.
+  where officers worked, daily hours, attendance &amp; punctuality, GPS &amp; geofence
+  compliance, and three on incidents: **by site** (how serious, police called, still
+  open), **by type** (with the serious share and the average hours to close) and **by
+  day** (to spot a bad week, with the busiest day and worst weekday).
 - **Safety &amp; live map** — open duress alerts with one-tap call and directions, plus a
   map of every post, its geofence, and where each officer actually clocked in.
   Refreshes every 15 seconds.
@@ -394,6 +396,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Flags** — the compliance queue: late clock-in, missed check-in, geofence violation,
   missed clock-out, early departure, no-show. Closing one requires a written outcome.
 - **Incidents** — review queue with severity adjustment and notes back to the officer.
+  **Follow-ups** turn a serious incident into the things that have to happen next
+  ("get the fence panel repaired", "pull the camera footage for the police"): each has
+  an owner (a supervisor or administrator), a due date, and is marked done only with a
+  note of what was done. The Follow-ups tab lists them across every incident (open,
+  overdue, mine, all), an overdue one lands in the alerts inbox, and each is either
+  shared with the client or kept internal.
 - **Sites & posts** — set each post's location **on a map** (search an address, drop or
   drag the pin, or use your current position), with the geofence drawn to scale.
   Check-in cadence, post orders and the armed flag live here too.
@@ -416,7 +424,9 @@ a PIN — and sees, for their own properties only:
 - **Patrol proof** — each round walked, with every checkpoint scanned, skipped or
   missed, and the time it was reached.
 - **Incidents** — the full report, including photographs, which are served through the
-  API rather than handed out as storage URLs.
+  API rather than handed out as storage URLs, and **what we are doing about it**: the
+  follow-ups shared with the client, each shown in hand with its due date or done. Who
+  owns them and the internal note on how each was closed stay with us.
 - **Daily activity report** — the same document the account manager reviews, laid out to
   print straight to PDF, including who came through the building: every visitor,
   contractor and delivery the officers signed in, when they arrived and left, and their
@@ -680,7 +690,12 @@ the server is running corrupts the data directory.
   its QR code or its own printed code, and refuses another checkpoint's. Clients read
   only their own posts' orders, without the author; a request is scoped to their own
   post, capped at three waiting, applied only to its own post and answered once, and
-  both answers reach the client in the portal and by email.
+  both answers reach the client in the portal and by email. Incident follow-ups are
+  supervisors' only, owned by a supervisor or administrator, closed only with a note,
+  reopened cleanly, counted and filtered correctly, raised in the alerts inbox when
+  overdue and dropped once done; the client sees only the shared ones, without owner or
+  note, and the officer who filed the incident does not see them. The incident reports
+  agree with each other, refuse a range over a year, and export as CSV with a total.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -694,7 +709,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 87 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 90 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

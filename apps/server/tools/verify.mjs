@@ -171,7 +171,7 @@ const sitelog = await run('test/sitelog.mjs');
 console.log('\n20/22  Site contacts, client feedback and CSV exports suite\n');
 const contactsSuite = await run('test/contacts.mjs');
 
-console.log('\n21/22  Post orders, alerts inbox and QR checkpoint tags suite\n');
+console.log('\n21/22  Post orders, alerts inbox, QR tags and incident follow-ups suite\n');
 const ordersSuite = await run('test/orders.mjs');
 
 // Last on purpose: it sends malformed writes to every endpoint, some of which

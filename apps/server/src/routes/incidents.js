@@ -186,6 +186,129 @@ incidentsRouter.get(
   })
 );
 
+/* ------------------------------------------------------- follow-ups --- */
+
+const actionSelect = `
+  SELECT a.*, o.first_name || ' ' || o.last_name AS owner_name,
+         d.first_name || ' ' || d.last_name AS done_by_name,
+         i.ref_number, i.category, i.severity, s.name AS site_name
+  FROM incident_actions a
+  JOIN incidents i ON i.id = a.incident_id
+  LEFT JOIN sites s ON s.id = i.site_id
+  LEFT JOIN users o ON o.id = a.owner_id
+  LEFT JOIN users d ON d.id = a.done_by`;
+const today = () => new Date().toISOString().slice(0, 10);
+export const presentAction = (a) => {
+  const due = a.due_on ? String(a.due_on).slice(0, 10) : null;
+  return {
+    ...isoFields(a, ['done_at', 'created_at']),
+    due_on: due,
+    overdue: a.status === 'open' && Boolean(due) && due < today(),
+  };
+};
+
+async function actionsFor(incidentId) {
+  return (await db.prepare(`${actionSelect} WHERE a.incident_id = ? ORDER BY a.status = 'done', a.due_on NULLS LAST, a.id`).all(incidentId)).map(presentAction);
+}
+
+/**
+ * Every follow-up across incidents: the open ones first, soonest due first.
+ * ?show=mine for the caller's own, ?show=overdue, or ?show=all (with done).
+ */
+incidentsRouter.get(
+  '/follow-ups',
+  requireRole(ROLES.SUPERVISOR),
+  wrap(async (req, res) => {
+    const show = ['mine', 'overdue', 'all', 'open'].includes(req.query.show) ? req.query.show : 'open';
+    const where = [];
+    const params = [];
+    if (show !== 'all') where.push(`a.status = 'open'`);
+    if (show === 'mine') {
+      where.push('a.owner_id = ?');
+      params.push(req.user.id);
+    }
+    if (show === 'overdue') {
+      where.push('a.due_on < ?');
+      params.push(today());
+    }
+    const rows = await db
+      .prepare(`${actionSelect} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY a.status = 'done', a.due_on NULLS LAST, a.id LIMIT 300`)
+      .all(...params);
+    const counts = await db
+      .prepare(
+        `SELECT SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open,
+                SUM(CASE WHEN status = 'open' AND due_on < ? THEN 1 ELSE 0 END) AS overdue,
+                SUM(CASE WHEN status = 'open' AND owner_id = ? THEN 1 ELSE 0 END) AS mine
+         FROM incident_actions`
+      )
+      .get(today(), req.user.id);
+    res.json({
+      actions: rows.map(presentAction),
+      counts: { open: Number(counts.open || 0), overdue: Number(counts.overdue || 0), mine: Number(counts.mine || 0) },
+    });
+  })
+);
+
+const actionSchema = z.object({
+  title: z.string().trim().min(5, 'Say what needs doing.').max(300),
+  ownerId: z.number().int().positive().optional().nullable(),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a due date.').optional().nullable(),
+  clientVisible: z.boolean().default(true),
+});
+
+/** Add a follow-up to an incident. The owner has to be a supervisor or administrator. */
+incidentsRouter.post(
+  '/:id/actions',
+  requireRole(ROLES.SUPERVISOR),
+  wrap(async (req, res) => {
+    const incident = await db.prepare(`SELECT id FROM incidents WHERE id = ?`).get(idParam(req.params.id, 'incident'));
+    if (!incident) throw new HttpError(404, 'Incident not found.');
+    const body = parse(actionSchema, req.body);
+    if (body.ownerId) {
+      const owner = await db.prepare(`SELECT role, status FROM users WHERE id = ?`).get(body.ownerId);
+      if (!owner || owner.status !== 'active' || !atLeast(owner.role, ROLES.SUPERVISOR)) {
+        throw new HttpError(422, 'A follow-up is owned by a supervisor or administrator.', [
+          { field: 'ownerId', message: 'Pick a supervisor or administrator.' },
+        ]);
+      }
+    }
+    const info = await db
+      .prepare(`INSERT INTO incident_actions (incident_id, title, owner_id, due_on, client_visible, created_by) VALUES (?,?,?,?,?,?)`)
+      .run(incident.id, body.title, body.ownerId ?? null, body.dueOn ?? null, body.clientVisible, req.user.id);
+    await audit(req.user.id, 'incident_action.created', 'incident_action', info.lastInsertRowid, { incidentId: incident.id }, req.ip);
+    res.status(201).json({ actions: await actionsFor(incident.id) });
+  })
+);
+
+/** Mark a follow-up done (with what was done) or reopen it. */
+incidentsRouter.patch(
+  '/actions/:actionId',
+  requireRole(ROLES.SUPERVISOR),
+  wrap(async (req, res) => {
+    const action = await db.prepare(`SELECT * FROM incident_actions WHERE id = ?`).get(idParam(req.params.actionId, 'follow-up'));
+    if (!action) throw new HttpError(404, 'Follow-up not found.');
+    const body = parse(
+      z.object({
+        status: z.enum(['open', 'done']),
+        note: z.string().trim().max(1000).optional().nullable(),
+      }),
+      req.body
+    );
+    if (body.status === 'done') {
+      if (!body.note || body.note.length < 3) {
+        throw new HttpError(422, 'Say what was done.', [{ field: 'note', message: 'Say what was done.' }]);
+      }
+      await db
+        .prepare(`UPDATE incident_actions SET status = 'done', done_note = ?, done_at = now(), done_by = ? WHERE id = ?`)
+        .run(body.note, req.user.id, action.id);
+    } else {
+      await db.prepare(`UPDATE incident_actions SET status = 'open', done_note = NULL, done_at = NULL, done_by = NULL WHERE id = ?`).run(action.id);
+    }
+    await audit(req.user.id, `incident_action.${body.status === 'done' ? 'done' : 'reopened'}`, 'incident_action', action.id, null, req.ip);
+    res.json({ actions: await actionsFor(action.incident_id) });
+  })
+);
+
 incidentsRouter.get(
   '/:id',
   wrap(async (req, res) => {
@@ -212,7 +335,9 @@ incidentsRouter.get(
       .prepare(`SELECT id, filename, original_name, caption FROM incident_photos WHERE incident_id = ?`)
       .all(row.id));
 
-    res.json({ incident: isoFields(row, TIMES), photos });
+    // Follow-ups carry internal notes, so the officer who filed it does not get them.
+    const actions = atLeast(req.user.role, ROLES.SUPERVISOR) ? await actionsFor(row.id) : [];
+    res.json({ incident: isoFields(row, TIMES), photos, actions });
   })
 );
 

@@ -531,7 +531,17 @@ clientRouter.get(
       .prepare(`SELECT id, filename, original_name, caption FROM incident_photos WHERE incident_id = ?`)
       .all(row.id);
 
-    res.json({ incident: isoFields(row, ['occurred_at', 'created_at']), photos });
+    // What we are doing about it: the follow-ups marked for the client, without
+    // who owns them or the internal note on how each was closed.
+    const actions = (
+      await db
+        .prepare(
+          `SELECT id, title, status, due_on, done_at FROM incident_actions
+           WHERE incident_id = ? AND client_visible = true ORDER BY status = 'done', due_on NULLS LAST, id`
+        )
+        .all(row.id)
+    ).map((a) => ({ ...isoFields(a, ['done_at']), due_on: a.due_on ? String(a.due_on).slice(0, 10) : null }));
+    res.json({ incident: isoFields(row, ['occurred_at', 'created_at']), photos, actions });
   })
 );
 
