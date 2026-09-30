@@ -186,7 +186,7 @@ export default function ReportsPage() {
         <div className="page-head" style={{ marginBottom: 0 }}>
           <div className="eyebrow">Reporting</div>
           <h1>Reports</h1>
-          <p className="lead">Hours, pay, billing, attendance and GPS compliance - for any period, site, officer or classification.</p>
+          <p className="lead">Hours, pay, billing, attendance, GPS compliance and incidents - for any period, site, officer or classification.</p>
         </div>
         <div className="row wrap no-print">
           <button className="btn btn-ghost" onClick={() => window.print()} disabled={!report}>
