@@ -7,7 +7,7 @@ import { CsvButton } from './SiteLogAdmin.jsx';
 const band = (score) => (score === null ? '' : score >= 90 ? 'ok' : score >= 75 ? 'warn' : 'danger');
 const pctText = (v) => (v === null || v === undefined ? '--' : `${Math.round(v)}%`);
 
-function ScoreBar({ score }) {
+export function ScoreBar({ score }) {
   if (score === null) return <span className="tiny muted">Not enough to judge</span>;
   const color = score >= 90 ? 'var(--ok)' : score >= 75 ? 'var(--warn)' : 'var(--danger)';
   return (

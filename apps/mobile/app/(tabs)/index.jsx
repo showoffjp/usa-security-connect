@@ -12,6 +12,7 @@ import {
 import { PanicButton, BreakControl } from '../../src/SafetyBar.jsx';
 import { LocationCard } from '../../src/LocationCard.jsx';
 import { PostLogCards, SiteContactsCard, usePostLog } from '../../src/PostLogCards.jsx';
+import { ShiftWrapUp } from '../../src/ShiftWrapUp.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -130,12 +131,14 @@ export default function HomeScreen() {
     }
   };
 
+  const [wrapUp, setWrapUp] = useState(false);
   const clockOut = async () => {
     setBusy(true);
     try {
       const current = await getPosition({ timeout: 9000 });
       const res = await api.post('/timeclock/clock-out', geoBody(current));
       notify(`Clocked out. ${formatDuration(res.minutesWorked)} on post.`, 'ok');
+      setWrapUp(false);
       await load();
     } catch (err) {
       notify(err.message, 'err');
@@ -258,7 +261,7 @@ export default function HomeScreen() {
                 label={onDuty ? 'Slide to clock out' : 'Slide to clock in'}
                 variant={onDuty ? 'out' : 'in'}
                 busy={busy}
-                onConfirm={onDuty ? clockOut : () => clockIn()}
+                onConfirm={onDuty ? () => setWrapUp(true) : () => clockIn()}
               />
             )}
           </View>
@@ -359,6 +362,7 @@ export default function HomeScreen() {
         </Field>
       </Sheet>
 
+      <ShiftWrapUp visible={wrapUp} busy={busy} notify={notify} onClose={() => setWrapUp(false)} onClockOut={clockOut} />
       <Toast toast={toast} />
     </View>
   );

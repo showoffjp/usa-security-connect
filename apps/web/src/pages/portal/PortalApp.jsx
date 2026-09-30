@@ -6,7 +6,7 @@
  * which a contact's session can pick up staff state.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
 import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../components/ui.jsx';
@@ -289,7 +289,19 @@ function PortalRoutes() {
   );
 }
 
+/** Installed from the portal, the app opens on the portal, not the staff sign-in. */
+function usePortalManifest() {
+  useEffect(() => {
+    const link = document.querySelector('link[rel="manifest"]');
+    if (!link) return undefined;
+    const before = link.getAttribute('href');
+    link.setAttribute('href', '/portal.webmanifest');
+    return () => link.setAttribute('href', before);
+  }, []);
+}
+
 export default function PortalApp() {
+  usePortalManifest();
   return (
     <ClientAuthProvider>
       <PortalRoutes />

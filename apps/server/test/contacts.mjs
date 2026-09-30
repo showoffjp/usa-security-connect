@@ -150,4 +150,43 @@ log((await monthly(capital, `?month=${now.getFullYear() + 1}-01`)).status === 42
 log((await monthly(capital, '?month=2019-01')).status === 422, 'reports go back two years');
 log([401, 403].includes((await call('/client/monthly', { token: marcus })).status), 'staff tokens do not open the client report');
 
+/* ============================================================ site health === */
+section('site health');
+
+const health = await call('/admin/site-health', { token: supervisor });
+const hs = health.data.sites || [];
+log(health.status === 200 && hs.length >= 5, 'supervisors see every active site scored', `${hs.length} sites`);
+log(hs.every((x, i) => i === 0 || hs[i - 1].score <= x.score), 'worst first');
+log(hs.every((x) => x.score >= 0 && x.score <= 100 && Array.isArray(x.concerns)), 'scores are out of 100, each with its reasons');
+log(health.data.needAttention === hs.filter((x) => x.concerns.length).length, 'the attention count matches the sites with concerns');
+const capitalRow = hs.find((x) => x.id === capitalSite.id);
+log(capitalRow && capitalRow.coverage.pct === r.coverage.pct && capitalRow.patrols.pct === r.patrols.pct && capitalRow.incidents.total === r.incidents.total,
+  "a site's numbers are the ones its client reads");
+const staffMonth = await call(`/admin/sites/${capitalSite.id}/monthly`, { token: supervisor });
+log(staffMonth.status === 200 && JSON.stringify(staffMonth.data.coverage) === JSON.stringify(r.coverage), 'and the full month opens from the board');
+log((await call('/admin/site-health', { token: marcus })).status === 403, 'officers do not see the board');
+log((await call('/admin/site-health?month=junk', { token: supervisor })).status === 422, 'a junk month is refused');
+log((await call('/admin/sites/999999/monthly', { token: supervisor })).status === 404, 'a missing site is a 404');
+log((await call('/admin/sites/abc/monthly', { token: supervisor })).status === 422, 'and a junk id a 422');
+
+/* ========================================================== shift summary === */
+section('end-of-shift summary');
+
+const sum = await call('/timeclock/shift-summary', { token: marcus });
+const sd = sum.data;
+log(sum.status === 200 && sd.entry?.open === true && sd.entry.minutes > 0, 'an officer on post sees their shift so far', `${sd.entry?.minutes} min`);
+log(['visitorsIn', 'visitorsOut', 'activity', 'violations', 'incidents'].every((k) => Number.isInteger(sd[k]) && sd[k] >= 0)
+  && sd.tours.runs >= sd.tours.completed && sd.checkIns.answered >= 0, 'with counts that make sense');
+log(sd.activity >= 1, 'including the activity they logged this shift', `${sd.activity}`);
+const writtenBefore = sd.passdownWritten;
+await call('/post-log/passdown', { token: marcus, method: 'POST', body: { body: 'Loading dock door still sticks - lift and push.', priority: 'normal' } });
+const after2 = await call('/timeclock/shift-summary', { token: marcus });
+log(after2.data.passdownWritten === writtenBefore + 1, 'and whether they have left a pass-down note');
+const marcusEntries = new Set(((await call('/timeclock/entries?limit=200', { token: marcus })).data.entries || []).map((e) => e.id));
+const everyone = (await call('/admin/time-entries', { token: supervisor })).data.entries || [];
+const notMine = everyone.find((e) => !marcusEntries.has(e.id));
+log(Boolean(notMine) && (await call(`/timeclock/shift-summary?entryId=${notMine.id}`, { token: marcus })).status === 404,
+  "an officer cannot read another officer's shift");
+log((await call('/timeclock/shift-summary?entryId=abc', { token: marcus })).status === 422, 'a junk entry id is refused');
+
 finish('Contacts, feedback and exports');

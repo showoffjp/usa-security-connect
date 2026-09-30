@@ -1,0 +1,17 @@
+{
+  "name": "USA Security Client Portal",
+  "short_name": "USC Portal",
+  "description": "Coverage, patrols, incidents, reports and invoices for USA Security & Protection Group clients.",
+  "id": "/portal",
+  "start_url": "/portal",
+  "scope": "/portal",
+  "display": "standalone",
+  "background_color": "#001F3F",
+  "theme_color": "#001F3F",
+  "categories": ["business"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

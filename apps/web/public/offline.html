@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#001F3F" />
+    <title>Offline - USA Security Connect</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #001f3f; color: #fff;
+      }
+      main { max-width: 380px; text-align: center; }
+      img { width: 72px; height: 72px; }
+      h1 { font-size: 1.35rem; margin: 16px 0 8px; }
+      p { color: #cbd6e2; line-height: 1.5; margin: 0 0 12px; }
+      .call { display: block; margin-top: 18px; padding: 12px; border-radius: 10px; background: #aa2f19; color: #fff; font-weight: 700; text-decoration: none; }
+      button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #4a6078; background: transparent; color: #fff; font: inherit; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icon-192.png" alt="" />
+      <h1>No connection</h1>
+      <p>USA Security Connect needs a signal to clock you in, check in or file a report. Nothing you did before you lost it has been lost.</p>
+      <p>If you are in danger, call 911. For dispatch, call your supervisor.</p>
+      <a class="call" href="tel:911">Call 911</a>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

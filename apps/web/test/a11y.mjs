@@ -65,6 +65,8 @@ const STAFF_PAGES = [
   ['Checkpoint QR tags', '/admin/tours/1/tags'],
   ['Client feedback', '/admin/feedback'],
   ['Officer scorecards', '/admin/scorecards'],
+  ['Site health', '/admin/site-health'],
+  ['Site health: one site', '/admin/site-health/1'],
   // The seed opens two weekly periods: 1 is closed, 2 has ended and is half approved.
   ['Pay period, closed', '/admin/payroll/1'],
   ['Pay period, to approve', '/admin/payroll/2'],

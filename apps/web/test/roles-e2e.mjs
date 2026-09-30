@@ -586,6 +586,29 @@ for (const u of STAFF) {
   log(/\d/.test(await client.page.locator('.stat').first().innerText()), 'the client opens the monthly service report');
   await checkScreen('client: monthly report', client.page, client.problems);
 
+  // Clocking out opens "Before you go": the shift so far and a nudge to
+  // leave a pass-down note. Staying on post closes it without clocking out.
+  await officer.page.goto(WEB + '/');
+  await settle(officer.page);
+  await officer.page.locator('[role="button"][aria-label="Slide to clock out"]').press('Enter');
+  await officer.page.waitForSelector('[role="dialog"]:has-text("Before you go")', { timeout: 10000 });
+  await officer.page.waitForSelector('[role="dialog"] dl.kv', { timeout: 10000 });
+  log(await officer.page.locator('[role="dialog"] dt:has-text("Visitors")').count() === 1, 'clocking out shows the officer what their shift did');
+  log(await officer.page.locator('[role="dialog"] textarea').count() === 1, 'and suggests a pass-down note for the next shift');
+  await checkScreen('officer: before you go', officer.page, officer.problems);
+  await officer.page.click('[role="dialog"] button:has-text("Stay on post")');
+  await officer.page.waitForTimeout(500);
+  log(await officer.page.locator('[aria-label="Slide to clock out"]').count() === 1, 'staying on post leaves them clocked in');
+
+  // Site health: every property's month, worst first.
+  await staff.page.goto(WEB + '/admin/site-health');
+  await settle(staff.page);
+  log(await staff.page.locator('table.data tbody tr').count() >= 5, 'a supervisor sees every site on the health board');
+  await checkScreen('supervisor: site health', staff.page, staff.problems);
+  await staff.page.locator('table.data tbody tr a').first().click();
+  await staff.page.waitForSelector('text=Coverage by post', { timeout: 10000 });
+  await checkScreen("supervisor: a site's month", staff.page, staff.problems);
+
   // Night mode: chosen in the account menu, remembered on the device.
   await staff.page.click('button[aria-label="Account menu"]');
   await staff.page.click('[role="radio"]:has-text("Night")');

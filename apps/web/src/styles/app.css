@@ -954,3 +954,7 @@ body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
   .monthly-report .card { break-inside: avoid; }
   .monthly-report .grid-4 { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---------------------------------------------------------- site health -- */
+.concern-list { margin: 0; padding-left: 16px; }
+.concern-list li { margin: 1px 0; }

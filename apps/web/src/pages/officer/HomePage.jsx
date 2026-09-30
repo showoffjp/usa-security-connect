@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
@@ -10,6 +10,103 @@ import {
 } from '../../components/ui.jsx';
 import { formatDuration, toHours } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
+
+/* ------------------------------------------------------ end of shift -- */
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * "Before you go": what the shift did, and - if the officer has not left
+ * one - a nudge to write a pass-down note for whoever comes next. Clocking
+ * out still works without one.
+ */
+function ShiftWrapUp({ onClose, onClockOut, busy }) {
+  const toast = useToast();
+  const [summary, setSummary] = useState(null);
+  const [note, setNote] = useState('');
+  const [important, setImportant] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.get('/timeclock/shift-summary').then(setSummary, () => setSummary({ failed: true }));
+  }, []);
+  const finish = async () => {
+    setSaving(true);
+    try {
+      if (note.trim()) {
+        await api.post('/post-log/passdown', { body: note.trim(), priority: important ? 'important' : 'normal' });
+      }
+    } catch (err) {
+      toast.error(`The note was not saved: ${err.message}`);
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
+    await onClockOut();
+  };
+  const rows = summary && !summary.failed
+    ? [
+        ['On post', formatDuration(summary.entry.minutes)],
+        ['Check-ins', summary.checkIns.missed ? `${summary.checkIns.answered} answered, ${summary.checkIns.missed} missed` : `${summary.checkIns.answered} answered`],
+        ['Patrols', summary.tours.runs ? `${plural(summary.tours.runs, 'tour')}, ${plural(summary.tours.checkpoints, 'checkpoint')}` : 'None walked'],
+        ['Visitors', `${summary.visitorsIn} signed in, ${summary.visitorsOut} signed out`],
+        ['Activity log', plural(summary.activity, 'entry').replace('entrys', 'entries')],
+        ['Incidents', summary.incidents ? plural(summary.incidents, 'report') : 'None'],
+      ]
+    : [];
+  return (
+    <Modal
+      title="Before you go"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving || busy}>
+            Stay on post
+          </button>
+          <button className="btn btn-primary" onClick={finish} disabled={saving || busy}>
+            {saving || busy ? 'Clocking out...' : note.trim() ? 'Save note and clock out' : 'Clock out'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        {!summary ? (
+          <LoadingPage label="Adding up your shift" />
+        ) : summary.failed ? (
+          <div className="small muted">Your shift summary did not load, but you can still clock out.</div>
+        ) : (
+          <>
+            <div className="small muted">
+              {summary.entry.post_name}, {summary.entry.site_name}. Since {fmtTime(summary.entry.clock_in_at)}.
+            </div>
+            <dl className="kv">
+              {rows.map(([k, v]) => (
+                <Fragment key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </Fragment>
+              ))}
+            </dl>
+            {summary.passdownWritten === 0 ? (
+              <>
+                <Field label="Anything the next shift should know?" hint="Optional. It goes to the pass-down for this post.">
+                  <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} />
+                </Field>
+                <label className="check">
+                  <input type="checkbox" checked={important} onChange={(e) => setImportant(e.target.checked)} />
+                  Mark it important
+                </label>
+              </>
+            ) : (
+              <div className="small">
+                <Icon name="check" size={14} /> You left {plural(summary.passdownWritten, 'pass-down note')} this shift.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 /* ----------------------------------------------------------- post orders -- */
 
@@ -330,12 +427,14 @@ export default function HomePage() {
     }
   };
 
+  const [wrapUp, setWrapUp] = useState(false);
   const clockOut = async () => {
     setBusy(true);
     try {
       const current = await getPosition({ timeout: 9000 });
       const res = await api.post('/timeclock/clock-out', geoBody(current));
       toast.success(`Clocked out. ${formatDuration(res.minutesWorked)} on post.`);
+      setWrapUp(false);
       await load();
     } catch (err) {
       toast.error(err.message);
@@ -484,13 +583,14 @@ export default function HomePage() {
               label={onDuty ? 'Slide to clock out' : 'Slide to clock in'}
               variant={onDuty ? 'out' : 'in'}
               busy={busy}
-              onConfirm={onDuty ? clockOut : () => clockIn()}
+              onConfirm={onDuty ? () => setWrapUp(true) : () => clockIn()}
             />
           )}
         </div>
       </div>
 
       <GpsPanel status={status} />
+      {wrapUp && <ShiftWrapUp busy={busy} onClose={() => setWrapUp(false)} onClockOut={clockOut} />}
 
       {/* ------------------------------------------------ quick actions -- */}
       <div className="grid grid-2">

@@ -177,6 +177,16 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   sign someone in with the same watchlist check as the web (a match stops it; letting
   them in anyway needs a reason), and log patrols, alarms and observations, marked
   internal when the client should not see them.
+- **Before you go** — sliding to clock out (web and mobile) first shows what the shift
+  did: time on post, check-ins answered and missed, patrols and checkpoints, visitors
+  in and out, activity entries and incident reports. If the officer has not left a
+  pass-down note, it offers a box for one (optionally marked important). Clocking out
+  never depends on it; **Stay on post** closes it.
+- **Install to the home screen** — the web app is installable (Android, iOS "Add to
+  Home Screen", desktop), with the shield as its icon; the client portal installs as its
+  own app that opens on the portal. If the signal drops, pages show a "No connection"
+  screen with a 911 button instead of the browser's error. API responses are never
+  cached: a clock-in or post order is always the live one.
 - **Night mode** — the account menu has Auto, Light and Night. Auto follows the
   device, so a phone set to dark at night gets a dark screen without asking. The
   choice is kept per device and applied before the first paint, so there is no
@@ -272,6 +282,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
   issues, lost and found), the scorecards and client feedback. Any cell starting
   with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
+- **Site health** (Reporting → Site health) — every active site's month side by side,
+  worst first, scored out of 100 with the reasons listed: shifts not covered, checkpoints
+  not scanned, serious incidents, building issues left open, a low client rating. The
+  numbers are the ones each client reads in their monthly report (the two share one
+  calculation), and any site's full month opens from the board, ready to print.
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
   ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
   25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
@@ -637,6 +652,9 @@ the server is running corrupts the data directory.
   downloads as a real CSV, with formulas neutralised. The monthly service report is
   scoped to the client's own property, its posts add up to its totals, the counts are
   consistent, the month is validated, and it carries no pay, rate or staff detail.
+  Site health is worst first, its numbers match each client's report, and only
+  supervisors see it. The end-of-shift summary counts the officer's own shift only,
+  and knows when they have left a pass-down note.
 - **`test/orders.mjs`** — post orders, the alerts inbox and QR tags. An officer can
   acknowledge only the version in force, for their own post; a new version, from the
   orders screen or the Sites screen, has to be read again, and the supervisor's list of
@@ -659,7 +677,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 83 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 85 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
