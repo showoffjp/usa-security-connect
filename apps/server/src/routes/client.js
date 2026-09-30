@@ -31,6 +31,7 @@ import { toHours, daysOverdue } from '../shared.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
 import { contactsFor, contactSchema } from './siteLog.js';
+import { currentOrders } from '../services/postOrders.js';
 
 export const clientRouter = Router();
 
@@ -1097,5 +1098,95 @@ clientRouter.post(
     await db.prepare(`UPDATE coverage_requests SET status = 'cancelled' WHERE id = ?`).run(row.id);
     await audit(null, 'coverage_request.cancelled', 'coverage_request', row.id, { client: req.client.id }, req.ip);
     res.json({ ok: true });
+  })
+);
+
+/* ============================================================ post orders === */
+
+/**
+ * The standing orders our officers work to at each of the client's posts,
+ * and the changes the client has asked for. Who on our side wrote a version
+ * is internal; the client sees the version, when it took effect and why.
+ */
+const clientRequest = (r) => ({
+  id: r.id, post_id: r.post_id, body: r.body, status: r.status, response: r.response,
+  applied_version: r.applied_version ?? null, mine: r.mine,
+  ...isoFields({ created_at: r.created_at, resolved_at: r.resolved_at }, ['created_at', 'resolved_at']),
+});
+
+async function clientPostOrders(req) {
+  const sites = [];
+  for (const siteId of req.clientSiteIds) {
+    const site = await db.prepare(`SELECT id, name FROM sites WHERE id = ?`).get(siteId);
+    if (!site) continue;
+    const posts = await db
+      .prepare(`SELECT id, name, post_code FROM posts WHERE site_id = ? AND active = 1 ORDER BY name`)
+      .all(siteId);
+    for (const post of posts) {
+      const order = await currentOrders(post.id);
+      post.order = order?.body.trim()
+        ? { version: order.version, body: order.body, change_note: order.change_note, ...isoFields({ created_at: order.created_at }, ['created_at']) }
+        : null;
+      post.requests = (
+        await db
+          .prepare(
+            `SELECT r.*, o.version AS applied_version, (r.client_user_id = ?) AS mine
+             FROM post_order_requests r LEFT JOIN post_orders o ON o.id = r.applied_order_id
+             WHERE r.post_id = ? ORDER BY r.created_at DESC LIMIT 10`
+          )
+          .all(req.client.id, post.id)
+      ).map(clientRequest);
+    }
+    sites.push({ ...site, posts });
+  }
+  return sites;
+}
+
+clientRouter.get(
+  '/post-orders',
+  requireClient,
+  wrap(async (req, res) => {
+    res.json({ sites: await clientPostOrders(req) });
+  })
+);
+
+/** Ask for a change to a post's orders. A supervisor applies or declines it. */
+clientRouter.post(
+  '/post-orders/requests',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({
+        postId: z.number().int().positive(),
+        body: z.string().trim().min(10, 'Say what should change, so we can act on it.').max(2000),
+      }),
+      req.body
+    );
+    const post = await db.prepare(`SELECT id, site_id FROM posts WHERE id = ? AND active = 1`).get(body.postId);
+    if (!post || !req.clientSiteIds.includes(post.site_id)) throw new HttpError(404, 'Post not found.');
+    const open = await db
+      .prepare(`SELECT COUNT(*) AS n FROM post_order_requests WHERE post_id = ? AND client_user_id = ? AND status = 'open'`)
+      .get(post.id, req.client.id);
+    if (Number(open.n) >= 3) {
+      throw new HttpError(409, 'You already have three changes waiting for this post. We will answer those first.');
+    }
+    const info = await db
+      .prepare(`INSERT INTO post_order_requests (post_id, client_user_id, body) VALUES (?,?,?)`)
+      .run(post.id, req.client.id, body.body);
+    await audit(null, 'post_order_request.created', 'post_order_request', info.lastInsertRowid, { client: req.client.id, postId: post.id }, req.ip);
+    res.status(201).json({ sites: await clientPostOrders(req) });
+  })
+);
+
+clientRouter.post(
+  '/post-orders/requests/:id/withdraw',
+  requireClient,
+  wrap(async (req, res) => {
+    const row = await db.prepare(`SELECT * FROM post_order_requests WHERE id = ?`).get(idParam(req.params.id, 'request'));
+    if (!row || row.client_user_id !== req.client.id) throw new HttpError(404, 'Request not found.');
+    if (row.status !== 'open') throw new HttpError(409, 'That request has already been answered.');
+    await db.prepare(`UPDATE post_order_requests SET status = 'withdrawn', resolved_at = now() WHERE id = ?`).run(row.id);
+    await audit(null, 'post_order_request.withdrawn', 'post_order_request', row.id, { client: req.client.id }, req.ip);
+    res.json({ sites: await clientPostOrders(req) });
   })
 );

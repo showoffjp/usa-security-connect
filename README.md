@@ -171,7 +171,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Post orders** — when a supervisor changes the standing orders for the officer's
   post, the home screen leads with them: what changed, who changed it, and the full
   orders, until the officer confirms "I have read these orders". Only the version
-  in force can be acknowledged.
+  in force can be acknowledged. The mobile app's home screen shows the same card, the
+  unread pass-down notes (each with **Got it**) and the site's contacts, tap to call.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
@@ -244,15 +245,17 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Alerts inbox** — the bell in the header, with the unread count, lists everything
   waiting on a supervisor: open duress alerts, no-shows, missed check-ins and
   walk-offs from the last three days, watchlist overrides, urgent building issues,
-  unanswered low client ratings, open coverage requests and licences lapsing within
-  14 days. Most serious first; opening one goes to the screen that deals with it and
+  unanswered low client ratings, open coverage requests, client requests to change
+  post orders, patrols finished with required checkpoints skipped or never finished,
+  and licences lapsing within 14 days. Most serious first; opening one goes to the screen that deals with it and
   marks it read. Alerts are worked out from the records, so they clear themselves when
   the problem is resolved; only who has read what is stored, per person.
 - **Post orders** (Post logs → Post orders) — each post's standing orders, versioned.
   Issuing new orders, or editing the instructions on the Sites screen, makes a new
   version; the old ones stay on record with who acknowledged each. Every post shows
   who has not yet read the version in force: anyone who worked it in the last 30 days
-  or is scheduled on it in the next 14.
+  or is scheduled on it in the next 14. A client's requested change shows on its post
+  with **Apply as a new version** (the reply goes with it) or **Decline**.
 - **Site contacts** (Post logs → Site contacts) — who officers call at each site,
   kept by supervisors and by the client; each entry says who added it.
 - **Client feedback** — every client's monthly rating per property with their
@@ -399,7 +402,12 @@ a PIN — and sees, for their own properties only:
   within the month; a low one needs a reason. Our reply appears underneath.
 - **Who our officers call** — the client keeps their property's contacts current,
   and officers on post see the changes at once.
-- **Extra coverage requests** — the one thing a client can ask for: officers beyond the
+- **Post orders** — what the officers are instructed to do at each of their posts, the
+  version in force and when it took effect (not which of our staff wrote it). A client
+  can **ask for a change**, up to three waiting per post; a supervisor applies it as a
+  new version or declines it with a reason, and the client sees the answer in the
+  portal and by email. A request nobody has answered can be withdrawn.
+- **Extra coverage requests** — officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
   the client sees the answer in the portal and by email, and can withdraw a request
@@ -618,7 +626,10 @@ the server is running corrupts the data directory.
   orders screen or the Sites screen, has to be read again, and the supervisor's list of
   who has not read it is right. Alerts are ranked by severity, carry a link to where
   they are handled, and read marks are per person. A checkpoint accepts its NFC tag,
-  its QR code or its own printed code, and refuses another checkpoint's.
+  its QR code or its own printed code, and refuses another checkpoint's. Clients read
+  only their own posts' orders, without the author; a request is scoped to their own
+  post, capped at three waiting, applied only to its own post and answered once, and
+  both answers reach the client in the portal and by email.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -632,7 +643,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 71 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 72 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright

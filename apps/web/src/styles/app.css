@@ -313,9 +313,15 @@ table.data tr.clickable { cursor: pointer; }
 }
 /* Labels shrink and clip rather than run into each other when a bar has many tabs. */
 .tabbar a { min-width: 0; padding: 0 2px; text-align: center; line-height: 1.15; }
+/* Columns may shrink below their label; the label clips instead of pushing the bar wider than the screen. */
+.tabbar { grid-auto-columns: minmax(0, 1fr); }
+.tabbar a { overflow: hidden; }
 @media (max-width: 480px) {
   .tabbar.tabbar-dense a { font-size: 0.6rem; letter-spacing: -0.01em; }
   .tabbar.tabbar-dense a svg { width: 19px; height: 19px; }
+}
+@media (max-width: 400px) {
+  .tabbar.tabbar-dense a { font-size: 0.54rem; letter-spacing: -0.02em; padding: 0 1px; }
 }
 .tabbar a.active { color: var(--brand-600); }
 .tabbar a.active::before {
@@ -858,3 +864,11 @@ body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
   .qr-tag { border-color: #666; }
   .admin-layout, .main, .page { display: block !important; padding: 0 !important; max-width: none !important; }
 }
+
+/* ------------------------------------------------ post order requests -- */
+.order-request {
+  margin-top: 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--info-bg); border-left: 3px solid var(--info);
+}
+.list.order-requests { margin-top: 8px; border-top: 1px solid var(--line); }
+.list.order-requests > li + li { border-top: 1px solid var(--line); }

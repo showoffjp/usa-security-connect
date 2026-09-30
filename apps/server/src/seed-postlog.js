@@ -459,5 +459,31 @@ export async function seedPostLog({ db }) {
     orders++;
   }
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders };
+  // Clients asking for changes: one waiting at the Riverfront lobby, and an
+  // older one elsewhere that was declined with a reason.
+  let orderRequests = 0;
+  if (lobby) {
+    await db
+      .prepare(`INSERT INTO post_order_requests (post_id, client_user_id, body, created_at) VALUES (?,?,?,?)`)
+      .run(lobby.id, await firstClient(lobby.site_id),
+        'Please add the east stairwell door to every round after 10 PM. Tenants on 4 have reported it propped open twice this month.',
+        toSql(new Date(now.getTime() - 5 * 3600000)));
+    orderRequests++;
+  }
+  const other = posts.find((p) => p.site_id !== lobby?.site_id && p.site_id === siteId(/Palmetto/)) || posts.find((p) => p.site_id !== lobby?.site_id);
+  const otherClient = other ? await firstClient(other.site_id) : null;
+  if (other && otherClient) {
+    await db
+      .prepare(
+        `INSERT INTO post_order_requests (post_id, client_user_id, body, status, response, resolved_by, resolved_at, created_at)
+         VALUES (?,?,?,'declined',?,?,?,?)`
+      )
+      .run(other.id, otherClient,
+        'Could the officer also sign for resident packages at the gate?',
+        'Signing for packages makes our officer responsible for them, which our insurance does not cover. The officer will call the resident when a courier arrives.',
+        sup.id, toSql(new Date(now.getTime() - 17 * 86400000)), toSql(new Date(now.getTime() - 18 * 86400000)));
+    orderRequests++;
+  }
+
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests };
 }

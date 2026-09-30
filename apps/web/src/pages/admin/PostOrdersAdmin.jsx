@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { fmtDateTime } from '../../lib/format.js';
-import { Chip, Empty, Field, Icon, LoadingPage, Modal, useToast } from '../../components/ui.jsx';
+import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, useToast } from '../../components/ui.jsx';
 
-function ReviseDialog({ post, onClose, onDone }) {
+function ReviseDialog({ post, request, onClose, onDone }) {
   const toast = useToast();
   const [body, setBody] = useState(post.order?.body || '');
   const [note, setNote] = useState('');
+  const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const unchanged = body.trim() === (post.order?.body || '').trim();
   const save = async () => {
     setBusy(true);
     try {
-      const d = await api.post('/post-log/admin/orders', { postId: post.id, body, changeNote: note || null });
-      toast.success(`Version ${d.order.version} issued. Officers on this post are asked to acknowledge it.`);
+      const d = await api.post('/post-log/admin/orders', {
+        postId: post.id, body, changeNote: note || null, requestId: request?.id ?? null, response: reply || null,
+      });
+      toast.success(
+        `Version ${d.order.version} issued. Officers on this post are asked to acknowledge it${request ? ', and the client is told' : ''}.`
+      );
       onDone();
     } catch (err) {
       toast.error(err.message);
@@ -37,6 +42,11 @@ function ReviseDialog({ post, onClose, onDone }) {
       }
     >
       <div className="stack">
+        {request && (
+          <Banner kind="info" title={`${request.client_name || 'The client'} asked`}>
+            {request.body}
+          </Banner>
+        )}
         <div className="small muted">
           {post.site_name}. The current version stays on record; every officer who works this post is asked to read and
           acknowledge the new one.
@@ -46,6 +56,53 @@ function ReviseDialog({ post, onClose, onDone }) {
         </Field>
         <Field label="What changed" hint="One line officers see above the orders, e.g. 'North doors now lock at 18:00'.">
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+        </Field>
+        {request && (
+          <Field label="Reply to the client" hint="Optional. They read it in the portal and by email with the change.">
+            <textarea rows={2} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={1000} />
+          </Field>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function DeclineDialog({ post, request, onClose, onDone }) {
+  const toast = useToast();
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/post-log/admin/order-requests/${request.id}/decline`, { response: reply });
+      toast.success('Declined. The client has your reply.');
+      onDone();
+    } catch (err) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Decline the change at ${post.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-danger" onClick={send} disabled={busy || reply.trim().length < 5}>
+            {busy ? 'Sending...' : 'Decline and reply'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <Banner kind="info" title={`${request.client_name || 'The client'} asked`}>
+          {request.body}
+        </Banner>
+        <Field label="Why not" required hint="The client reads this in the portal and by email.">
+          <textarea rows={3} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={1000} />
         </Field>
       </div>
     </Modal>
@@ -108,6 +165,7 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
   const [data, setData] = useState(null);
   const [revising, setRevising] = useState(null);
   const [history, setHistory] = useState(null);
+  const [declining, setDeclining] = useState(null);
   const [onlyOutstanding, setOnlyOutstanding] = useState(false);
 
   const load = useCallback(async () => {
@@ -122,7 +180,7 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
     load();
   }, [load]);
 
-  const posts = !data ? [] : onlyOutstanding ? data.posts.filter((p) => p.outstanding.length) : data.posts;
+  const posts = !data ? [] : onlyOutstanding ? data.posts.filter((p) => p.outstanding.length || p.requests?.length) : data.posts;
 
   return (
     <div className="card">
@@ -137,10 +195,11 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
         </select>
         <label className="row small" style={{ gap: 6 }}>
           <input type="checkbox" checked={onlyOutstanding} onChange={(e) => setOnlyOutstanding(e.target.checked)} />
-          Only posts waiting on acknowledgements
+          Only posts needing attention
         </label>
         {data && (
           <span className="small muted">
+            {data.requestsTotal ? `${data.requestsTotal} client request${data.requestsTotal === 1 ? '' : 's'} · ` : ''}
             {data.outstandingTotal ? `${data.outstandingTotal} acknowledgement${data.outstandingTotal === 1 ? '' : 's'} outstanding` : 'Everyone is up to date'}
           </span>
         )}
@@ -148,7 +207,7 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
       {!data ? (
         <LoadingPage label="Loading post orders" />
       ) : posts.length === 0 ? (
-        <Empty icon="clipboard" title={onlyOutstanding ? 'Every officer has read the orders in force' : 'No posts here'} />
+        <Empty icon="clipboard" title={onlyOutstanding ? 'Nothing waiting: every officer has read the orders in force' : 'No posts here'} />
       ) : (
         <ul className="list">
           {posts.map((p) => (
@@ -185,6 +244,26 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
                     ))}
                   </div>
                 )}
+                {p.requests?.map((r) => (
+                  <div key={r.id} className="order-request">
+                    <div className="small">
+                      <strong>
+                        {r.client_name || 'A client'}
+                        {r.client_company ? ` (${r.client_company})` : ''} asked
+                      </strong>{' '}
+                      <span className="tiny muted">{fmtDateTime(r.created_at)}</span>
+                    </div>
+                    <div className="small" style={{ marginTop: 2 }}>{r.body}</div>
+                    <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                      <button className="btn btn-sm btn-primary" onClick={() => setRevising({ post: p, request: r })}>
+                        Apply as a new version
+                      </button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => setDeclining({ post: p, request: r })}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="row" style={{ gap: 6 }}>
                 {p.order && (
@@ -192,7 +271,7 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
                     History
                   </button>
                 )}
-                <button className="btn btn-sm" onClick={() => setRevising(p)}>
+                <button className="btn btn-sm" onClick={() => setRevising({ post: p })}>
                   {p.order ? 'New version' : 'Write orders'}
                 </button>
               </div>
@@ -202,7 +281,8 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
       )}
       {revising && (
         <ReviseDialog
-          post={revising}
+          post={revising.post}
+          request={revising.request}
           onClose={() => setRevising(null)}
           onDone={() => {
             setRevising(null);
@@ -211,6 +291,17 @@ export function OrdersAdmin({ sites, siteId, setSiteId }) {
         />
       )}
       {history && <HistoryDialog post={history} onClose={() => setHistory(null)} />}
+      {declining && (
+        <DeclineDialog
+          post={declining.post}
+          request={declining.request}
+          onClose={() => setDeclining(null)}
+          onDone={() => {
+            setDeclining(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

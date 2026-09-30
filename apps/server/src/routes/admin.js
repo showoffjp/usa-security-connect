@@ -2211,6 +2211,52 @@ async function buildAlerts(userId) {
       title: `${c.officer}: ${c.type.replace(/_/g, ' ')} ${lapsed ? 'has lapsed' : 'expires soon'}`, detail: `Expires ${String(c.expires_on).slice(0, 10)}` });
   }
 
+  // A patrol finished with required checkpoints skipped: the client pays for
+  // those checkpoints, so each skip needs looking at.
+  for (const r of await db
+    .prepare(
+      `SELECT tr.id, tr.completed_at, t.name AS tour_name, s.name AS site_name,
+              u.first_name || ' ' || u.last_name AS officer, COUNT(*) AS skipped
+       FROM tour_runs tr
+       JOIN tours t ON t.id = tr.tour_id JOIN sites s ON s.id = t.site_id JOIN users u ON u.id = tr.user_id
+       JOIN tour_run_checkpoints trc ON trc.tour_run_id = tr.id
+       JOIN checkpoints c ON c.id = trc.checkpoint_id
+       WHERE tr.completed_at >= ? AND trc.status = 'skipped' AND c.required = true
+       GROUP BY tr.id, tr.completed_at, t.name, s.name, u.first_name, u.last_name
+       ORDER BY tr.completed_at DESC LIMIT 25`
+    )
+    .all(since)) {
+    push({ key: `tour:${r.id}`, kind: 'tour', severity: 'warning', at: r.completed_at, link: '/admin/tours',
+      title: `${s(Number(r.skipped), 'required checkpoint')} skipped: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}` });
+  }
+
+  // A patrol started and never finished: abandoned, or still open hours after it began.
+  for (const r of await db
+    .prepare(
+      `SELECT tr.id, tr.started_at, tr.status, t.name AS tour_name, s.name AS site_name,
+              u.first_name || ' ' || u.last_name AS officer
+       FROM tour_runs tr JOIN tours t ON t.id = tr.tour_id JOIN sites s ON s.id = t.site_id JOIN users u ON u.id = tr.user_id
+       WHERE tr.started_at >= ? AND (tr.status = 'abandoned' OR (tr.status = 'in_progress' AND tr.started_at < ?))
+       ORDER BY tr.started_at DESC LIMIT 25`
+    )
+    .all(since, toSql(new Date(Date.now() - 4 * 3600000)))) {
+    push({ key: `tour-open:${r.id}`, kind: 'tour', severity: 'warning', at: r.started_at, link: '/admin/tours',
+      title: `Tour not finished: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}, ${r.status === 'abandoned' ? 'abandoned' : 'still open after 4 hours'}` });
+  }
+
+  // A client asking to change a post's orders.
+  for (const r of await db
+    .prepare(
+      `SELECT r.id, r.created_at, p.name AS post_name, s.name AS site_name, c.name AS client_name
+       FROM post_order_requests r JOIN posts p ON p.id = r.post_id JOIN sites s ON s.id = p.site_id
+       LEFT JOIN client_users c ON c.id = r.client_user_id
+       WHERE r.status = 'open' ORDER BY r.created_at`
+    )
+    .all()) {
+    push({ key: `order-request:${r.id}`, kind: 'orders', severity: 'warning', at: r.created_at, link: '/admin/post-logs?tab=orders',
+      title: `${r.client_name || 'A client'} asked to change the orders for ${r.post_name}`, detail: r.site_name });
+  }
+
   const read = new Set(
     (await db.prepare(`SELECT alert_key FROM alert_reads WHERE user_id = ?`).all(userId)).map((r) => r.alert_key)
   );

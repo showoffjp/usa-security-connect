@@ -13,6 +13,7 @@ import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield } from '../../co
 import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
 import PortalRequests from './PortalRequests.jsx';
+import PortalOrders from './PortalOrders.jsx';
 import { useDemo } from '../../lib/demo.js';
 import {
   PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
@@ -177,6 +178,7 @@ function PortalShell() {
     { to: '/portal/incidents', icon: 'alert', label: 'Incidents' },
     { to: '/portal/report', icon: 'clipboard', label: 'Report' },
     { to: '/portal/invoices', icon: 'chart', label: 'Invoices' },
+    { to: '/portal/orders', icon: 'clipboard', label: 'Orders' },
     { to: '/portal/requests', icon: 'plus', label: 'Requests' },
   ];
 
@@ -275,6 +277,7 @@ function PortalRoutes() {
         <Route path="report" element={<PortalReport sites={sites} />} />
         <Route path="invoices" element={<PortalInvoices />} />
         <Route path="requests" element={<PortalRequests sites={sites} />} />
+        <Route path="orders" element={<PortalOrders />} />
       </Route>
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

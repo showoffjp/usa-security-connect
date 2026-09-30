@@ -517,7 +517,7 @@ for (const u of STAFF) {
   log(await lobbyRow.count() === 1, 'a supervisor sees the post orders for every post');
   await checkScreen('supervisor: post orders', staff.page, staff.problems);
   const change = `E2E change ${Date.now() % 100000}`;
-  await lobbyRow.locator('button:has-text("New version")').click();
+  await lobbyRow.locator('button:text-is("New version")').click();
   await staff.page.waitForSelector('[role="dialog"] textarea');
   const current = await staff.page.locator('[role="dialog"] textarea').inputValue();
   await staff.page.locator('[role="dialog"] textarea').fill(`${current}\n${change}: radio check on the hour.`);
@@ -553,6 +553,30 @@ for (const u of STAFF) {
   const tags = await staff.page.locator('.qr-tag').count();
   log(tags > 0 && (await staff.page.locator('.qr-img svg').count()) === tags, 'a supervisor prints a QR tag for every checkpoint', `${tags} tags`);
   await checkScreen('supervisor: checkpoint QR tags', staff.page, staff.problems);
+
+  // A client asks for a change to a post's orders; a supervisor declines it
+  // with a reason, which the client reads in the portal.
+  const ask = `E2E ask ${Date.now() % 100000}: walk the roof deck hourly.`;
+  await client.page.goto(WEB + '/portal/orders');
+  await settle(client.page);
+  await checkScreen('client: post orders', client.page, client.problems);
+  const clientPost = client.page.locator('li.list-item', { hasText: 'RF-02' });
+  await clientPost.locator('button:has-text("Ask for a change")').click();
+  await clientPost.locator('textarea').fill(ask);
+  await clientPost.locator('button:has-text("Send request")').click();
+  await client.page.waitForTimeout(1200);
+  log(await clientPost.locator(`text=${ask}`).count() === 1, 'a client asks for a change to the post orders');
+  await staff.page.goto(WEB + '/admin/post-logs?tab=orders');
+  await settle(staff.page);
+  const staffRequest = staff.page.locator('.order-request', { hasText: ask });
+  log(await staffRequest.count() === 1, 'the supervisor sees the request under Post orders');
+  await staffRequest.locator('button:has-text("Decline")').click();
+  await staff.page.locator('[role="dialog"] textarea').fill('The roof deck is outside the contracted area; we will send a quote.');
+  await staff.page.click('[role="dialog"] button:has-text("Decline and reply")');
+  await staff.page.waitForTimeout(1200);
+  await client.page.reload();
+  await settle(client.page);
+  log(await client.page.locator('li', { hasText: ask }).locator('text=Not changed').count() >= 1, 'and the client reads the answer');
 
   await officer.page.goto(WEB + '/post-log?tab=visitors');
   await settle(officer.page);
