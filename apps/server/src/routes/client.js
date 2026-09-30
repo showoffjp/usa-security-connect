@@ -401,6 +401,98 @@ clientRouter.get(
   })
 );
 
+/* ------------------------------------------------------------- schedule --- */
+
+/**
+ * The schedule ahead at their properties: who is booked on each post, and
+ * which shifts we are still arranging. Nothing about pay or the reason a
+ * shift is open.
+ */
+clientRouter.get(
+  '/schedule',
+  wrap(async (req, res) => {
+    const { sql, ids } = sitesFilter(req);
+    const days = Math.min(Math.max(Math.floor(Number(req.query.days)) || 7, 1), 14);
+    const from = new Date();
+    const until = new Date(from.getTime() + days * 86400000);
+    const rows = await db
+      .prepare(
+        `SELECT sh.id, sh.starts_at, sh.ends_at, sh.user_id, p.name AS post_name, p.armed, s.name AS site_name, s.id AS site_id,
+                u.first_name, u.last_name
+         FROM shifts sh
+         JOIN posts p ON p.id = sh.post_id
+         JOIN sites s ON s.id = p.site_id
+         LEFT JOIN users u ON u.id = sh.user_id
+         WHERE s.id IN (${sql}) AND sh.status != 'cancelled' AND sh.ends_at > ? AND sh.starts_at < ?
+         ORDER BY sh.starts_at, p.name`
+      )
+      .all(...ids, toSql(from), toSql(until));
+    const shifts = rows.map((r) => {
+      const row = isoFields(r, ['starts_at', 'ends_at']);
+      return {
+        id: row.id,
+        site_id: row.site_id,
+        site_name: row.site_name,
+        post_name: row.post_name,
+        armed: Boolean(row.armed),
+        starts_at: row.starts_at,
+        ends_at: row.ends_at,
+        officer_name: row.user_id && row.first_name ? `${row.first_name} ${row.last_name}` : null,
+        assigned: Boolean(row.user_id),
+      };
+    });
+    res.json({ days, shifts, summary: { total: shifts.length, assigned: shifts.filter((x) => x.assigned).length } });
+  })
+);
+
+/* -------------------------------------------------------------- notices --- */
+
+/** Notices live now at any of the client's properties. */
+const liveNotices = (sql) => `
+  n.withdrawn_at IS NULL AND n.starts_at <= now() AND (n.ends_at IS NULL OR n.ends_at > now())
+  AND (n.all_sites = true OR EXISTS (SELECT 1 FROM client_notice_sites ns WHERE ns.notice_id = n.id AND ns.site_id IN (${sql})))`;
+
+clientRouter.get(
+  '/notices',
+  wrap(async (req, res) => {
+    const { sql, ids } = scope(req);
+    const rows = await db
+      .prepare(
+        `SELECT n.id, n.title, n.body, n.level, n.all_sites, n.starts_at, n.ends_at,
+                EXISTS (SELECT 1 FROM client_notice_reads r WHERE r.notice_id = n.id AND r.client_user_id = ?) AS read
+         FROM client_notices n
+         WHERE ${liveNotices(sql)}
+         ORDER BY CASE n.level WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 ELSE 2 END, n.starts_at DESC`
+      )
+      .all(req.client.id, ...ids);
+    const notices = [];
+    for (const n of rows) {
+      // Which of their own properties it is about; never the others it went to.
+      const sites = n.all_sites
+        ? []
+        : (await db
+            .prepare(`SELECT s.name FROM client_notice_sites ns JOIN sites s ON s.id = ns.site_id WHERE ns.notice_id = ? AND ns.site_id IN (${sql}) ORDER BY s.name`)
+            .all(n.id, ...ids)).map((x) => x.name);
+      notices.push({ ...isoFields(n, ['starts_at', 'ends_at']), all_sites: Boolean(n.all_sites), read: Boolean(n.read), sites });
+    }
+    res.json({ notices, unread: notices.filter((n) => !n.read).length });
+  })
+);
+
+clientRouter.post(
+  '/notices/:id/read',
+  wrap(async (req, res) => {
+    const { sql, ids } = scope(req);
+    const id = idParam(req.params.id, 'notice');
+    const visible = await db.prepare(`SELECT n.id FROM client_notices n WHERE n.id = ? AND ${liveNotices(sql)}`).get(id, ...ids);
+    if (!visible) throw new HttpError(404, 'Notice not found.');
+    await db
+      .prepare(`INSERT INTO client_notice_reads (notice_id, client_user_id) VALUES (?,?) ON CONFLICT DO NOTHING`)
+      .run(id, req.client.id);
+    res.json({ ok: true });
+  })
+);
+
 /* -------------------------------------------------------------- patrols --- */
 
 /** Patrol proof: every run, and every checkpoint scanned or missed. */

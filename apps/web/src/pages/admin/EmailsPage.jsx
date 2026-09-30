@@ -182,7 +182,7 @@ export default function EmailsPage() {
         </div>
       ) : (
         <div className="card table-wrap">
-          <table>
+          <table className="data">
             <thead>
               <tr>
                 <th scope="col">When</th>

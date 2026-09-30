@@ -549,10 +549,35 @@ export async function seedPostLog({ db }) {
     invoiceQueries++;
   }
 
+  // Notices to clients: hurricane season to everyone, and a lobby change at one property.
+  let notices = 0;
+  await db
+    .prepare(
+      `INSERT INTO client_notices (title, body, level, all_sites, starts_at, ends_at, created_by)
+       VALUES (?,?,?,?,?,?,?)`
+    )
+    .run('Hurricane season: how we keep your property covered',
+      'If a named storm threatens your area, we move to our storm plan: officers stay on post until relieved, patrols switch to the inside of the building once winds pass 40 mph, and your account manager calls you 72 hours before landfall to agree any closures. Keep your after-hours contacts up to date in the portal so we can reach you.',
+      'important', true, toSql(new Date(now.getTime() - 5 * 86400000)), toSql(new Date(now.getTime() + 60 * 86400000)), sup.id);
+  notices++;
+  const riverfrontSite = await db.prepare(`SELECT id FROM sites WHERE name LIKE 'Riverfront%'`).get();
+  if (riverfrontSite) {
+    const lobby = await db
+      .prepare(
+        `INSERT INTO client_notices (title, body, level, all_sites, starts_at, ends_at, created_by)
+         VALUES (?,?,?,?,?,?,?)`
+      )
+      .run('Lobby desk moves during the atrium works',
+        'While the atrium is refurbished, the lobby security desk moves to the east entrance. Visitors will be signed in there, and deliveries go to the loading dock as usual.',
+        'info', false, toSql(new Date(now.getTime() - 2 * 86400000)), toSql(new Date(now.getTime() + 21 * 86400000)), sup.id);
+    await db.prepare(`INSERT INTO client_notice_sites (notice_id, site_id) VALUES (?,?)`).run(Number(lobby.lastInsertRowid), riverfrontSite.id);
+    notices++;
+  }
+
   // The incidents seeded above are history: their clients were told at the time.
   await db.prepare(`UPDATE incidents SET client_notified_at = occurred_at WHERE severity IN ('high', 'critical')`).run();
   // One contact takes the daily report email, so the morning sweep has someone to send it to.
   await db.prepare(`UPDATE client_users SET notify_daily_report = true WHERE email = ?`).run('dana.whitfield@riverfrontholdings.com');
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps, invoiceQueries };
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps, invoiceQueries, notices };
 }

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtRelative, fmtDateTime } from '../../lib/format.js';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, StatusChip, useToast,
+  Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, StatusChip, useToast,
 } from '../../components/ui.jsx';
+import { NoticesTab } from './ClientNotices.jsx';
 
 /**
  * The link is shown once and never again, so it gets its own dialog rather
@@ -202,6 +204,8 @@ export default function ClientsPage() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // contact object, or 'new'
   const [credential, setCredential] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'notices' ? 'notices' : 'logins';
 
   const load = useCallback(async () => {
     try {
@@ -263,7 +267,7 @@ export default function ClientsPage() {
             properties only.
           </p>
         </div>
-        {isAdmin && (
+        {isAdmin && tab === 'logins' && (
           <button className="btn btn-primary" onClick={() => setEditing('new')}>
             <Icon name="plus" size={16} /> New login
           </button>
@@ -272,7 +276,21 @@ export default function ClientsPage() {
 
       {error && <Banner kind="danger">{error}</Banner>}
 
-      {clients.length === 0 ? (
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          label="Client portal view"
+          value={tab}
+          onChange={(v) => setParams(v === 'logins' ? {} : { tab: v }, { replace: true })}
+          options={[
+            { value: 'logins', label: 'Logins' },
+            { value: 'notices', label: 'Notices' },
+          ]}
+        />
+      </div>
+
+      {tab === 'notices' ? (
+        <NoticesTab sites={sites} />
+      ) : clients.length === 0 ? (
         <div className="card card-pad">
           <Empty
             icon="building"
@@ -290,7 +308,7 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="card table-wrap">
-          <table>
+          <table className="data">
             <thead>
               <tr>
                 <th scope="col">Contact</th>

@@ -29,6 +29,7 @@ import { reportsRouter } from './routes/reports.js';
 import { shiftRequestsRouter } from './routes/shiftRequests.js';
 import { clientRouter } from './routes/client.js';
 import { clientAdminRouter } from './routes/clientAdmin.js';
+import { noticesRouter } from './routes/notices.js';
 import { invoicesRouter } from './routes/invoices.js';
 import { liveRouter, punchesRouter } from './routes/operations.js';
 import { payRatesRouter } from './routes/payRates.js';
@@ -149,6 +150,7 @@ app.use('/api/client', clientRouter);
 app.use('/api/invoices', invoicesRouter);
 // Mounted ahead of adminRouter so these prefixes reach their own routers.
 app.use('/api/admin/clients', clientAdminRouter);
+app.use('/api/admin/client-notices', noticesRouter);
 app.use('/api/admin/live', liveRouter);
 app.use('/api/admin/punches', punchesRouter);
 app.use('/api/admin/pay-rates', payRatesRouter);
