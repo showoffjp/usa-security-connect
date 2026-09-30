@@ -64,6 +64,7 @@ function Gate() {
       <Stack.Screen name="change-pin" />
       <Stack.Screen name="tour/[runId]" options={{ headerShown: true, title: 'Tour' }} />
       <Stack.Screen name="incident-new" options={{ headerShown: true, title: 'Report an incident' }} />
+      <Stack.Screen name="post-log" options={{ headerShown: true, title: 'Post log' }} />
     </Stack>
   );
 }

@@ -378,7 +378,7 @@ export default function HomePage() {
       <div className="card">
         <div className="card-head">
           <div className="row">
-            <Icon name="pin" size={18} style={{ color: 'var(--brand-600)' }} />
+            <Icon name="pin" size={18} style={{ color: 'var(--brand-text)' }} />
             <h3>{onDuty ? 'Current post' : shift ? 'Your next post' : 'No post assigned'}</h3>
           </div>
           {onDuty && (
@@ -495,7 +495,7 @@ export default function HomePage() {
       {/* ------------------------------------------------ quick actions -- */}
       <div className="grid grid-2">
         <Link className="card card-pad row" to="/incidents/new" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="lead-icon" style={{ background: 'var(--brand-100)', color: 'var(--brand-600)' }}>
+          <div className="lead-icon" style={{ background: 'var(--brand-100)', color: 'var(--brand-text)' }}>
             <Icon name="alert" size={19} />
           </div>
           <div className="grow">

@@ -120,4 +120,34 @@ log(act.text.includes(`"'=HYPERLINK(`) && !/(^|,)=HYPERLINK/m.test(act.text), 'a
 const officerCsv = await fetch(`${BASE}/post-log/admin/activity?format=csv`, { headers: { authorization: `Bearer ${marcus}` } });
 log(officerCsv.status === 403, 'officers cannot download the exports');
 
+/* ========================================================= monthly report === */
+section('monthly service report');
+
+const monthly = (token, q = '') => call(`/client/monthly${q}`, { token });
+const now = new Date();
+const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+const lastMonth = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}`;
+
+const report = await monthly(capital);
+const r = report.data;
+log(report.status === 200 && r.month === thisMonth && r.partial === true && r.site?.id === capitalSite.id,
+  "a client's report defaults to this month so far, for their property");
+log(r.posts.reduce((a, p) => a + p.scheduled, 0) === r.coverage.scheduled && r.posts.reduce((a, p) => a + p.covered, 0) === r.coverage.covered,
+  'the posts add up to the totals');
+log(r.coverage.covered <= r.coverage.scheduled && (r.coverage.pct === null || (r.coverage.pct >= 0 && r.coverage.pct <= 100)),
+  'coverage is a fair percentage', `${r.coverage.pct}%`);
+log(r.patrols.scanned + r.patrols.skipped <= r.patrols.checkpoints, 'checkpoints scanned and skipped never exceed those on the rounds');
+log(r.incidents.list.length === r.incidents.total && Object.values(r.incidents.bySeverity).reduce((a, b) => a + b, 0) === r.incidents.total,
+  'incidents are listed in full and counted by severity');
+log(!JSON.stringify(r).match(/pay_rate|bill_rate|margin|employee_code|first_name/), 'no pay, bill rate or staff detail in the report');
+const previous = await monthly(capital, `?month=${lastMonth}`);
+log(previous.status === 200 && previous.data.partial === false && previous.data.month === lastMonth, 'last month is a whole month');
+const pensacolaSite = (await call('/client/me', { token: pensacola })).data.sites[0].id;
+log((await monthly(capital, `?siteId=${pensacolaSite}`)).status === 404, "a client cannot read another client's property");
+log((await monthly(capital, '?month=2026-13')).status === 422, 'a month has to be a real month');
+log((await monthly(capital, `?month=${now.getFullYear() + 1}-01`)).status === 422, 'and not one that has not started');
+log((await monthly(capital, '?month=2019-01')).status === 422, 'reports go back two years');
+log([401, 403].includes((await call('/client/monthly', { token: marcus })).status), 'staff tokens do not open the client report');
+
 finish('Contacts, feedback and exports');

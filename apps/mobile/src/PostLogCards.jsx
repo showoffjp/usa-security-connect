@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { api } from './api.js';
 import { fmtDay, fmtRelative } from './format.js';
@@ -143,10 +144,28 @@ export function usePostLog(refreshKey) {
 }
 
 export function PostLogCards({ postLog, notify }) {
+  const router = useRouter();
   const { log, setLog, reload } = postLog;
   if (!log?.post) return null;
+  const inside = log.visitors?.onSite?.length || 0;
   return (
     <>
+      <Pressable
+        onPress={() => router.push('/post-log')}
+        accessibilityRole="button"
+        accessibilityLabel="Open the post log"
+        style={({ pressed }) => [S.card, pressed && { backgroundColor: C.surface3 }]}
+      >
+        <View style={[S.cardPad, S.rowBetween]}>
+          <View style={S.grow}>
+            <Text style={[S.small, S.strong, { color: C.ink }]}>Post log</Text>
+            <Text style={S.tiny}>
+              {log.onDuty ? `${inside} visitor${inside === 1 ? '' : 's'} on site · ` : ''}Visitors and the activity log
+            </Text>
+          </View>
+          <Text style={{ fontSize: 20, color: C.muted }}>›</Text>
+        </View>
+      </Pressable>
       <PostOrdersCard
         orders={log.orders}
         notify={notify}

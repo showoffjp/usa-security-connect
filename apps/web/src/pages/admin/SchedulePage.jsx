@@ -532,7 +532,7 @@ function RosterGrid({ shifts, employees, range, siteFilter, showAll, onOpen, onA
             <tr>
               <th style={{ minWidth: 170 }}>Officer</th>
               {days.map((d) => (
-                <th key={d.toISOString()} style={d.toDateString() === new Date().toDateString() ? { color: 'var(--brand-600)' } : undefined}>
+                <th key={d.toISOString()} style={d.toDateString() === new Date().toDateString() ? { color: 'var(--brand-text)' } : undefined}>
                   {fmtDay(d)}
                   <div className="tiny muted">{d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
                 </th>

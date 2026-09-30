@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import QuickSearch from './QuickSearch.jsx';
 import AlertsBell from './AlertsBell.jsx';
+import ThemeChoice from './ThemeChoice.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { api } from '../lib/api.js';
 import { Icon, Shield, Modal } from './ui.jsx';
@@ -33,6 +34,8 @@ function AccountMenu({ open, onClose }) {
             </div>
           </div>
         </div>
+
+        <ThemeChoice />
 
         <div className="stack-sm">
           <Link className="btn btn-ghost btn-block" to="/profile" onClick={onClose}>

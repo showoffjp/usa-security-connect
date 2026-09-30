@@ -41,6 +41,22 @@
   --info: #145d9e;
   --info-bg: #e4f0fa;
 
+  /* Solid fills that carry white text (buttons, toasts, badges). In the
+     light theme they are the status colours themselves; the dark theme
+     keeps them deep while the status text colours lighten. */
+  --ok-strong: var(--ok);
+  --danger-strong: var(--danger);
+  /* Brand red used as text, not as a fill. */
+  --brand-text: var(--brand-600);
+  --toast-bg: var(--ink-2);
+  --unread-bg: #fcfdff;
+  --banner-warn-fg: #7a4a00; --banner-warn-line: #f0d7ae;
+  --banner-danger-fg: #8f2a20; --banner-danger-line: #f3c9c3;
+  --banner-info-fg: #10456f; --banner-info-line: #c2dcf0;
+  --banner-ok-fg: #10633a; --banner-ok-line: #b9e8ce;
+  --wash: linear-gradient(115deg, #eaf1fc 0%, #e9f7ee 28%, #fdf7df 52%, #fcedea 76%, #eaf1fc 100%);
+  color-scheme: light;
+
   --r-sm: 6px;
   --r-md: 10px;
   --r-lg: 14px;
@@ -79,7 +95,7 @@ body {
  */
 body::before {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: linear-gradient(115deg, #eaf1fc 0%, #e9f7ee 28%, #fdf7df 52%, #fcedea 76%, #eaf1fc 100%);
+  background: var(--wash);
   background-size: 300% 300%;
   animation: usc-wash 60s ease-in-out infinite alternate;
 }
@@ -158,7 +174,7 @@ a { color: var(--navy-600); }
   margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
 .stat .foot { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-.stat.alert { border-color: #f3c9c3; background: linear-gradient(180deg, #fff 0%, var(--danger-bg) 220%); }
+.stat.alert { border-color: var(--banner-danger-line); background: linear-gradient(180deg, var(--surface) 0%, var(--danger-bg) 220%); }
 .stat.alert .value { color: var(--danger); }
 
 /* -------------------------------------------------------------- buttons -- */
@@ -182,7 +198,7 @@ a { color: var(--navy-600); }
 .btn-navy:hover { background: var(--navy-700); }
 .btn-ghost { background: transparent; border-color: var(--line-2); }
 .btn-ghost:hover { background: var(--surface-3); }
-.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger { background: var(--danger-strong); color: #fff; }
 .btn-danger:hover { background: #a5312a; }
 .btn-sm { padding: 6px 11px; font-size: 0.8rem; }
 .btn-lg { padding: 13px 22px; font-size: 1rem; }
@@ -200,7 +216,7 @@ a { color: var(--navy-600); }
 .chip-warn { background: var(--warn-bg); color: var(--warn); }
 .chip-danger { background: var(--danger-bg); color: var(--danger); }
 .chip-info { background: var(--info-bg); color: var(--info); }
-.chip-brand { background: var(--brand-100); color: var(--brand-600); }
+.chip-brand { background: var(--brand-100); color: var(--brand-text); }
 .chip-navy { background: var(--navy-100); color: var(--navy-700); }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
@@ -294,7 +310,7 @@ table.data tr.clickable { cursor: pointer; }
 .page-head { margin-bottom: 18px; }
 .page-head .eyebrow {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--brand-600); font-weight: 750;
+  color: var(--brand-text); font-weight: 750;
 }
 .page-head p.lead { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; }
 
@@ -323,14 +339,14 @@ table.data tr.clickable { cursor: pointer; }
 @media (max-width: 400px) {
   .tabbar.tabbar-dense a { font-size: 0.54rem; letter-spacing: -0.02em; padding: 0 1px; }
 }
-.tabbar a.active { color: var(--brand-600); }
+.tabbar a.active { color: var(--brand-text); }
 .tabbar a.active::before {
   content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 3px;
   background: var(--brand-600); border-radius: 0 0 3px 3px;
 }
 .tabbar .badge {
   position: absolute; top: 8px; right: 50%; margin-right: -22px;
-  background: var(--danger); color: #fff; font-size: 0.6rem; font-weight: 700;
+  background: var(--danger-strong); color: #fff; font-size: 0.6rem; font-weight: 700;
   min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   display: grid; place-items: center;
 }
@@ -421,7 +437,7 @@ table.data tr.clickable { cursor: pointer; }
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .slider.out { background: linear-gradient(90deg, var(--brand-700), var(--brand-500)); }
-.slider.done { background: var(--ok); }
+.slider.done { background: var(--ok-strong); }
 .slider.disabled { background: var(--line-2); cursor: not-allowed; }
 .slider .track-label {
   position: absolute; inset: 0; display: grid; place-items: center;
@@ -443,10 +459,10 @@ table.data tr.clickable { cursor: pointer; }
   padding: 13px 15px; border-radius: var(--r-md);
   font-size: 0.87rem; border: 1px solid transparent;
 }
-.banner-warn { background: var(--warn-bg); color: #7a4a00; border-color: #f0d7ae; }
-.banner-danger { background: var(--danger-bg); color: #8f2a20; border-color: #f3c9c3; }
-.banner-info { background: var(--info-bg); color: #10456f; border-color: #c2dcf0; }
-.banner-ok { background: var(--ok-bg); color: #10633a; border-color: #b9e8ce; }
+.banner-warn { background: var(--warn-bg); color: var(--banner-warn-fg); border-color: var(--banner-warn-line); }
+.banner-danger { background: var(--danger-bg); color: var(--banner-danger-fg); border-color: var(--banner-danger-line); }
+.banner-info { background: var(--info-bg); color: var(--banner-info-fg); border-color: var(--banner-info-line); }
+.banner-ok { background: var(--ok-bg); color: var(--banner-ok-fg); border-color: var(--banner-ok-line); }
 .banner strong { display: block; margin-bottom: 2px; }
 
 .empty { text-align: center; padding: 42px 20px; color: var(--muted); }
@@ -467,7 +483,7 @@ table.data tr.clickable { cursor: pointer; }
   width: 38px; height: 38px; border-radius: 10px; flex: none;
   display: grid; place-items: center; background: var(--navy-100); color: var(--navy-700);
 }
-.list-item.unread { background: #fcfdff; }
+.list-item.unread { background: var(--unread-bg); }
 .list-item.unread .title { font-weight: 700; }
 
 .progress { height: 7px; border-radius: 999px; background: var(--line); overflow: hidden; }
@@ -494,11 +510,11 @@ table.data tr.clickable { cursor: pointer; }
 .toast-host { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 80; display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); }
 .toast {
   padding: 12px 15px; border-radius: var(--r-md); color: #fff; font-size: 0.87rem; font-weight: 550;
-  background: var(--ink-2); box-shadow: var(--shadow-3);
+  background: var(--toast-bg); box-shadow: var(--shadow-3);
   animation: rise 0.18s ease-out;
 }
-.toast.ok { background: var(--ok); }
-.toast.err { background: var(--danger); }
+.toast.ok { background: var(--ok-strong); }
+.toast.err { background: var(--danger-strong); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .spinner {
@@ -774,7 +790,7 @@ table.data tfoot td { border-top: 2px solid var(--line-2); background: var(--sur
   .reports-layout { display: block; }
 }
 
-.card.attention { border-color: #f3c9c3; }
+.card.attention { border-color: var(--banner-danger-line); }
 table.report-table td { white-space: nowrap; padding: 8px 12px; }
 
 /* Payroll review: what needs a second look on each officer's line. */
@@ -787,7 +803,7 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
 .issue-list li.issue-block::before { background: var(--danger); }
 
 /* Demo sign-in shortcuts, shown only on a self-contained demo deployment. */
-.demo-accounts { display: grid; gap: 6px; padding: 12px; border-radius: var(--r-md); background: var(--info-bg); color: #10456f; }
+.demo-accounts { display: grid; gap: 6px; padding: 12px; border-radius: var(--r-md); background: var(--info-bg); color: var(--banner-info-fg); }
 .demo-accounts .btn { box-sizing: border-box; width: 100%; justify-content: flex-start; gap: 10px; background: var(--surface); font-size: 0.85rem; white-space: normal; text-align: left; }
 .demo-accounts .demo-codes { flex: none; font-weight: 700; }
 .demo-accounts .demo-who { min-width: 0; }
@@ -795,7 +811,7 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
 /* The self-contained demo says so on every page. */
 .demo-strip {
   padding: 6px 16px; text-align: center; font-size: 0.8rem; line-height: 1.4;
-  background: #fdf0df; color: #6b4000; border-bottom: 1px solid #f0d7ae;
+  background: var(--warn-bg); color: var(--banner-warn-fg); border-bottom: 1px solid var(--banner-warn-line);
 }
 body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
 
@@ -872,3 +888,69 @@ body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
 }
 .list.order-requests { margin-top: 8px; border-top: 1px solid var(--line); }
 .list.order-requests > li + li { border-top: 1px solid var(--line); }
+
+/* =============================================================== night mode ==
+   Chosen in the account menu (Auto follows the device). lib/theme.js sets
+   data-theme on <html> before the first paint, so there is no flash of the
+   light theme at night. Navy and brand fills stay as they are; the tokens
+   that are used as text lighten so they still read on the dark surfaces. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --navy-100: #1b2a3f;
+  --navy-600: #8fb8ea;
+  --navy-700: #a9c8ee;
+  --brand-100: #3a1d18;
+  --brand-text: #ff8a73;
+
+  --ink: #e8edf3;
+  --ink-2: #d6dde6;
+  --ink-3: #b6c0cc;
+  --muted: #9aa6b4;
+  --line: #273243;
+  --line-2: #354256;
+  --surface: #121a24;
+  --surface-2: #0b1119;
+  --surface-3: #1a2330;
+
+  --ok: #5fd294;
+  --ok-bg: #11301f;
+  --warn: #f2b660;
+  --warn-bg: #36270e;
+  --danger: #ff8c7c;
+  --danger-bg: #3b1916;
+  --info: #7fbdf3;
+  --info-bg: #122a40;
+  --ok-strong: #1c7d45;
+  --danger-strong: #b3372a;
+  --toast-bg: #2b3645;
+  --unread-bg: #152030;
+  --banner-warn-fg: #f7cf95; --banner-warn-line: #5a4318;
+  --banner-danger-fg: #ffb3a8; --banner-danger-line: #5d2721;
+  --banner-info-fg: #b3d7f7; --banner-info-line: #22476b;
+  --banner-ok-fg: #9fe6bd; --banner-ok-line: #1d5236;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --wash: linear-gradient(115deg, #0c1626 0%, #0b1d17 28%, #1d1a0c 52%, #22110f 76%, #0c1626 100%);
+}
+:root[data-theme='dark'] .btn-navy { background: #16365c; }
+:root[data-theme='dark'] .btn-navy:hover { background: #1d4573; }
+:root[data-theme='dark'] .topbar, :root[data-theme='dark'] .sidebar { background: #060d17; }
+:root[data-theme='dark'] .invoice-company,
+:root[data-theme='dark'] .report-link[aria-current='page'],
+:root[data-theme='dark'] .qs-results li.active { color: var(--ink); }
+/* Street maps stay readable at night: invert the tiles, then turn the hues back. */
+:root[data-theme='dark'] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
+:root[data-theme='dark'] .leaflet-container { background: #0b1119; }
+@media print {
+  /* Paper is white whatever the screen was. */
+  :root[data-theme='dark'] { color-scheme: light; }
+}
+
+/* ----------------------------------------------------- monthly report -- */
+.monthly-kv { grid-template-columns: minmax(180px, auto) 1fr; }
+@media print {
+  .monthly-report .card { break-inside: avoid; }
+  .monthly-report .grid-4 { grid-template-columns: repeat(4, 1fr); }
+}

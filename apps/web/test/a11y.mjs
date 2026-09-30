@@ -82,6 +82,7 @@ const PORTAL_PAGES = [
   ['Portal invoices', '/portal/invoices'],
   ['Portal coverage requests', '/portal/requests'],
   ['Portal post orders', '/portal/orders'],
+  ['Portal monthly report', '/portal/monthly'],
 ];
 
 let failures = 0;
@@ -124,7 +125,7 @@ async function launch() {
  * client's and is not ours to change on a test's say-so. Everything else -
  * a missing label, an unnamed control, a bad role - is a defect.
  */
-async function audit(page, label, path) {
+async function audit(page, label, path, { strictContrast = false } = {}) {
   if (path !== null) {
     await page.goto(`${WEB}${path}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(400); // let a data fetch settle
@@ -135,7 +136,7 @@ async function audit(page, label, path) {
     .analyze();
 
   audited += 1;
-  const serious = results.violations.filter((v) => v.id !== 'color-contrast');
+  const serious = results.violations.filter((v) => strictContrast || v.id !== 'color-contrast');
   const contrast = results.violations.filter((v) => v.id === 'color-contrast');
 
   log(
@@ -249,6 +250,41 @@ await page.click('button[type="submit"]');
 await page.waitForTimeout(1200);
 
 for (const [label, path] of PORTAL_PAGES) await audit(page, label, path);
+
+// --- night mode ------------------------------------------------------------
+// The dark palette is ours, not the client's brand, so here colour contrast
+// is held to the same line as everything else: a failure fails the run.
+console.log('\n--- night mode (contrast enforced) ---');
+const night = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'dark' });
+const nightPage = await night.newPage();
+await nightPage.goto(`${WEB}/portal`, { waitUntil: 'networkidle' });
+await nightPage.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+await nightPage.fill('input[type="password"]', 'riverfront-portal-01');
+await nightPage.click('button[type="submit"]');
+await nightPage.waitForTimeout(1200);
+const theme = await nightPage.evaluate(() => document.documentElement.dataset.theme);
+log(theme === 'dark', 'a device set to dark opens in night mode', theme);
+for (const [label, path] of [['Portal overview', '/portal'], ['Portal monthly report', '/portal/monthly'], ['Portal post orders', '/portal/orders']]) {
+  await audit(nightPage, `Night: ${label}`, path, { strictContrast: true });
+}
+await nightPage.evaluate(() => localStorage.clear());
+await nightPage.goto(WEB, { waitUntil: 'networkidle' });
+await nightPage.fill('#employeeCode', '1002');
+await nightPage.click('button[type="submit"]');
+await nightPage.waitForSelector('.keypad', { timeout: 10000 });
+for (const digit of '3571') await nightPage.keyboard.press(digit);
+await nightPage.click('button:text-is("Sign in")');
+await nightPage.waitForTimeout(1500);
+for (const [label, path] of [
+  ['Dashboard', '/admin'], ['Post orders', '/admin/post-logs?tab=orders'], ['Schedule', '/admin/schedule'],
+  ['Flags', '/admin/flags'], ['Reports', '/admin/reports'], ['Client feedback', '/admin/feedback'],
+]) {
+  await audit(nightPage, `Night: ${label}`, path, { strictContrast: true });
+}
+await nightPage.click('.bell-btn');
+await nightPage.waitForSelector('.alerts-list');
+await audit(nightPage, 'Night: Alerts inbox', null, { strictContrast: true });
+await night.close();
 
 await browser.close();
 

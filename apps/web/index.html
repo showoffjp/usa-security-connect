@@ -8,6 +8,16 @@
     <title>USA Security Connect</title>
     <link rel="icon" href="/shield.svg" type="image/svg+xml" />
     <script>
+      // Night mode before the first paint, so a dark screen never flashes
+      // white. The same rule as src/lib/theme.js.
+      (function () {
+        var pref = 'auto';
+        try { pref = localStorage.getItem('usc.theme') || 'auto'; } catch (e) {}
+        var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      })();
+    </script>
+    <script>
       // If the app's stylesheet fails to load on a flaky connection, fetch it
       // again rather than leave an unstyled page. Error events do not bubble,
       // so this listens in the capture phase.

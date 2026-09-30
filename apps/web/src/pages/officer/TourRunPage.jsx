@@ -155,7 +155,7 @@ function CheckpointSheet({ checkpoint, runId, onUpdated, onClose }) {
                     <button
                       className="icon-btn"
                       style={{
-                        background: t.status === 'done' ? 'var(--ok)' : 'var(--surface-3)',
+                        background: t.status === 'done' ? 'var(--ok-strong)' : 'var(--surface-3)',
                         color: t.status === 'done' ? '#fff' : 'var(--muted)',
                         width: 26, height: 26, borderRadius: 999, flex: 'none',
                       }}

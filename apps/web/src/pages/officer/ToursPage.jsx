@@ -53,7 +53,7 @@ export default function ToursPage() {
 
       {data.activeRun && (
         <button className="card card-pad row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', borderColor: 'var(--brand-400)' }} onClick={() => navigate(`/tours/${data.activeRun.id}`)}>
-          <div className="lead-icon" style={{ background: 'var(--brand-100)', color: 'var(--brand-600)' }}>
+          <div className="lead-icon" style={{ background: 'var(--brand-100)', color: 'var(--brand-text)' }}>
             <Icon name="route" size={19} />
           </div>
           <div className="grow">
