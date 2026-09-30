@@ -912,6 +912,11 @@ ALTER TABLE client_users ADD COLUMN IF NOT EXISTS notify_daily_report boolean NO
 -- review that keeps it serious does not tell them twice.
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS client_notified_at timestamptz;
 
+-- What the client reads about a supervisor's visit. The visit's own notes are
+-- about the officer (coaching, a missing patch) and stay with us.
+ALTER TABLE supervisor_visits ADD COLUMN IF NOT EXISTS client_note text;
+CREATE INDEX IF NOT EXISTS idx_supervisor_visits_site ON supervisor_visits(site_id, visited_at);
+
 -- What is being done about an incident: a corrective action with an owner
 -- and a due date. The client sees the ones marked client-visible, without
 -- who owns them.
@@ -931,6 +936,10 @@ CREATE TABLE IF NOT EXISTS incident_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_incident_actions_incident ON incident_actions(incident_id);
 CREATE INDEX IF NOT EXISTS idx_incident_actions_open ON incident_actions(status, due_on);
+
+-- Set when the client was told a shared follow-up was done, so reopening and
+-- closing it again does not email them twice.
+ALTER TABLE incident_actions ADD COLUMN IF NOT EXISTS client_notified_at timestamptz;
 
 -- One daily report email per contact, site and day, however often the sweep runs.
 CREATE TABLE IF NOT EXISTS client_digests (

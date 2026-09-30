@@ -189,6 +189,19 @@ export const INCIDENT_CATEGORIES = [
   'Other',
 ];
 
+/**
+ * What a field supervisor checks on a post visit. Stored as one boolean column
+ * each on supervisor_visits, so the keys are the column names.
+ */
+export const VISIT_CHECKS = [
+  { key: 'uniform_ok', label: 'Uniform and appearance' },
+  { key: 'post_orders_reviewed', label: 'Post orders reviewed with the officer' },
+  { key: 'equipment_ok', label: 'Equipment present and working' },
+  { key: 'site_secure', label: 'Site secure' },
+];
+/** A site with no supervisor visit for this long is due one. */
+export const VISIT_DUE_DAYS = 14;
+
 export const INCIDENT_SEVERITY = ['low', 'medium', 'high', 'critical'];
 export const INCIDENT_STATUS = ['submitted', 'under_review', 'closed'];
 

@@ -115,6 +115,7 @@ const GO_TO = [
   ['t', '/admin/timesheets', 'Timesheets & pay'],
   ['r', '/admin/reports', 'Reports'],
   ['h', '/admin/site-health', 'Site health'],
+  ['v', '/admin/visits', 'Field visits'],
   ['c', '/admin/clients', 'Client portal'],
 ];
 
@@ -293,6 +294,7 @@ export function AdminShell() {
         { to: '/admin/flags', icon: 'flag', label: 'Flags', count: counts.openFlags },
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
         { to: '/admin/tours', icon: 'route', label: 'Tours' },
+        { to: '/admin/visits', icon: 'pin', label: 'Field visits', count: counts.visitsDue },
         { to: '/admin/equipment', icon: 'clipboard', label: 'Keys & equipment', count: counts.equipmentOut },
         { to: '/admin/post-logs', icon: 'users', label: 'Post logs', count: counts.visitorsOnSite },
       ],

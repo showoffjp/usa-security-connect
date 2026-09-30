@@ -8,7 +8,7 @@ import { INCIDENT_CATEGORIES, INCIDENT_SEVERITY, ROLES, atLeast } from '../share
 import { toSql } from '../services/compliance.js';
 import * as storage from '../services/storage.js';
 import { generateFilename } from '../services/storage.js';
-import { notifySeriousIncident } from '../services/clientNotify.js';
+import { notifySeriousIncident, notifyFollowUpDone } from '../services/clientNotify.js';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(requireAuth);
@@ -305,6 +305,7 @@ incidentsRouter.patch(
       await db.prepare(`UPDATE incident_actions SET status = 'open', done_note = NULL, done_at = NULL, done_by = NULL WHERE id = ?`).run(action.id);
     }
     await audit(req.user.id, `incident_action.${body.status === 'done' ? 'done' : 'reopened'}`, 'incident_action', action.id, null, req.ip);
+    if (body.status === 'done') await notifyFollowUpDone(action.id);
     res.json({ actions: await actionsFor(action.incident_id) });
   })
 );
@@ -397,84 +398,5 @@ incidentsRouter.patch(
     // Raised to serious on review: the client hears about it now, once.
     await notifySeriousIncident(incident.id).catch((err) => console.error('[usc] incident alert failed', err.message));
     res.json({ incident: isoFields((await db.prepare(`SELECT * FROM incidents WHERE id = ?`).get(incident.id)), TIMES) });
-  })
-);
-
-/* -------------------------------------------------- supervisor visits --- */
-
-export const visitsRouter = Router();
-visitsRouter.use(requireAuth);
-
-const visitSchema = z.object({
-  officerId: z.number().int().positive().optional(),
-  siteId: z.number().int().positive().optional(),
-  postId: z.number().int().positive().optional(),
-  visitedAt: z.string().optional(),
-  uniformOk: z.boolean().optional(),
-  postOrdersReviewed: z.boolean().optional(),
-  equipmentOk: z.boolean().optional(),
-  siteSecure: z.boolean().optional(),
-  rating: z.number().int().min(1).max(5).optional(),
-  notes: z.string().max(3000).optional(),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
-});
-
-visitsRouter.post(
-  '/',
-  requireRole(ROLES.SUPERVISOR),
-  wrap(async (req, res) => {
-    const body = parse(visitSchema, req.body);
-    const bit = (v) => (v == null ? null : v ? 1 : 0);
-
-    const info = (await db
-      .prepare(
-        `INSERT INTO supervisor_visits
-         (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok,
-          post_orders_reviewed, equipment_ok, site_secure, rating, notes, latitude, longitude)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      )
-      .run(
-        req.user.id,
-        body.officerId ?? null,
-        body.siteId ?? null,
-        body.postId ?? null,
-        toSql(body.visitedAt ? new Date(body.visitedAt) : new Date()),
-        bit(body.uniformOk),
-        bit(body.postOrdersReviewed),
-        bit(body.equipmentOk),
-        bit(body.siteSecure),
-        body.rating ?? null,
-        body.notes ?? null,
-        body.latitude ?? null,
-        body.longitude ?? null
-      ));
-
-    await audit(req.user.id, 'visit.logged', 'supervisor_visit', Number(info.lastInsertRowid), null, req.ip);
-    res.status(201).json({ visit: (await db.prepare(`SELECT * FROM supervisor_visits WHERE id = ?`).get(info.lastInsertRowid)) });
-  })
-);
-
-visitsRouter.get(
-  '/',
-  wrap(async (req, res) => {
-    const limit = limitParam(req.query.limit, 50, 200);
-    const supervisorOnly = !atLeast(req.user.role, ROLES.ADMIN);
-    const rows = (await db
-      .prepare(
-        `SELECT v.*, s.name AS site_name, p.name AS post_name,
-                sup.first_name || ' ' || sup.last_name AS supervisor_name,
-                o.first_name || ' ' || o.last_name AS officer_name
-         FROM supervisor_visits v
-         LEFT JOIN sites s ON s.id = v.site_id
-         LEFT JOIN posts p ON p.id = v.post_id
-         JOIN users sup ON sup.id = v.supervisor_id
-         LEFT JOIN users o ON o.id = v.officer_id
-         ${supervisorOnly ? 'WHERE v.supervisor_id = ? OR v.officer_id = ?' : ''}
-         ORDER BY v.visited_at DESC LIMIT ?`
-      )
-      .all(...(supervisorOnly ? [req.user.id, req.user.id] : []), limit));
-
-    res.json({ visits: rows.map((r) => isoFields(r, ['visited_at', 'created_at'])) });
   })
 );

@@ -317,6 +317,14 @@ const doneRow = closed.data.actions.find((a) => a.id === latch.id);
 log(closed.status === 200 && doneRow.status === 'done' && !doneRow.overdue && doneRow.done_by_name === 'Renata Diaz' && doneRow.done_at,
   'a supervisor marks it done, with who and when');
 log(!(await call('/admin/alerts', { token: supervisor })).data.alerts.some((a) => a.key.startsWith(`followup:${latch.id}:`)), 'and it leaves the alerts inbox');
+const updates = async () => ((await call('/admin/emails?limit=300', { token: admin })).data.emails || [])
+  .filter((e) => e.kind === 'incident_update' && e.subject.includes('Replace the broken gate latch'));
+const sentUpdate = await updates();
+log(sentUpdate.some((e) => /rpike@/.test(e.to_email)), 'the client is emailed that a shared follow-up is done',
+  sentUpdate.map((e) => e.to_email).join(', '));
+const updateBody = (await call(`/admin/emails/${sentUpdate[0]?.id}`, { token: admin })).data.email?.body || '';
+log(/now done/.test(updateBody) && !/property manager on Tuesday/.test(updateBody) && !/Renata/.test(updateBody),
+  'without our note on how it was done or who did it');
 
 const incidentRef = incDetail.data.incident.ref_number;
 const clientList = (await call('/client/incidents', { token: pensacola })).data;
@@ -336,6 +344,9 @@ const reRow = reopened.data.actions.find((a) => a.id === latch.id);
 log(reopened.status === 200 && reRow.status === 'open' && reRow.done_note === null && reRow.overdue, 'reopening clears the note and it is overdue again');
 await markDone(latch.id, { status: 'done', note: 'Latch replaced by the property manager on Tuesday.' });
 await markDone(hr.id, { status: 'done', note: 'Reviewed with HR, no further action.' });
+log((await updates()).length === sentUpdate.length, 'closing it again after a reopen does not email twice');
+const hrMail = ((await call('/admin/emails?limit=300', { token: admin })).data.emails || []).filter((e) => e.subject.includes('officer statement'));
+log(hrMail.length === 0, 'and an internal follow-up is never emailed');
 
 /* ======================================================= incident reports === */
 section('incident reports');

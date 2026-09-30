@@ -76,6 +76,9 @@ const STAFF_PAGES = [
   ['Incident follow-ups', '/admin/incidents?tab=follow-ups'],
   ['Report: incidents by site', '/admin/reports?report=incidents-by-site'],
   ['Report: incidents by day', '/admin/reports?report=incidents-daily'],
+  ['Field visits', '/admin/visits'],
+  ['Field visits: problems', '/admin/visits?issues=1'],
+  ['Report: supervisor visits', '/admin/reports?report=visits-by-site'],
 ];
 
 const PORTAL_PAGES = [
@@ -293,6 +296,7 @@ await nightPage.waitForTimeout(1500);
 for (const [label, path] of [
   ['Dashboard', '/admin'], ['Post orders', '/admin/post-logs?tab=orders'], ['Schedule', '/admin/schedule'],
   ['Flags', '/admin/flags'], ['Reports', '/admin/reports'], ['Client feedback', '/admin/feedback'],
+  ['Field visits', '/admin/visits'],
 ]) {
   await audit(nightPage, `Night: ${label}`, path, { strictContrast: true });
 }

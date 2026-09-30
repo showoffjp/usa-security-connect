@@ -8,7 +8,7 @@ import {
   Icon, Banner, Chip, StatusChip, Modal, Field, SlideToAction,
   LoadingPage, useToast, Empty,
 } from '../../components/ui.jsx';
-import { formatDuration, toHours, expiryState } from '@shared/domain.js';
+import { formatDuration, toHours, expiryState, VISIT_CHECKS } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
@@ -55,6 +55,56 @@ function ExpiryReminder({ user }) {
       </ul>
       <Link to="/profile">Your record</Link> · speak to the office about renewal.
     </Banner>
+  );
+}
+
+/* ----------------------------------------------------- last visit -- */
+
+/**
+ * The officer's latest supervisor visit, for a week after it: how it went,
+ * what was checked, and what the supervisor said. The client reads only
+ * the supervisor's note for them, never this.
+ */
+function LastVisitCard() {
+  const [visit, setVisit] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.get('/visits?days=7&limit=1').then(
+      (d) => alive && setVisit(d.visits?.[0] || null),
+      () => {}
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!visit) return null;
+  const checks = VISIT_CHECKS.filter((c) => visit[c.key] != null);
+  return (
+    <section className="card" aria-labelledby="last-visit-title">
+      <div className="card-head">
+        <div className="row">
+          <Icon name="pin" size={18} style={{ color: 'var(--brand-text)' }} />
+          <h3 id="last-visit-title">Your last supervisor visit</h3>
+        </div>
+        {visit.rating != null && <Chip kind={visit.rating <= 2 ? 'danger' : visit.rating >= 4 ? 'ok' : ''}>Rated {visit.rating} of 5</Chip>}
+      </div>
+      <div className="card-body stack-sm">
+        <div className="small muted">
+          {visit.supervisor_name} · {fmtRelative(visit.visited_at)}
+          {visit.post_name ? ` · ${visit.post_name}` : ''}
+        </div>
+        {checks.length > 0 && (
+          <ul className="visit-check-list">
+            {checks.map((c) => (
+              <li key={c.key} className={visit[c.key] ? 'ok' : 'bad'}>
+                <Icon name={visit[c.key] ? 'check' : 'x'} size={14} /> {c.label}
+              </li>
+            ))}
+          </ul>
+        )}
+        {visit.notes && <p className="small" style={{ margin: 0 }}>{visit.notes}</p>}
+      </div>
+    </section>
   );
 }
 
@@ -667,6 +717,7 @@ export default function HomePage() {
 
       <PostLogCard onDuty={onDuty} />
       <SiteContactsCard onDuty={onDuty} />
+      <LastVisitCard />
 
       {/* --------------------------------------------------- this week -- */}
       <div className="grid grid-3">

@@ -1462,7 +1462,7 @@ export function PortalReport({ sites }) {
                     <li key={i} className="list-item">
                       <div className="grow">
                         <div className="strong">{v.post_name || 'Site visit'}</div>
-                        {v.notes && <div className="small muted">{v.notes}</div>}
+                        {v.note && <div className="small muted">{v.note}</div>}
                       </div>
                       <div className="nowrap small muted">{fmtTime(v.visited_at)}</div>
                     </li>

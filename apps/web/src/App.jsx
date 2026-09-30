@@ -27,6 +27,7 @@ import SitesPage from './pages/admin/SitesPage.jsx';
 import AdminToursPage from './pages/admin/ToursPage.jsx';
 import TourTagsPage from './pages/admin/TourTagsPage.jsx';
 import SiteHealthPage, { SiteMonthPage } from './pages/admin/SiteHealthPage.jsx';
+import VisitsPage from './pages/admin/VisitsPage.jsx';
 import BroadcastsPage from './pages/admin/BroadcastsPage.jsx';
 import AdminTrainingPage from './pages/admin/TrainingPage.jsx';
 import AuditPage from './pages/admin/AuditPage.jsx';
@@ -124,6 +125,7 @@ export default function App() {
         <Route path="tours" element={<AdminToursPage />} />
         <Route path="tours/:id/tags" element={<TourTagsPage />} />
         <Route path="site-health" element={<SiteHealthPage />} />
+        <Route path="visits" element={<VisitsPage />} />
         <Route path="site-health/:id" element={<SiteMonthPage />} />
         <Route path="broadcasts" element={<BroadcastsPage />} />
         <Route path="training" element={<AdminTrainingPage />} />

@@ -657,12 +657,13 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   (await db.prepare(
     `INSERT INTO supervisor_visits
      (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok, post_orders_reviewed,
-      equipment_ok, site_secure, rating, notes, latitude, longitude)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      equipment_ok, site_secure, rating, notes, client_note, latitude, longitude)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     users.supervisor, users.marcus, siteIds.riverfront, postIds.riverfrontLobby,
     toSql(at(-2, 11, 30)), 1, 1, 1, 1, 5,
     'Post in good order. Visitor log current and legible. Reviewed the storm annex with the officer.',
+    'Supervisor visit to the lobby. Visitor log current; hurricane procedures reviewed with the officer.',
     30.3196, -81.6795
   ));
 
@@ -1049,32 +1050,40 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
 
   const VISITS = [
     { officer: users.marcus, site: 'riverfront', post: 'riverfrontLobby', days: -2, hour: 10, rating: 5,
-      notes: 'Lobby presentable, visitor log current, uniform correct. Marcus raised the camera 6 fault again - chased with building management.' },
+      notes: 'Lobby presentable, visitor log current, uniform correct. Marcus raised the camera 6 fault again - chased with building management.',
+      clientNote: 'Lobby visited. The camera 6 fault has been chased with building management.' },
     { officer: users.janelle, site: 'palmetto', post: 'palmettoGate', days: -4, hour: 20, rating: 4,
-      notes: 'Gate log up to date. Reminded Janelle to record contractor plates in full rather than the last three digits.' },
+      notes: 'Gate log up to date. Reminded Janelle to record contractor plates in full rather than the last three digits.',
+      clientNote: 'Gate visited in the evening. Gate log up to date.' },
     { officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', days: -6, hour: 3, rating: 5,
-      notes: 'Weapon check logged correctly at shift start. Seal procedure being followed to the letter since the bulletin.' },
-    { officer: users.alicia, site: 'coral', post: 'coralRetail', days: -9, hour: 15, rating: 4,
-      notes: 'Good rapport with store managers. Radio left in the back office for part of the round - corrected on the spot.' },
+      notes: 'Weapon check logged correctly at shift start. Seal procedure being followed to the letter since the bulletin.',
+      clientNote: 'Overnight yard visit. Seal procedure followed.' },
+    { officer: users.alicia, site: 'coral', post: 'coralRetail', days: -17, hour: 15, rating: 4,
+      notes: 'Good rapport with store managers. Radio left in the back office for part of the round - corrected on the spot.',
+      clientNote: 'Supervisor visit to the retail floor. No concerns.' },
     { officer: users.marcus, site: 'riverfront', post: 'riverfrontPatrol', days: -12, hour: 23, rating: 5,
-      notes: 'Exterior round walked properly, not driven. Deck 3 lighting fault noted and reported.' },
-    { officer: users.janelle, site: 'palmetto', post: 'palmettoGate', days: -15, hour: 21, rating: 3,
-      notes: 'Arrived to find the gatehouse door propped for airflow. Explained why it cannot be left open. Otherwise post in order.' },
+      notes: 'Exterior round walked properly, not driven. Deck 3 lighting fault noted and reported.',
+      clientNote: 'Night exterior round checked. A lighting fault on deck 3 has been reported.' },
+    { officer: users.janelle, site: 'palmetto', post: 'palmettoGate', days: -15, hour: 21, rating: 3, insecure: true,
+      notes: 'Arrived to find the gatehouse door propped for airflow. Explained why it cannot be left open. Otherwise post in order.',
+      clientNote: 'Evening gate visit. The gatehouse door was found propped open and closed on the spot.' },
     { officer: users.dwayne, site: 'gulfport', post: 'gulfportYard', days: -18, hour: 2, rating: 5,
-      notes: 'Full perimeter walked in poor weather without prompting. Post orders reviewed together.' },
+      notes: 'Full perimeter walked in poor weather without prompting. Post orders reviewed together.',
+      clientNote: 'Overnight perimeter check. No concerns.' },
     { officer: users.alicia, site: 'coral', post: 'coralRetail', days: -23, hour: 17, rating: 4,
-      notes: 'Handled a difficult customer interaction well while I was present. Uniform shirt needs replacing - ordered.' },
+      notes: 'Handled a difficult customer interaction well while I was present. Uniform shirt needs replacing - ordered.',
+      clientNote: 'Supervisor visit to the retail floor. No concerns.' },
   ];
 
   for (const v of VISITS) {
     await db.prepare(
       `INSERT INTO supervisor_visits
        (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok, post_orders_reviewed,
-        equipment_ok, site_secure, rating, notes, latitude, longitude)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        equipment_ok, site_secure, rating, notes, client_note, latitude, longitude)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       users.supervisor, v.officer, siteIds[v.site], postIds[v.post], toSql(at(v.days, v.hour, 20)),
-      v.rating >= 4 ? 1 : 0, 1, v.rating >= 4 ? 1 : 0, 1, v.rating, v.notes, null, null
+      v.rating >= 4 || v.insecure ? 1 : 0, 1, v.rating >= 4 || v.insecure ? 1 : 0, v.insecure ? 0 : 1, v.rating, v.notes, v.clientNote, null, null
     );
   }
 

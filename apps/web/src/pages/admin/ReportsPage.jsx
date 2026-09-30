@@ -48,6 +48,8 @@ export function formatCell(value, type) {
       return `${value}%`;
     case 'int':
       return Number(value).toLocaleString();
+    case 'decimal':
+      return Number(value).toFixed(1);
     case 'date':
       return fmtDateShort(value);
     case 'datetime':
@@ -57,7 +59,7 @@ export function formatCell(value, type) {
   }
 }
 
-const numeric = (type) => ['money', 'rate', 'hours', 'percent', 'int'].includes(type);
+const numeric = (type) => ['money', 'rate', 'hours', 'percent', 'int', 'decimal'].includes(type);
 
 /* --------------------------------------------------------------- page -- */
 
