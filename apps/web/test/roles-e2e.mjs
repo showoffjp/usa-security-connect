@@ -683,6 +683,64 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* ------------------------------------------ round 10: incident follow-ups --- */
+{
+  console.log('\n--- Incident follow-ups and incident reports ---');
+  const client = await watchedPage({ width: 1280, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'rpike@emeraldcoastlogistics.com');
+  await client.page.fill('input[type="password"]', 'pensacola-portal-05');
+  await client.page.click('button[type="submit"]');
+  await settle(client.page);
+  await client.page.goto(WEB + '/portal/incidents');
+  await settle(client.page);
+  const ref = (await client.page.locator('table.data tbody tr td.mono, .list .mono').first().innerText()).trim();
+  log(/^USC-/.test(ref), "the client's incident list has a report to follow up", ref);
+
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await staff.page.goto(WEB + '/admin/incidents?tab=follow-ups');
+  await settle(staff.page);
+  log(await staff.page.locator('.follow-ups li.list-item').count() >= 1, 'a supervisor sees the open follow-ups across incidents');
+  await checkScreen('supervisor: follow-ups', staff.page, staff.problems);
+
+  const task = `E2E follow-up ${Date.now() % 100000}: meet the property manager`;
+  await staff.page.goto(WEB + '/admin/incidents');
+  await settle(staff.page);
+  await staff.page.fill('input[aria-label="Search incidents"]', ref);
+  await staff.page.waitForTimeout(1000);
+  await staff.page.locator('tr.clickable', { hasText: ref }).first().click();
+  await staff.page.waitForSelector('#followups-title', { timeout: 10000 });
+  await staff.page.getByLabel('What needs doing').fill(task);
+  await staff.page.click('button:has-text("Add follow-up")');
+  const item = staff.page.locator('.follow-ups li.list-item', { hasText: task });
+  await item.waitFor({ timeout: 10000 });
+  log(await item.count() === 1, 'a supervisor adds a follow-up to the incident');
+  await checkScreen('supervisor: incident with follow-ups', staff.page, staff.problems);
+  await item.locator('button:has-text("Mark done")').click();
+  await staff.page.getByLabel('What was done').fill('Met on site; fence panel ordered.');
+  await staff.page.click('.modal-foot button:text-is("Mark done")');
+  await staff.page.waitForTimeout(1200);
+  log(await staff.page.locator('.follow-ups li.list-item', { hasText: task }).locator('text=Done').count() >= 1, 'and marks it done with what was done');
+
+  await client.page.reload();
+  await settle(client.page);
+  const row = client.page.locator('tr, li.list-item', { hasText: ref }).first();
+  await row.locator('button:has-text("Read")').click();
+  await client.page.waitForSelector('.client-actions', { timeout: 10000 });
+  log(await client.page.locator('.client-actions li', { hasText: task }).count() === 1, 'the client reads what was done about their incident');
+  log(await client.page.locator('[role="dialog"]').getByText('Met on site; fence panel ordered.').count() === 0, 'but not the internal note');
+  await checkScreen('client: incident follow-ups', client.page, client.problems);
+
+  await staff.page.goto(WEB + '/admin/reports?report=incidents-by-site');
+  await settle(staff.page);
+  await staff.page.waitForSelector('table.data tbody tr', { timeout: 10000 });
+  log(await staff.page.locator('table.data tbody tr').count() >= 1, 'a manager runs the incidents by site report');
+  await checkScreen('supervisor: incidents by site', staff.page, staff.problems);
+  await staff.context.close();
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

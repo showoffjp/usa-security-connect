@@ -485,10 +485,43 @@ export async function seedPostLog({ db }) {
     orderRequests++;
   }
 
+  // Follow-ups on the month's serious incidents: one overdue, one done, one coming up.
+  let followUps = 0;
+  const seriousIncidents = await db
+    .prepare(`SELECT id, site_id, occurred_at FROM incidents WHERE severity IN ('high', 'critical') ORDER BY occurred_at DESC LIMIT 3`)
+    .all();
+  const day = (offset) => {
+    const d = new Date(now.getTime() + offset * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const plans = [
+    [
+      ['Get the damaged fence panel repaired with the property manager', -3, null, true],
+      ['Review the CCTV footage with the responding officers', -6, 'Footage copied to USB and handed to JSO; case number on the incident.', true],
+    ],
+    [
+      ['Refresher on detaining shoplifters for the retail floor officers', 5, null, false],
+      ['Ask the client about adding a camera at the stockroom door', 9, null, true],
+    ],
+    [['Check the lighting on the east side after dark for a week', 2, null, true]],
+  ];
+  for (const [i, inc] of seriousIncidents.entries()) {
+    for (const [title, dueOffset, doneNote, visible] of plans[i] || []) {
+      await db
+        .prepare(
+          `INSERT INTO incident_actions (incident_id, title, owner_id, due_on, status, client_visible, done_note, done_at, done_by, created_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run(inc.id, title, sup.id, day(dueOffset), doneNote ? 'done' : 'open', visible, doneNote,
+          doneNote ? toSql(new Date(now.getTime() + (dueOffset - 1) * 86400000)) : null, doneNote ? sup.id : null, sup.id);
+      followUps++;
+    }
+  }
+
   // The incidents seeded above are history: their clients were told at the time.
   await db.prepare(`UPDATE incidents SET client_notified_at = occurred_at WHERE severity IN ('high', 'critical')`).run();
   // One contact takes the daily report email, so the morning sweep has someone to send it to.
   await db.prepare(`UPDATE client_users SET notify_daily_report = true WHERE email = ?`).run('dana.whitfield@riverfrontholdings.com');
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests };
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps };
 }

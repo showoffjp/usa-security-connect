@@ -2245,6 +2245,20 @@ async function buildAlerts(userId) {
       title: `Tour not finished: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}, ${r.status === 'abandoned' ? 'abandoned' : 'still open after 4 hours'}` });
   }
 
+  // A follow-up on an incident that has gone past its due date.
+  for (const a of await db
+    .prepare(
+      `SELECT a.id, a.title, a.due_on, i.ref_number, s.name AS site_name, o.first_name || ' ' || o.last_name AS owner
+       FROM incident_actions a JOIN incidents i ON i.id = a.incident_id LEFT JOIN sites s ON s.id = i.site_id
+       LEFT JOIN users o ON o.id = a.owner_id
+       WHERE a.status = 'open' AND a.due_on < current_date ORDER BY a.due_on LIMIT 25`
+    )
+    .all()) {
+    push({ key: `followup:${a.id}:${String(a.due_on).slice(0, 10)}`, kind: 'followup', severity: 'warning', at: a.due_on,
+      link: '/admin/incidents?tab=follow-ups',
+      title: `Follow-up overdue: ${a.title}`, detail: `${a.ref_number}${a.site_name ? `, ${a.site_name}` : ''}${a.owner ? ` · ${a.owner}` : ''}` });
+  }
+
   // A client asking to change a post's orders.
   for (const r of await db
     .prepare(

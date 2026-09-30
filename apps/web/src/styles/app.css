@@ -975,3 +975,10 @@ kbd {
 
 .expiry-list { margin: 4px 0 6px; padding-left: 18px; }
 .email-settings legend { text-transform: none; letter-spacing: normal; color: var(--ink); font-size: 0.85rem; font-weight: 700; }
+
+/* --------------------------------------------------------- follow-ups -- */
+.follow-ups .lead-icon.fu-done { background: var(--ok-bg); color: var(--ok); }
+.follow-ups .lead-icon.fu-overdue { background: var(--danger-bg); color: var(--danger); }
+.client-actions { margin: 4px 0 0; padding-left: 18px; }
+.client-actions li { margin: 4px 0; }
+.client-actions .done { text-decoration: line-through; color: var(--muted); }

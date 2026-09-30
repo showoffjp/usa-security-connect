@@ -11,7 +11,7 @@
  * and nothing else.
  */
 
-import { call, log, section, signIn, finish } from './harness.mjs';
+import { BASE, call, log, section, signIn, finish } from './harness.mjs';
 
 const supervisor = await signIn('1002', '3571');
 const admin = await signIn('1001', '2468');
@@ -251,4 +251,117 @@ const inboxAfter = await call('/admin/alerts', { token: supervisor });
 log(!inboxAfter.data.alerts.some((a) => a.key === `order-request:${askedRow.id}` || a.key === `order-request:${lights.id}`),
   'answered requests leave the alerts inbox');
 
-finish('Post orders, alerts and QR tags');
+/* ============================================================= follow-ups === */
+section('incident follow-ups');
+
+const fuBoard = await call('/incidents/follow-ups?show=all', { token: supervisor });
+log(fuBoard.status === 200 && fuBoard.data.actions.length >= 5, 'supervisors see every follow-up across incidents', `${fuBoard.data.actions?.length}`);
+log(fuBoard.data.actions.some((a) => a.overdue) && fuBoard.data.actions.some((a) => a.status === 'done'), 'with overdue and done ones among them');
+log((await call('/incidents/follow-ups', { token: marcus })).status === 403, 'officers do not see the follow-up board');
+const openOnly = await call('/incidents/follow-ups', { token: supervisor });
+log(openOnly.data.actions.every((a) => a.status === 'open') && openOnly.data.counts.open === openOnly.data.actions.length,
+  'the default list is the open ones, and the count matches');
+const overdueOnly = await call('/incidents/follow-ups?show=overdue', { token: supervisor });
+log(overdueOnly.data.actions.length === overdueOnly.data.counts.overdue && overdueOnly.data.actions.every((a) => a.overdue),
+  'the overdue filter lists exactly the overdue ones');
+
+// Work on an incident at the Pensacola client's property, so the client side can be checked too.
+const pensacolaRefs = new Set(((await call('/client/incidents', { token: pensacola })).data.incidents || []).map((i) => i.ref_number));
+const target = fuBoard.data.actions.find((a) => pensacolaRefs.has(a.ref_number)) || fuBoard.data.actions[0];
+const incidentId = target.incident_id;
+const staff = (await call('/admin/employees', { token: admin })).data.employees;
+const renata = staff.find((e) => e.employee_code === '1002');
+const officerRow = staff.find((e) => e.employee_code === '1003');
+const addAction = (body, token = supervisor, id = incidentId) => call(`/incidents/${id}/actions`, { token, method: 'POST', body });
+log((await addAction({ title: 'Fix' })).status === 422, 'a follow-up has to say what needs doing');
+log((await addAction({ title: 'Replace the broken gate latch', ownerId: officerRow.id })).status === 422, 'an officer cannot own one');
+log((await addAction({ title: 'Replace the broken gate latch', dueOn: 'next week' })).status === 422, 'the due date has to be a date');
+log((await addAction({ title: 'Replace the broken gate latch' }, marcus)).status === 403, 'officers cannot add them');
+log((await addAction({ title: 'Replace the broken gate latch' }, supervisor, 'abc')).status === 422, 'a junk incident id is refused');
+log((await addAction({ title: 'Replace the broken gate latch' }, supervisor, 999999)).status === 404, 'and an unknown one is not found');
+const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+const created = await addAction({ title: 'Replace the broken gate latch', ownerId: renata.id, dueOn: yesterday, clientVisible: true });
+const latch = created.data.actions?.find((a) => a.title === 'Replace the broken gate latch');
+log(created.status === 201 && latch?.owner_name === 'Renata Diaz' && latch.due_on === yesterday && latch.overdue,
+  'a supervisor adds one with an owner and a due date', latch?.due_on);
+const secret = await addAction({ title: 'Review the officer statement with HR', clientVisible: false });
+const hr = secret.data.actions.find((a) => a.title === 'Review the officer statement with HR');
+log(secret.status === 201 && hr.client_visible === false && hr.owner_name === null, 'an internal one, with nobody yet');
+
+const mineNow = await call('/incidents/follow-ups?show=mine', { token: supervisor });
+log(mineNow.data.actions.some((a) => a.id === latch.id) && mineNow.data.actions.every((a) => a.owner_id === renata.id),
+  "'mine' lists the caller's own");
+const inboxFu = await call('/admin/alerts', { token: supervisor });
+log(inboxFu.data.alerts.some((a) => a.key === `followup:${latch.id}:${yesterday}` && a.kind === 'followup'), 'an overdue follow-up is in the alerts inbox');
+
+const incDetail = await call(`/incidents/${incidentId}`, { token: supervisor });
+log(incDetail.data.actions?.some((a) => a.id === latch.id), 'the incident carries its follow-ups');
+const ownForm = new FormData();
+ownForm.append('category', 'Disturbance');
+ownForm.append('severity', 'medium');
+ownForm.append('occurredAt', new Date().toISOString());
+ownForm.append('whatHappened', 'Test incident for the follow-up visibility checks.');
+const ownIncident = await (await fetch(`${BASE}/incidents`, { method: 'POST', headers: { authorization: `Bearer ${marcus}` }, body: ownForm })).json();
+await addAction({ title: 'Speak to the tenant about the noise' }, supervisor, ownIncident.incident.id);
+const ownView = await call(`/incidents/${ownIncident.incident.id}`, { token: marcus });
+log(ownView.status === 200 && Array.isArray(ownView.data.actions) && ownView.data.actions.length === 0,
+  'the officer who filed an incident opens it without its follow-ups');
+
+const markDone = (id, body, token = supervisor) => call(`/incidents/actions/${id}`, { token, method: 'PATCH', body });
+log((await markDone(latch.id, { status: 'done' })).status === 422, 'marking one done needs what was done');
+log((await markDone(latch.id, { status: 'done', note: 'Latch replaced.' }, marcus)).status === 403, 'officers cannot close them');
+log((await markDone('abc', { status: 'done', note: 'Latch replaced.' })).status === 422, 'a junk follow-up id is refused');
+log((await markDone(999999, { status: 'done', note: 'Latch replaced.' })).status === 404, 'and an unknown one is not found');
+const closed = await markDone(latch.id, { status: 'done', note: 'Latch replaced by the property manager on Tuesday.' });
+const doneRow = closed.data.actions.find((a) => a.id === latch.id);
+log(closed.status === 200 && doneRow.status === 'done' && !doneRow.overdue && doneRow.done_by_name === 'Renata Diaz' && doneRow.done_at,
+  'a supervisor marks it done, with who and when');
+log(!(await call('/admin/alerts', { token: supervisor })).data.alerts.some((a) => a.key.startsWith(`followup:${latch.id}:`)), 'and it leaves the alerts inbox');
+
+const incidentRef = incDetail.data.incident.ref_number;
+const clientList = (await call('/client/incidents', { token: pensacola })).data;
+const clientRow = (clientList.incidents || []).find((i) => i.ref_number === incidentRef);
+if (clientRow) {
+  const clientView = await call(`/client/incidents/${clientRow.id}`, { token: pensacola });
+  const seen = clientView.data.actions || [];
+  log(seen.some((a) => a.id === latch.id && a.status === 'done'), 'the client sees what was done on their incident');
+  log(!seen.some((a) => a.id === hr.id), 'but not the internal follow-up');
+  log(seen.every((a) => !('owner_id' in a) && !('done_note' in a) && !('owner_name' in a)), 'nor who owns them or the internal note');
+} else {
+  log(false, 'the seeded incident belongs to the Pensacola client', incidentRef);
+}
+
+const reopened = await markDone(latch.id, { status: 'open' });
+const reRow = reopened.data.actions.find((a) => a.id === latch.id);
+log(reopened.status === 200 && reRow.status === 'open' && reRow.done_note === null && reRow.overdue, 'reopening clears the note and it is overdue again');
+await markDone(latch.id, { status: 'done', note: 'Latch replaced by the property manager on Tuesday.' });
+await markDone(hr.id, { status: 'done', note: 'Reviewed with HR, no further action.' });
+
+/* ======================================================= incident reports === */
+section('incident reports');
+
+const catalogue = (await call('/admin/reports', { token: admin })).data.reports;
+log(['incidents-by-site', 'incidents-by-category', 'incidents-daily'].every((id) => catalogue.some((r) => r.id === id && r.group === 'Incidents')),
+  'the three incident reports are in the catalogue');
+const yearAgo = new Date(Date.now() - 360 * 86400000).toISOString().slice(0, 10);
+const range = `from=${yearAgo}&to=${new Date().toISOString().slice(0, 10)}`;
+log((await call('/admin/reports/incidents-by-site?from=2020-01-01&to=2030-12-31', { token: admin })).status === 422, 'a range longer than a year is refused');
+const bySite = await call(`/admin/reports/incidents-by-site?${range}`, { token: admin });
+const byCat = await call(`/admin/reports/incidents-by-category?${range}`, { token: admin });
+log(bySite.status === 200 && bySite.data.totals.total > 0 && bySite.data.rows.reduce((n, r) => n + r.total, 0) === bySite.data.totals.total,
+  'incidents by site adds up', `${bySite.data.totals?.total}`);
+log(byCat.status === 200 && byCat.data.totals.total === bySite.data.totals.total, 'by type counts the same incidents');
+log(bySite.data.rows.every((r) => r.open <= r.total && r.police <= r.total), 'police and still-open never exceed the total');
+const lastMonth = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+const todayStr = new Date().toISOString().slice(0, 10);
+const daily = await call(`/admin/reports/incidents-daily?from=${lastMonth}&to=${todayStr}`, { token: admin });
+log(daily.status === 200 && daily.data.rows.length >= 28 && daily.data.chart?.series === 'time', 'by day has a row for every day in the range', `${daily.data.rows?.length}`);
+const siteScoped = await call(`/admin/reports/incidents-by-site?${range}&siteId=${incDetail.data.incident.site_id}`, { token: admin });
+log(siteScoped.status === 200, 'a report can be scoped to one site');
+const csvRes = await fetch(`${BASE}/admin/reports/incidents-by-category/export.csv?${range}`, { headers: { authorization: `Bearer ${admin}` } });
+const csvText = await csvRes.text();
+log(csvRes.ok && /text\/csv/.test(csvRes.headers.get('content-type')) && csvText.split('\n')[0].startsWith('Type,Incidents') && /\nTOTAL,/.test(csvText),
+  'and exports as a CSV with a total row');
+log((await call(`/admin/reports/incidents-by-site?${range}`, { token: marcus })).status === 403, 'officers cannot run reports');
+
+finish('Post orders, alerts, QR tags and incident follow-ups');

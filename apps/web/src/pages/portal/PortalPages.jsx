@@ -669,7 +669,7 @@ export function PortalCoverage({ sites }) {
             </div>
           ) : (
             <div className="card table-wrap">
-              <table>
+              <table className="data">
                 <thead>
                   <tr>
                     <th scope="col">Date</th>
@@ -830,7 +830,7 @@ export function PortalPatrols({ sites }) {
             </div>
           ) : (
             <div className="card table-wrap">
-              <table>
+              <table className="data">
                 <thead>
                   <tr>
                     <th scope="col">Started</th>
@@ -932,6 +932,24 @@ function IncidentDialog({ id, onClose }) {
               </div>
             )}
 
+            {data.actions?.length > 0 && (
+              <div>
+                <h3 className="small strong">What we are doing about it</h3>
+                <ul className="client-actions">
+                  {data.actions.map((a) => (
+                    <li key={a.id}>
+                      <span className={a.status === 'done' ? 'done' : ''}>{a.title}</span>{' '}
+                      {a.status === 'done' ? (
+                        <Chip kind="ok">Done{a.done_at ? ` ${fmtDate(a.done_at)}` : ''}</Chip>
+                      ) : (
+                        <Chip kind="info">In hand{a.due_on ? `, due ${fmtDate(a.due_on)}` : ''}</Chip>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {data.incident.people_notified && (
               <div>
                 <h3 className="small strong">Who was notified</h3>
@@ -1019,7 +1037,7 @@ export function PortalIncidents({ sites }) {
             </div>
           ) : (
             <div className="card table-wrap">
-              <table>
+              <table className="data">
                 <thead>
                   <tr>
                     <th scope="col">Reference</th>

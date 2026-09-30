@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtDateTime, fmtMoney, fmtDate } from '../../lib/format.js';
 import {
@@ -6,12 +7,14 @@ import {
 } from '../../components/ui.jsx';
 import { AuthedImage } from '../../components/AuthedImage.jsx';
 import { INCIDENT_SEVERITY } from '@shared/domain.js';
+import { AddFollowUp, FollowUpList, FollowUpsTab, useOwners } from './FollowUps.jsx';
 
 function ReviewDialog({ id, onClose, onSaved }) {
   const toast = useToast();
   const [data, setData] = useState(null);
   const [form, setForm] = useState({ status: 'under_review', reviewNotes: '', severity: '' });
   const [busy, setBusy] = useState(false);
+  const owners = useOwners();
 
   useEffect(() => {
     (async () => {
@@ -156,6 +159,21 @@ function ReviewDialog({ id, onClose, onSaved }) {
 
         <hr style={{ border: 0, borderTop: '1px solid var(--line)' }} />
 
+        <section aria-labelledby="followups-title">
+          <h3 id="followups-title" style={{ margin: '0 0 6px' }}>
+            Follow-ups
+          </h3>
+          <p className="tiny muted" style={{ marginTop: 0 }}>
+            What is being done so it does not happen again. The client sees the ones marked for them, and whether each is done.
+          </p>
+          <div className="card" style={{ marginBottom: 12 }}>
+            <FollowUpList actions={data.actions || []} onChange={(actions) => setData((d) => ({ ...d, actions }))} />
+          </div>
+          <AddFollowUp incidentId={i.id} owners={owners} onAdded={(actions) => setData((d) => ({ ...d, actions }))} />
+        </section>
+
+        <hr style={{ border: 0, borderTop: '1px solid var(--line)' }} />
+
         <fieldset>
           <legend>Supervisor review</legend>
           <div className="stack">
@@ -192,6 +210,29 @@ function ReviewDialog({ id, onClose, onSaved }) {
 }
 
 export default function AdminIncidentsPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'follow-ups' ? 'follow-ups' : 'incidents';
+  return (
+    <div className="page stack">
+      <div className="page-head" style={{ marginBottom: 0 }}>
+        <div className="eyebrow">Operations</div>
+        <h1>Incident reports</h1>
+      </div>
+      <Segmented
+        label="Incidents view"
+        value={tab}
+        onChange={(v) => setParams(v === 'incidents' ? {} : { tab: v }, { replace: true })}
+        options={[
+          { value: 'incidents', label: 'Reports' },
+          { value: 'follow-ups', label: 'Follow-ups' },
+        ]}
+      />
+      {tab === 'follow-ups' ? <FollowUpsTab /> : <IncidentList />}
+    </div>
+  );
+}
+
+function IncidentList() {
   const toast = useToast();
   const [incidents, setIncidents] = useState(null);
   const [status, setStatus] = useState('');
@@ -222,12 +263,7 @@ export default function AdminIncidentsPage() {
   const recovery = incidents.reduce((n, i) => n + (i.cost_recovery_cents || 0), 0);
 
   return (
-    <div className="page stack">
-      <div className="page-head">
-        <div className="eyebrow">Operations</div>
-        <h1>Incident reports</h1>
-      </div>
-
+    <div className="stack">
       <div className="grid grid-4">
         <Stat label="Total reports" value={incidents.length} foot="Matching current filter" />
         <Stat label="Awaiting review" value={open} foot="Submitted or in review" alert={open > 0} />

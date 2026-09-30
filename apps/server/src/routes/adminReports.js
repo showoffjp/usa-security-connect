@@ -70,6 +70,24 @@ export const REPORTS = [
     description: 'How much of each shift was spent inside the post geofence, clock-ins from outside, and walk-offs.',
     group: 'Compliance',
   },
+  {
+    id: 'incidents-by-site',
+    title: 'Incidents by site',
+    description: 'How many incidents each site had, how serious, how many brought the police, and how many are still open.',
+    group: 'Incidents',
+  },
+  {
+    id: 'incidents-by-category',
+    title: 'Incidents by type',
+    description: 'What kinds of incident happen, how serious they tend to be, and how long they take to close.',
+    group: 'Incidents',
+  },
+  {
+    id: 'incidents-daily',
+    title: 'Incidents by day',
+    description: 'Incidents reported each day in the range, and how many were serious, to spot a bad week or a pattern.',
+    group: 'Incidents',
+  },
 ];
 
 const C = (key, label, type = 'text', extra = {}) => ({ key, label, type, ...extra });
@@ -705,6 +723,155 @@ const builders = {
     };
   },
 };
+
+
+/* ------------------------------------------------------------- incidents -- */
+
+async function loadIncidents(f) {
+  const sc = scope(f);
+  return db
+    .prepare(
+      `SELECT i.id, i.category, i.severity, i.status, i.occurred_at, i.police_notified, i.reviewed_at,
+              s.id AS site_id, s.name AS site_name
+       FROM incidents i
+       JOIN users u ON u.id = i.user_id
+       LEFT JOIN sites s ON s.id = i.site_id
+       WHERE i.occurred_at >= ? AND i.occurred_at < ? ${sc.sql}
+       ORDER BY i.occurred_at`
+    )
+    .all(toSql(f.from), toSql(f.to), ...sc.params);
+}
+
+const SEVERITY_COLUMNS = [
+  C('critical', 'Critical', 'int', { sum: true, warnAbove: 0 }),
+  C('high', 'High', 'int', { sum: true, warnAbove: 0 }),
+  C('medium', 'Medium', 'int', { sum: true }),
+  C('low', 'Low', 'int', { sum: true }),
+];
+const bySeverity = (list) => Object.fromEntries(['critical', 'high', 'medium', 'low'].map((k) => [k, list.filter((i) => i.severity === k).length]));
+const serious = (i) => i.severity === 'high' || i.severity === 'critical';
+const policeOf = (i) => i.police_notified === true || i.police_notified === 1;
+
+Object.assign(builders, {
+  async 'incidents-by-site'(f) {
+    const list = await loadIncidents(f);
+    const groups = groupBy(list, 'site_id');
+    const rows = [...groups.values()].map((g) => ({
+      site: g[0].site_name || 'No site recorded',
+      total: g.length,
+      ...bySeverity(g),
+      police: g.filter(policeOf).length,
+      open: g.filter((i) => i.status !== 'closed').length,
+    }));
+    rows.sort((a, b) => b.total - a.total || a.site.localeCompare(b.site));
+    const columns = [
+      C('site', 'Site'),
+      C('total', 'Incidents', 'int', { sum: true, bar: true }),
+      ...SEVERITY_COLUMNS,
+      C('police', 'Police notified', 'int', { sum: true }),
+      C('open', 'Still open', 'int', { sum: true, warnAbove: 0 }),
+    ];
+    const totals = sumColumns(rows, columns);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Incidents', value: totals.total || 0, type: 'int' },
+        { label: 'Serious (high or critical)', value: (totals.critical || 0) + (totals.high || 0), type: 'int' },
+        { label: 'Police notified', value: totals.police || 0, type: 'int' },
+        { label: 'Still open', value: totals.open || 0, type: 'int' },
+      ],
+      chart: { label: 'site', value: 'total', type: 'int' },
+      notes: ['An incident is counted at the site it happened at, on the day it happened.'],
+    };
+  },
+
+  async 'incidents-by-category'(f) {
+    const list = await loadIncidents(f);
+    const groups = groupBy(list, 'category');
+    const rows = [...groups.values()].map((g) => {
+      const closed = g.filter((i) => i.status === 'closed' && i.reviewed_at);
+      const hours = closed.map((i) => (new Date(sqlToIso(i.reviewed_at)) - new Date(sqlToIso(i.occurred_at))) / 3600000).filter((h) => h >= 0);
+      return {
+        category: g[0].category || 'Uncategorised',
+        total: g.length,
+        serious: g.filter(serious).length,
+        serious_pct: pct(g.filter(serious).length, g.length),
+        police: g.filter(policeOf).length,
+        hours_to_close: hours.length ? Math.round((hours.reduce((a, b) => a + b, 0) / hours.length) * 10) / 10 : null,
+      };
+    });
+    rows.sort((a, b) => b.total - a.total || a.category.localeCompare(b.category));
+    const columns = [
+      C('category', 'Type'),
+      C('total', 'Incidents', 'int', { sum: true, bar: true }),
+      C('serious', 'Serious', 'int', { sum: true, warnAbove: 0 }),
+      C('serious_pct', 'Serious share', 'percent'),
+      C('police', 'Police notified', 'int', { sum: true }),
+      C('hours_to_close', 'Hours to close (avg)', 'hours'),
+    ];
+    const totals = sumColumns(rows, columns);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Incidents', value: totals.total || 0, type: 'int' },
+        { label: 'Most common', value: rows[0]?.category || '--' },
+        { label: 'Serious', value: totals.serious || 0, type: 'int' },
+        { label: 'Types seen', value: rows.length, type: 'int' },
+      ],
+      chart: { label: 'category', value: 'total', type: 'int' },
+      notes: ['Hours to close runs from when the incident happened to the review that closed it.'],
+    };
+  },
+
+  async 'incidents-daily'(f) {
+    const list = await loadIncidents(f);
+    const byDay = groupBy(list.map((i) => ({ ...i, day: toDateString(new Date(sqlToIso(i.occurred_at))) })), 'day');
+    const rows = [];
+    for (let d = new Date(f.from); d < f.to; d.setDate(d.getDate() + 1)) {
+      const key = toDateString(d);
+      const g = byDay.get(key) || [];
+      rows.push({
+        day: key,
+        weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        total: g.length,
+        serious: g.filter(serious).length,
+        police: g.filter(policeOf).length,
+        sites: new Set(g.map((i) => i.site_id)).size,
+      });
+    }
+    const columns = [
+      C('day', 'Date', 'date'),
+      C('weekday', 'Day'),
+      C('total', 'Incidents', 'int', { sum: true, bar: true }),
+      C('serious', 'Serious', 'int', { sum: true, warnAbove: 0 }),
+      C('police', 'Police notified', 'int', { sum: true }),
+      C('sites', 'Sites', 'int'),
+    ];
+    const totals = sumColumns(rows, columns);
+    const busiest = [...rows].sort((a, b) => b.total - a.total)[0];
+    const weekdays = groupBy(rows, 'weekday');
+    const worstWeekday = [...weekdays.entries()]
+      .map(([day, g]) => [day, g.reduce((n, r) => n + r.total, 0)])
+      .sort((a, b) => b[1] - a[1])[0];
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Incidents', value: totals.total || 0, type: 'int' },
+        { label: 'Average per day', value: rows.length ? Math.round(((totals.total || 0) / rows.length) * 100) / 100 : 0 },
+        { label: 'Busiest day', value: busiest?.total ? busiest.day : '--', type: busiest?.total ? 'date' : undefined },
+        { label: 'Worst weekday', value: worstWeekday && worstWeekday[1] ? worstWeekday[0] : '--' },
+      ],
+      chart: { label: 'day', value: 'total', type: 'int', series: 'time' },
+      notes: ['An incident is counted on the day it happened, which may be before the day it was filed.'],
+    };
+  },
+});
 
 /* ---------------------------------------------------------------- routes -- */
 
