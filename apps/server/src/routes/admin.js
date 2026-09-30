@@ -2251,6 +2251,20 @@ async function buildAlerts(userId) {
       title: `Tour not finished: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}, ${r.status === 'abandoned' ? 'abandoned' : 'still open after 4 hours'}` });
   }
 
+  // A client's question about an invoice, waiting on us.
+  for (const q of await db
+    .prepare(
+      `SELECT q.id, q.question, q.created_at, i.number, s.name AS site_name, c.name AS asked_by
+       FROM invoice_queries q JOIN invoices i ON i.id = q.invoice_id JOIN sites s ON s.id = i.site_id
+       LEFT JOIN client_users c ON c.id = q.client_user_id
+       WHERE q.status = 'open' ORDER BY q.created_at LIMIT 25`
+    )
+    .all()) {
+    push({ key: `invoice-query:${q.id}`, kind: 'invoice_query', severity: 'warning', at: q.created_at, link: '/admin/invoices?tab=questions',
+      title: `Invoice question: ${q.number}`,
+      detail: `${q.asked_by || 'Client'}, ${q.site_name} - ${q.question.length > 80 ? `${q.question.slice(0, 77)}...` : q.question}` });
+  }
+
   // A supervisor visit that found something wrong at the post.
   for (const v of await db
     .prepare(

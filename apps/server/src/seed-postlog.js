@@ -518,10 +518,41 @@ export async function seedPostLog({ db }) {
     }
   }
 
+  // Two questions from clients about their invoices: one waiting on us, one answered.
+  let invoiceQueries = 0;
+  const billed = await db
+    .prepare(
+      `SELECT i.id, i.number, MIN(c.id) AS client_user_id
+       FROM invoices i JOIN client_sites cs ON cs.site_id = i.site_id JOIN client_users c ON c.id = cs.client_user_id
+       WHERE i.status IN ('sent', 'paid') AND c.status = 'active'
+       GROUP BY i.id, i.number ORDER BY i.status = 'sent' DESC, i.period_end DESC, i.id LIMIT 2`
+    )
+    .all();
+  for (const [n, inv] of billed.entries()) {
+    const line = await db.prepare(`SELECT id, description FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence, id LIMIT 1`).get(inv.id);
+    if (n === 0) {
+      await db
+        .prepare(`INSERT INTO invoice_queries (invoice_id, line_id, client_user_id, question, created_at) VALUES (?,?,?,?,?)`)
+        .run(inv.id, line?.id ?? null, inv.client_user_id,
+          'The hours on this line look higher than the schedule we agreed. Can you confirm how many shifts were covered?',
+          toSql(new Date(now.getTime() - 26 * 3600000)));
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO invoice_queries (invoice_id, line_id, client_user_id, question, status, answer, answered_by, answered_at, created_at)
+           VALUES (?,?,?,?,'answered',?,?,?,?)`
+        )
+        .run(inv.id, null, inv.client_user_id, 'Please send the invoice to our accounts payable address as well as to me.',
+          'Done - accounts payable is now copied on every invoice for this property.', sup.id,
+          toSql(new Date(now.getTime() - 3 * 86400000)), toSql(new Date(now.getTime() - 4 * 86400000)));
+    }
+    invoiceQueries++;
+  }
+
   // The incidents seeded above are history: their clients were told at the time.
   await db.prepare(`UPDATE incidents SET client_notified_at = occurred_at WHERE severity IN ('high', 'critical')`).run();
   // One contact takes the daily report email, so the morning sweep has someone to send it to.
   await db.prepare(`UPDATE client_users SET notify_daily_report = true WHERE email = ?`).run('dana.whitfield@riverfrontholdings.com');
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps };
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps, invoiceQueries };
 }

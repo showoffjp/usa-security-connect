@@ -29,7 +29,7 @@ import {
   toHours,
 } from '../shared.js';
 import { toSql } from '../services/compliance.js';
-import { notifyInvoiceIssued, emailKind } from '../services/email.js';
+import { notifyInvoiceIssued, notifyInvoiceQueryAnswered, emailKind } from '../services/email.js';
 import { loadRateBook, rateOn, dayOf } from '../services/payroll.js';
 
 export const invoicesRouter = Router();
@@ -278,6 +278,52 @@ invoicesRouter.post(
   })
 );
 
+/* -------------------------------------------------- client questions --- */
+
+const querySelect = `
+  SELECT q.*, i.number, i.status AS invoice_status, i.total_cents, i.site_id, s.name AS site_name, s.client_name,
+         l.description AS line_description, l.amount_cents AS line_amount_cents,
+         c.name AS asked_by, c.email AS asked_by_email,
+         u.first_name || ' ' || u.last_name AS answered_by_name
+  FROM invoice_queries q
+  JOIN invoices i ON i.id = q.invoice_id
+  JOIN sites s ON s.id = i.site_id
+  LEFT JOIN invoice_lines l ON l.id = q.line_id
+  LEFT JOIN client_users c ON c.id = q.client_user_id
+  LEFT JOIN users u ON u.id = q.answered_by`;
+const presentQuery = (q) => isoFields(q, ['created_at', 'answered_at']);
+
+/** Clients' questions about their invoices, the waiting ones first. */
+invoicesRouter.get(
+  '/queries',
+  wrap(async (req, res) => {
+    const show = ['open', 'answered', 'all'].includes(req.query.status) ? req.query.status : 'open';
+    const rows = await db
+      .prepare(`${querySelect} ${show === 'all' ? '' : 'WHERE q.status = ?'} ORDER BY q.status = 'answered', q.created_at DESC LIMIT 200`)
+      .all(...(show === 'all' ? [] : [show]));
+    const open = Number((await db.prepare(`SELECT COUNT(*) AS n FROM invoice_queries WHERE status = 'open'`).get()).n);
+    res.json({ queries: rows.map(presentQuery), open });
+  })
+);
+
+/** Answer a client's question. The answer reaches them in the portal and by email. */
+invoicesRouter.post(
+  '/queries/:id/answer',
+  wrap(async (req, res) => {
+    const query = await db.prepare(`SELECT * FROM invoice_queries WHERE id = ?`).get(idParam(req.params.id, 'question'));
+    if (!query) throw new HttpError(404, 'Question not found.');
+    const body = parse(z.object({ answer: z.string().trim().min(5, 'Write an answer the client can read.').max(2000) }), req.body);
+    const claimed = await db
+      .prepare(`UPDATE invoice_queries SET status = 'answered', answer = ?, answered_by = ?, answered_at = now() WHERE id = ? AND status = 'open'`)
+      .run(body.answer, req.user.id, query.id);
+    if (!claimed.changes) throw new HttpError(409, 'That question has already been answered.');
+    await audit(req.user.id, 'invoice_query.answered', 'invoice_query', query.id, { invoiceId: query.invoice_id }, req.ip);
+    const answered = await db.prepare(`${querySelect} WHERE q.id = ?`).get(query.id);
+    await notifyInvoiceQueryAnswered(answered);
+    res.json({ query: presentQuery(answered) });
+  })
+);
+
 /* ----------------------------------------------------------------- list --- */
 
 invoicesRouter.get(
@@ -298,7 +344,8 @@ invoicesRouter.get(
     const rows = await db
       .prepare(
         `SELECT i.*, s.name AS site_name, s.client_name,
-                (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id) AS line_count
+                (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id) AS line_count,
+                (SELECT COUNT(*) FROM invoice_queries q WHERE q.invoice_id = i.id AND q.status = 'open') AS open_queries
          FROM invoices i JOIN sites s ON s.id = i.site_id
          ${where}
          ORDER BY i.created_at DESC, i.id DESC
@@ -322,6 +369,7 @@ invoicesRouter.get(
       invoices: rows.map((r) => ({
         ...isoFields(r, TIMES),
         overdue_days: daysOverdue(r.due_on, r.status),
+        open_queries: Number(r.open_queries || 0),
       })),
       summary: {
         ...summary,
@@ -364,6 +412,7 @@ invoicesRouter.get(
     res.json({
       invoice: { ...isoFields(invoice, TIMES), overdue_days: daysOverdue(invoice.due_on, invoice.status) },
       lines,
+      queries: (await db.prepare(`${querySelect} WHERE q.invoice_id = ? ORDER BY q.created_at DESC`).all(invoice.id)).map(presentQuery),
       totals: invoiceTotals(lines, invoice.subtotal_cents > 0
         ? (invoice.tax_cents / invoice.subtotal_cents) * 100
         : 0),

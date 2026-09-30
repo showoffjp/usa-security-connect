@@ -315,3 +315,34 @@ export async function notifyOrderRequestAnswered(request) {
   });
   return 1;
 }
+
+/** The office's answer to a client's question about an invoice, to whoever asked. */
+export async function notifyInvoiceQueryAnswered(query) {
+  const contact = query.client_user_id
+    ? await db.prepare(`SELECT id, email, name FROM client_users WHERE id = ? AND status = 'active'`).get(query.client_user_id)
+    : null;
+  if (!contact) return 0;
+  await send({
+    to: contact.email,
+    name: contact.name,
+    kind: 'invoice_query_answered',
+    entity: 'invoice',
+    entityId: query.invoice_id,
+    subject: `Your question about invoice ${query.number}`,
+    body: [
+      `Dear ${contact.name},`,
+      '',
+      `You asked about invoice ${query.number} for ${query.site_name}${query.line_description ? ` (${query.line_description})` : ''}:`,
+      '',
+      `  ${query.question}`,
+      '',
+      'Our answer:',
+      '',
+      `  ${query.answer}`,
+      '',
+      'The invoice and this answer are in your portal under Invoices. Reply to this email if anything is still unclear.',
+      signOff(),
+    ].join('\n'),
+  });
+  return 1;
+}
