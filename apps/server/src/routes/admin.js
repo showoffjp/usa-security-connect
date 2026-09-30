@@ -19,6 +19,7 @@ import {
   blocksAssignment,
   payrollWeekOf,
   distanceMeters,
+  VISIT_CHECKS,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -27,6 +28,7 @@ import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
 import { assertHoursOpen } from '../services/payPeriods.js';
 import { currentOrders, reviseOrders } from '../services/postOrders.js';
 import { siteMonth, monthKey } from '../services/siteMonth.js';
+import { visitBoard } from './visits.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 
@@ -219,6 +221,9 @@ adminRouter.get(
       .prepare(`SELECT COUNT(*) AS n FROM client_feedback WHERE rating <= 2 AND response IS NULL`)
       .get()).n);
 
+    // Active sites no field supervisor has visited for too long.
+    const visitsDue = (await visitBoard()).due;
+
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
       .get(toDateString(new Date()))).n);
@@ -254,6 +259,7 @@ adminRouter.get(
         openIssues,
         foundHeld,
         unhappyClients,
+        visitsDue,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -2245,6 +2251,33 @@ async function buildAlerts(userId) {
       title: `Tour not finished: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}, ${r.status === 'abandoned' ? 'abandoned' : 'still open after 4 hours'}` });
   }
 
+  // A supervisor visit that found something wrong at the post.
+  for (const v of await db
+    .prepare(
+      `SELECT v.id, v.visited_at, v.rating, v.uniform_ok, v.post_orders_reviewed, v.equipment_ok, v.site_secure,
+              s.name AS site_name, p.name AS post_name, o.first_name || ' ' || o.last_name AS officer
+       FROM supervisor_visits v LEFT JOIN sites s ON s.id = v.site_id LEFT JOIN posts p ON p.id = v.post_id
+       LEFT JOIN users o ON o.id = v.officer_id
+       WHERE v.visited_at >= ? AND (v.uniform_ok = false OR v.post_orders_reviewed = false OR v.equipment_ok = false
+         OR v.site_secure = false OR v.rating <= 2)
+       ORDER BY v.visited_at DESC LIMIT 25`
+    )
+    .all(since)) {
+    const failed = VISIT_CHECKS.filter((c) => v[c.key] === false).map((c) => c.label.toLowerCase());
+    push({ key: `visit:${v.id}`, kind: 'visit', severity: 'warning', at: v.visited_at, link: '/admin/visits?issues=1',
+      title: `Visit found a problem: ${v.site_name || 'site'}`,
+      detail: [v.post_name, v.officer, failed.length ? `failed: ${failed.join(', ')}` : `rated ${v.rating} of 5`].filter(Boolean).join(' · ') });
+  }
+
+  // A site nobody has visited for too long. The key carries the last visit, so
+  // a new visit clears it and a later lapse raises it afresh.
+  for (const site of (await visitBoard()).sites.filter((x) => x.due)) {
+    push({ key: `visit-due:${site.id}:${site.last_visit ? site.last_visit.slice(0, 10) : 'never'}`, kind: 'visit_due', severity: 'info',
+      at: site.last_visit || new Date().toISOString(), link: '/admin/visits',
+      title: `Visit due: ${site.name}`,
+      detail: site.last_visit ? `No supervisor visit for ${site.days_since} days` : 'No supervisor visit on record' });
+  }
+
   // A follow-up on an incident that has gone past its due date.
   for (const a of await db
     .prepare(
@@ -2320,9 +2353,11 @@ adminRouter.get(
   wrap(async (req, res) => {
     const month = req.query.month ? String(req.query.month) : monthKey();
     const sites = await db.prepare(`SELECT id, client_name FROM sites WHERE active = true ORDER BY name`).all();
+    const visits = new Map((await visitBoard()).sites.map((v) => [v.id, v]));
     const rows = [];
     for (const site of sites) {
       const m = await siteMonth(site.id, month);
+      const visit = visits.get(site.id);
       const serious = (m.incidents.bySeverity.high || 0) + (m.incidents.bySeverity.critical || 0);
       const concerns = [];
       if (m.coverage.pct !== null && m.coverage.pct < 95) concerns.push(`${m.coverage.scheduled - m.coverage.covered} shift${m.coverage.scheduled - m.coverage.covered === 1 ? '' : 's'} not covered`);
@@ -2330,6 +2365,7 @@ adminRouter.get(
       if (serious) concerns.push(`${serious} serious incident${serious === 1 ? '' : 's'}`);
       if (m.issues.open) concerns.push(`${m.issues.open} building issue${m.issues.open === 1 ? '' : 's'} open`);
       if (m.rating && m.rating.average <= 3) concerns.push(`client rated us ${m.rating.average} of 5`);
+      if (visit?.due) concerns.push(visit.last_visit ? `no supervisor visit for ${visit.days_since} days` : 'never visited by a supervisor');
       // Out of 100: coverage and patrols carry most of it, the rest comes off for what went wrong.
       let score = 100;
       if (m.coverage.pct !== null) score -= Math.min(40, (100 - m.coverage.pct) * 2);
@@ -2341,6 +2377,7 @@ adminRouter.get(
         score: Math.max(0, Math.round(score)),
         coverage: m.coverage, patrols: m.patrols, incidents: { total: m.incidents.total, serious },
         issuesOpen: m.issues.open, visitors: m.visitors, rating: m.rating, concerns,
+        supervisorVisits: m.supervisorVisits, lastVisit: visit?.last_visit ?? null, visitDue: Boolean(visit?.due),
       });
     }
     rows.sort((a, b) => a.score - b.score || b.concerns.length - a.concerns.length || a.name.localeCompare(b.name));

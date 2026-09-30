@@ -16,7 +16,8 @@ import { sendDailyReports } from './services/clientNotify.js';
 
 import { authRouter } from './routes/auth.js';
 import { timeclockRouter } from './routes/timeclock.js';
-import { incidentsRouter, visitsRouter } from './routes/incidents.js';
+import { incidentsRouter } from './routes/incidents.js';
+import { visitsRouter } from './routes/visits.js';
 import { toursRouter } from './routes/tours.js';
 import { broadcastsRouter, trainingRouter, messagesRouter } from './routes/comms.js';
 import { scheduleRouter } from './routes/schedule.js';

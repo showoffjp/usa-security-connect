@@ -14,7 +14,8 @@ import { Router } from 'express';
 import { db } from '../lib/db.js';
 import { HttpError, wrap, parseDay, toDateString, sqlToIso } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { ROLES, EMPLOYMENT_TYPES, toHours, RULES } from '../shared.js';
+import { ROLES, EMPLOYMENT_TYPES, toHours, RULES, VISIT_CHECKS, VISIT_DUE_DAYS } from '../shared.js';
+import { visitBoard } from './visits.js';
 import { toSql } from '../services/compliance.js';
 import { scope, loadPricedEntries as loadEntries, personPay, groupBy } from '../services/payroll.js';
 
@@ -68,6 +69,12 @@ export const REPORTS = [
     id: 'gps',
     title: 'GPS & geofence compliance',
     description: 'How much of each shift was spent inside the post geofence, clock-ins from outside, and walk-offs.',
+    group: 'Compliance',
+  },
+  {
+    id: 'visits-by-site',
+    title: 'Supervisor visits by site',
+    description: 'How often a field supervisor was at each site, what the visits found, and which sites have gone longest without one.',
     group: 'Compliance',
   },
   {
@@ -727,6 +734,21 @@ const builders = {
 
 /* ------------------------------------------------------------- incidents -- */
 
+async function loadVisits(f) {
+  const sc = scope(f);
+  return db
+    .prepare(
+      `SELECT v.id, v.site_id, v.officer_id, v.visited_at, v.rating,
+              v.uniform_ok, v.post_orders_reviewed, v.equipment_ok, v.site_secure
+       FROM supervisor_visits v
+       JOIN sites s ON s.id = v.site_id
+       LEFT JOIN users u ON u.id = v.officer_id
+       WHERE v.visited_at >= ? AND v.visited_at < ? ${sc.sql}
+       ORDER BY v.visited_at`
+    )
+    .all(toSql(f.from), toSql(f.to), ...sc.params);
+}
+
 async function loadIncidents(f) {
   const sc = scope(f);
   return db
@@ -753,6 +775,55 @@ const serious = (i) => i.severity === 'high' || i.severity === 'critical';
 const policeOf = (i) => i.police_notified === true || i.police_notified === 1;
 
 Object.assign(builders, {
+  async 'visits-by-site'(f) {
+    const visits = await loadVisits(f);
+    const board = await visitBoard();
+    const bySite = groupBy(visits, 'site_id');
+    const rows = board.sites
+      .filter((s) => !f.siteId || s.id === f.siteId)
+      .map((s) => {
+        const g = bySite.get(s.id) || [];
+        const rated = g.filter((v) => v.rating != null);
+        return {
+          site: s.name,
+          visits: g.length,
+          officers: new Set(g.map((v) => v.officer_id).filter(Boolean)).size,
+          rating: rated.length ? Math.round((rated.reduce((n, v) => n + v.rating, 0) / rated.length) * 10) / 10 : null,
+          problems: g.filter((v) => VISIT_CHECKS.some((c) => v[c.key] === false) || (v.rating != null && v.rating <= 2)).length,
+          last_visit: s.last_visit,
+          days_since: s.days_since,
+        };
+      });
+    rows.sort((a, b) => (b.days_since ?? Infinity) - (a.days_since ?? Infinity) || a.site.localeCompare(b.site));
+    const columns = [
+      C('site', 'Site'),
+      C('visits', 'Visits', 'int', { sum: true, bar: true }),
+      C('officers', 'Officers seen', 'int'),
+      C('rating', 'Average rating', 'decimal'),
+      C('problems', 'Visits with a problem', 'int', { sum: true, warnAbove: 0 }),
+      C('last_visit', 'Last visit', 'datetime'),
+      C('days_since', 'Days since', 'int', { warnAbove: VISIT_DUE_DAYS - 1 }),
+    ];
+    const totals = sumColumns(rows, columns);
+    const rated = visits.filter((v) => v.rating != null);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Visits', value: totals.visits || 0, type: 'int' },
+        { label: 'Average rating', value: rated.length ? Math.round((rated.reduce((n, v) => n + v.rating, 0) / rated.length) * 10) / 10 : '--' },
+        { label: 'Found a problem', value: totals.problems || 0, type: 'int' },
+        { label: 'Sites due a visit', value: rows.filter((r) => r.days_since == null || r.days_since >= VISIT_DUE_DAYS).length, type: 'int' },
+      ],
+      chart: { label: 'site', value: 'visits', type: 'int' },
+      notes: [
+        `A site is due a visit after ${VISIT_DUE_DAYS} days without one. Last visit and days since count from any date, not just this range.`,
+        'A problem is a failed check (uniform, post orders, equipment, site secure) or a rating of 2 or less.',
+      ],
+    };
+  },
+
   async 'incidents-by-site'(f) {
     const list = await loadIncidents(f);
     const groups = groupBy(list, 'site_id');

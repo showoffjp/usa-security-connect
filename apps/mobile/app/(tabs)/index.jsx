@@ -14,6 +14,7 @@ import { LocationCard } from '../../src/LocationCard.jsx';
 import { PostLogCards, SiteContactsCard, usePostLog } from '../../src/PostLogCards.jsx';
 import { ShiftWrapUp } from '../../src/ShiftWrapUp.jsx';
 import { ExpiryReminder } from '../../src/ExpiryReminder.jsx';
+import { LastVisitCard } from '../../src/LastVisitCard.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -272,6 +273,7 @@ export default function HomeScreen() {
         <LocationCard status={status} />
 
         <SiteContactsCard site={postLog.site} />
+        <LastVisitCard />
 
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Pressable style={[S.card, S.grow]} onPress={() => router.push('/incident-new')}>

@@ -581,9 +581,7 @@ clientRouter.get(
 
     const rows = await db
       .prepare(
-        `SELECT v.id, v.visited_at, v.uniform_ok, v.post_orders_reviewed,
-                v.equipment_ok, v.site_secure, v.rating, v.notes,
-                s.name AS site_name, p.name AS post_name
+        `SELECT v.id, v.visited_at, v.client_note AS note, s.name AS site_name, p.name AS post_name
          FROM supervisor_visits v
          JOIN sites s ON s.id = v.site_id
          LEFT JOIN posts p ON p.id = v.post_id
@@ -740,7 +738,7 @@ clientRouter.get(
 
     const visits = await db
       .prepare(
-        `SELECT v.visited_at, v.notes, v.rating, p.name AS post_name
+        `SELECT v.visited_at, v.client_note AS note, p.name AS post_name
          FROM supervisor_visits v
          LEFT JOIN posts p ON p.id = v.post_id
          WHERE v.site_id = ? AND v.visited_at >= ? AND v.visited_at < ?

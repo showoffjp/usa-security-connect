@@ -1099,28 +1099,41 @@ export async function seedExpansion(ctx) {
   const tourRuns = (await runRows(hvTour, '1014', 20, 30)) + (await runRows(pdTour, '1027', 21, 40)) + (await runRows(cpTour, '1020', 23, 45));
 
   /* ------------------------------------------------- supervisor visits -- */
+  // Each visit's own note is about the officer and stays with us; the client
+  // note is what the property's contacts read in the portal.
   const VISITS = [
-    ['1011', 'hvEd', -1, 10, 5, 'ED doors well controlled during a busy morning. Visitor band compliance spot-checked: 20 of 20.'],
-    ['1013', 'hvEd', -4, 2, 4, 'Handled a Code Grey well the night before. Reminded to complete the incident report before end of shift, not after.'],
-    ['1014', 'hvGarage', -3, 21, 4, 'Garage round driven as required. Two stairwell lights out on level 5 - reported to facilities.'],
-    ['1016', 'bmDock', -5, 18, 5, 'Excellent knowledge of the dock and the members. Bilge alarm response was textbook.'],
-    ['1018', 'cpLobby', -2, 8, 5, 'Turnstile queue managed calmly at 08:30 peak. Pre-registration list current.'],
-    ['1020', 'cpGarage', -6, 23, 5, 'Weapon inspection logged. P3 closed and walked. No concerns.'],
-    ['1021', 'rpLab', -7, 11, 4, 'BSL-2 tailgating log up to date. Asked her to escalate the freezer panel fault again.'],
-    ['1023', 'rpPatrol', -9, 1, 3, 'Patrol vehicle log had two gaps of over an hour. Discussed - radio dead spot on the far lot. Raised with the client.'],
-    ['1024', 'soFloor', -3, 14, 4, 'Good visibility in the food court. Uniform jacket missing its patch - replacement ordered.'],
-    ['1026', 'pdGate', -2, 7, 5, 'Seal verification on three trucks observed. Thorough and polite with drivers.'],
-    ['1028', 'pdWarehouse', -5, 22, 5, 'Two-person rule on the cage enforced without exception. Aisle tag scans complete.'],
+    ['1011', 'hvEd', -1, 10, 5, 'ED doors well controlled during a busy morning. Visitor band compliance spot-checked: 20 of 20.',
+      'Supervisor visit to the Emergency Department entrance. Visitor bands spot-checked: all in order.'],
+    ['1013', 'hvEd', -4, 2, 4, 'Handled a Code Grey well the night before. Reminded to complete the incident report before end of shift, not after.',
+      'Overnight supervisor visit. Post in good order.'],
+    ['1014', 'hvGarage', -3, 21, 4, 'Garage round driven as required. Two stairwell lights out on level 5 - reported to facilities.',
+      'Garage patrol checked. Two stairwell lights out on level 5 have been reported to your facilities team.'],
+    ['1016', 'bmDock', -16, 18, 5, 'Excellent knowledge of the dock and the members. Bilge alarm response was textbook.',
+      'Supervisor visit to the dock post. No concerns.'],
+    ['1018', 'cpLobby', -2, 8, 5, 'Turnstile queue managed calmly at 08:30 peak. Pre-registration list current.',
+      'Lobby visited during the morning peak. Visitor pre-registration working as agreed.'],
+    ['1020', 'cpGarage', -6, 23, 5, 'Weapon inspection logged. P3 closed and walked. No concerns.',
+      'Late-evening garage visit. Level P3 closed and checked.'],
+    ['1021', 'rpLab', -7, 11, 4, 'BSL-2 tailgating log up to date. Asked her to escalate the freezer panel fault again.',
+      'Lab entrance visited. The freezer panel fault has been raised with your facilities team again.'],
+    ['1023', 'rpPatrol', -9, 1, 3, 'Patrol vehicle log had two gaps of over an hour. Discussed - radio dead spot on the far lot. Raised with the client.',
+      'Overnight patrol checked. There is a radio dead spot on the far lot; we are proposing a fix.'],
+    ['1024', 'soFloor', -3, 14, 4, 'Good visibility in the food court. Uniform jacket missing its patch - replacement ordered.',
+      'Supervisor visit to the mall floor. Good visibility in the food court.', ['uniform']],
+    ['1026', 'pdGate', -2, 7, 5, 'Seal verification on three trucks observed. Thorough and polite with drivers.',
+      'Gate visited at shift change. Seal verification observed on three trucks.'],
+    ['1028', 'pdWarehouse', -5, 22, 5, 'Two-person rule on the cage enforced without exception. Aisle tag scans complete.',
+      'Warehouse visited. Two-person rule on the high-value cage followed.'],
   ];
-  for (const [code, postKey, days, hour, rating, notes] of VISITS) {
+  for (const [code, postKey, days, hour, rating, notes, clientNote, fails = []] of VISITS) {
     const post = posts[postKey];
     await db.prepare(
       `INSERT INTO supervisor_visits
        (supervisor_id, officer_id, site_id, post_id, visited_at, uniform_ok, post_orders_reviewed, equipment_ok,
-        site_secure, rating, notes, latitude, longitude)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        site_secure, rating, notes, client_note, latitude, longitude)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(supervisorFor(post.siteKey), staff[code].id, post.siteId, post.id, toSql(at(days, hour, 15)),
-      rating >= 4, true, rating >= 4, true, rating, notes, post.latitude, post.longitude);
+      rating >= 4 && !fails.includes('uniform'), true, rating >= 4, true, rating, notes, clientNote, post.latitude, post.longitude);
   }
 
   /* ------------------------------------------------------- broadcasts -- */

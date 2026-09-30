@@ -188,7 +188,7 @@ section('reports');
 
 log((await call('/admin/reports', { token: officer })).status === 403, 'an officer cannot open the report centre');
 const catalogue = await call('/admin/reports', { token: supervisor });
-log(catalogue.data?.reports?.length === 11, 'eleven reports are offered');
+log(catalogue.data?.reports?.length === 12, 'twelve reports are offered');
 
 const from = localDate(addDays(new Date(), -13));
 const to = localDate();

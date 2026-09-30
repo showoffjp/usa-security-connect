@@ -977,8 +977,14 @@ kbd {
 .email-settings legend { text-transform: none; letter-spacing: normal; color: var(--ink); font-size: 0.85rem; font-weight: 700; }
 
 /* --------------------------------------------------------- follow-ups -- */
-.follow-ups .lead-icon.fu-done { background: var(--ok-bg); color: var(--ok); }
-.follow-ups .lead-icon.fu-overdue { background: var(--danger-bg); color: var(--danger); }
+.follow-ups .lead-icon.fu-done, .visit-list .lead-icon.fu-done { background: var(--ok-bg); color: var(--ok); }
+.follow-ups .lead-icon.fu-overdue, .visit-list .lead-icon.fu-overdue { background: var(--danger-bg); color: var(--danger); }
+.visit-checks { display: grid; gap: 8px; }
+.visit-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.86rem; }
+.visit-check-list li { display: flex; align-items: center; gap: 6px; }
+.visit-check-list li.ok { color: var(--ok-strong); }
+.visit-check-list li.bad { color: var(--danger-strong); font-weight: 600; }
+.visit-checks legend { font-size: 0.88rem; font-weight: 700; margin-bottom: 8px; }
 .client-actions { margin: 4px 0 0; padding-left: 18px; }
 .client-actions li { margin: 4px 0; }
 .client-actions .done { text-decoration: line-through; color: var(--muted); }

@@ -741,6 +741,53 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* --------------------------------------------- round 11: field visits --- */
+{
+  console.log('\n--- Supervisor field visits ---');
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await staff.page.goto(WEB + '/admin/visits');
+  await settle(staff.page);
+  const dueRows = staff.page.locator('table.data tbody tr', { hasText: 'Due' });
+  const dueBefore = await dueRows.count();
+  log(dueBefore >= 1, 'a supervisor sees the sites due a visit', `${dueBefore}`);
+  await checkScreen('supervisor: field visits', staff.page, staff.problems);
+  const dueSite = (await dueRows.first().locator('td .strong').innerText()).trim();
+  await dueRows.first().locator('button:has-text("Log a visit")').click();
+  await staff.page.waitForSelector('[role="dialog"]:has-text("Log a visit")');
+  const postSelect = staff.page.locator('[role="dialog"] select').nth(1);
+  const firstPost = await postSelect.locator('option').nth(1).getAttribute('value');
+  await postSelect.selectOption(firstPost);
+  await staff.page.getByLabel('Equipment present and working').uncheck();
+  await staff.page.getByLabel('Notes (internal)').fill('E2E: radio battery flat, replaced from the spare.');
+  await staff.page.getByLabel('Note for the client').fill('E2E: supervisor visit, post in order.');
+  await checkScreen('supervisor: log a visit', staff.page, staff.problems);
+  await staff.page.click('[role="dialog"] .modal-foot button:has-text("Log visit")');
+  await staff.page.waitForTimeout(1500);
+  log(await dueRows.count() === dueBefore - 1, `the visit takes ${dueSite} off the due list`);
+  const logged = staff.page.locator('.visit-list li', { hasText: 'E2E: radio battery flat' });
+  log(await logged.count() === 1 && (await logged.locator('text=Equipment present and working').count()) === 1,
+    'and the visit is listed with the failed check');
+  await staff.page.click('[role="radio"]:has-text("Found a problem")');
+  await staff.page.waitForTimeout(800);
+  log(await staff.page.locator('.visit-list li', { hasText: 'E2E: radio battery flat' }).count() === 1, 'including under visits that found a problem');
+
+  await staff.page.goto(WEB + '/admin/reports?report=visits-by-site');
+  await settle(staff.page);
+  await staff.page.waitForSelector('table.data tbody tr', { timeout: 10000 });
+  log(await staff.page.locator('table.data tbody tr').count() >= 10, 'a manager runs the supervisor visits report');
+  await checkScreen('supervisor: visits report', staff.page, staff.problems);
+
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await settle(officer.page);
+  await officer.page.waitForSelector('#last-visit-title', { timeout: 10000 });
+  log(await officer.page.locator('#last-visit-title').count() === 1, "an officer's home shows their last supervisor visit");
+  await checkScreen('officer: last supervisor visit', officer.page, officer.problems);
+  await staff.context.close();
+  await officer.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

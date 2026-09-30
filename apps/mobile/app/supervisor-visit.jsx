@@ -24,6 +24,7 @@ export default function SupervisorVisitScreen() {
     siteSecure: true,
     rating: 5,
     notes: '',
+    clientNote: '',
   });
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -56,6 +57,7 @@ export default function SupervisorVisitScreen() {
         siteSecure: form.siteSecure,
         rating: form.rating,
         notes: form.notes || undefined,
+        clientNote: form.clientNote || undefined,
         latitude: fix.ok ? fix.latitude : null,
         longitude: fix.ok ? fix.longitude : null,
       });
@@ -109,7 +111,7 @@ export default function SupervisorVisitScreen() {
         </View>
 
         <Banner tone="info">
-          Your GPS position is recorded with the visit, so the client can see the post was attended.
+          Your GPS position is recorded with the visit. The client sees that the post was visited, and your note for them.
         </Banner>
 
         <Card title="Where and who">
@@ -157,7 +159,7 @@ export default function SupervisorVisitScreen() {
                 </Pressable>
               ))}
             </View>
-            <Field label="Notes" hint="What you observed, and anything you coached the officer on.">
+            <Field label="Notes (internal)" hint="What you observed, and anything you coached the officer on. The client never sees this.">
               <Input
                 value={form.notes}
                 onChangeText={set('notes')}
@@ -165,10 +167,18 @@ export default function SupervisorVisitScreen() {
                 style={{ height: 110, textAlignVertical: 'top' }}
               />
             </Field>
+            <Field label="Note for the client" hint="What the property's contacts read in the portal. Leave it empty to show the visit alone.">
+              <Input
+                value={form.clientNote}
+                onChangeText={set('clientNote')}
+                multiline
+                style={{ height: 80, textAlignVertical: 'top' }}
+              />
+            </Field>
           </View>
         </Card>
 
-        <Button title="Log visit" variant="primary" onPress={submit} busy={busy} />
+        <Button title="Log visit" variant="primary" onPress={submit} busy={busy} disabled={!form.postId} />
         <Button title="Cancel" variant="ghost" onPress={() => router.back()} disabled={busy} />
       </ScrollView>
       <Toast toast={toast} />

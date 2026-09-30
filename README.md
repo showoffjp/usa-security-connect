@@ -237,7 +237,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   to call, with who answers after hours.
 - **Messaging** with supervisors and dispatch.
 - **Supervisor visits** (supervisors only) — uniform, post orders, equipment and site
-  checks, logged with GPS.
+  checks, logged with GPS. Two notes: an internal one (what was seen, what the officer
+  was coached on) and a separate note for the client. The client never reads the
+  first.
+- **Your last supervisor visit** — for a week after a visit, the officer's home screen
+  shows who came, how it was rated, which checks passed and what the supervisor said.
 - **Duress button** — one tap plus a confirmation alerts every supervisor with the
   officer's name, post and position. It fires immediately rather than waiting on GPS,
   repeat presses update the same alert instead of flooding the board, and the officer
@@ -252,7 +256,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 
 - **Keyboard shortcuts** — **?** lists them; **g** then a letter jumps to a screen
   (d dashboard, l live tracking, f flags, i incidents, p post logs, s schedule,
-  e employees, t timesheets, r reports, h site health, c client portal). Off while
+  e employees, t timesheets, r reports, h site health, v field visits, c client portal). Off while
   typing in a field.
 - **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
   the search button in the header. Find an officer by name, code or phone, a site by
@@ -289,9 +293,17 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
   issues, lost and found), the scorecards and client feedback. Any cell starting
   with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
+- **Field visits** (Operations → Field visits) — every active site with its last
+  supervisor visit, longest first; a site with no visit in 14 days is **due** (a badge in
+  the sidebar, an alert in the inbox, a line on site health) until someone goes. Every
+  visit is listed with the checks that failed, the rating, the internal notes and what
+  the client reads; filter to the ones that found a problem, or by site. A visit can be
+  logged from the desk too, dated up to a week back. A visit that found a problem is
+  raised in the alerts inbox.
 - **Site health** (Reporting → Site health) — every active site's month side by side,
   worst first, scored out of 100 with the reasons listed: shifts not covered, checkpoints
-  not scanned, serious incidents, building issues left open, a low client rating. The
+  not scanned, serious incidents, building issues left open, a low client rating, a
+  site overdue for a supervisor visit. The
   numbers are the ones each client reads in their monthly report (the two share one
   calculation), and any site's full month opens from the board, ready to print.
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
@@ -332,12 +344,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
   1099 separately.
-- **Reports** — eleven reports over any period, site, officer or classification, each
+- **Reports** — twelve reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
   1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
   where officers worked, daily hours, attendance &amp; punctuality, GPS &amp; geofence
-  compliance, and three on incidents: **by site** (how serious, police called, still
+  compliance, **supervisor visits by site** (visits, rating, problems found, days since
+  the last one), and three on incidents: **by site** (how serious, police called, still
   open), **by type** (with the serious share and the average hours to close) and **by
   day** (to spot a bad week, with the busiest day and worst weekday).
 - **Safety &amp; live map** — open duress alerts with one-tap call and directions, plus a
@@ -426,7 +439,12 @@ a PIN — and sees, for their own properties only:
 - **Incidents** — the full report, including photographs, which are served through the
   API rather than handed out as storage URLs, and **what we are doing about it**: the
   follow-ups shared with the client, each shown in hand with its due date or done. Who
-  owns them and the internal note on how each was closed stay with us.
+  owns them and the internal note on how each was closed stay with us. When a shared
+  follow-up is done, the contacts who take serious incident alerts are emailed once,
+  with what is still in hand.
+- **Supervisor visits** — each visit to the property, when and at which post, with the
+  supervisor's note for the client. Their internal notes, the rating and the officer's
+  name are not shown.
 - **Daily activity report** — the same document the account manager reviews, laid out to
   print straight to PDF, including who came through the building: every visitor,
   contractor and delivery the officers signed in, when they arrived and left, and their
@@ -610,7 +628,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 22 steps and stops it:
+One command reseeds the database, starts the API, runs all 23 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -696,6 +714,15 @@ the server is running corrupts the data directory.
   overdue and dropped once done; the client sees only the shared ones, without owner or
   note, and the officer who filed the incident does not see them. The incident reports
   agree with each other, refuse a range over a year, and export as CSV with a total.
+  A follow-up done emails the client once, without our note, and an internal one never.
+- **`test/visits.mjs`** — supervisor field visits. A visit is tied to a real site and
+  post (the post decides the site), a real officer, and a time no later than now and
+  no more than a week back. Supervisors see every visit and filter it; an officer sees
+  only the visits made to them. The client reads only the note written for them - not
+  the internal notes, the rating or the officer's name, in the visit list or the daily
+  report. Sites with no visit in 14 days are due on the board, the sidebar badge, the
+  alerts and site health, and drop off all four once visited. The visits report covers
+  every site, adds up, and exports.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -709,7 +736,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 90 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 94 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

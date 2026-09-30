@@ -5,6 +5,9 @@
  *     when a supervisor raises it to serious on review.
  *   - The daily report: yesterday at each property, sent by the daily sweep to
  *     the contacts who asked for it, once per contact, site and day.
+ *   - A follow-up done: when a follow-up shared with the client on one of
+ *     their incidents is marked done, once, to the contacts who take serious
+ *     incident alerts.
  *
  * Only what the portal already shows the client goes in: never the officer's
  * name, a review note or anything about pay.
@@ -71,6 +74,54 @@ export async function notifySeriousIncident(incidentId) {
       ]
         .filter((l) => l !== null)
         .join('\n'),
+    });
+  }
+  return contacts.length;
+}
+
+/** Tell the property's contacts that a follow-up we shared with them is done. Returns how many were emailed. */
+export async function notifyFollowUpDone(actionId) {
+  const a = await db
+    .prepare(
+      `SELECT a.id, a.title, a.status, a.client_visible, a.client_notified_at, a.done_at,
+              i.id AS incident_id, i.ref_number, i.site_id, s.name AS site_name
+       FROM incident_actions a JOIN incidents i ON i.id = a.incident_id JOIN sites s ON s.id = i.site_id
+       WHERE a.id = ?`
+    )
+    .get(actionId);
+  if (!a || a.status !== 'done' || !a.client_visible || a.client_notified_at) return 0;
+  const claimed = await db
+    .prepare(`UPDATE incident_actions SET client_notified_at = now() WHERE id = ? AND client_notified_at IS NULL`)
+    .run(a.id);
+  if (!claimed.changes) return 0;
+
+  const open = await db
+    .prepare(`SELECT title FROM incident_actions WHERE incident_id = ? AND client_visible = true AND status = 'open' ORDER BY due_on NULLS LAST, id`)
+    .all(a.incident_id);
+  const contacts = await contactsFor(a.site_id, 'notify_serious_incidents');
+  for (const c of contacts) {
+    await send({
+      to: c.email,
+      name: c.name,
+      kind: 'incident_update',
+      entity: 'incident',
+      entityId: a.incident_id,
+      subject: `Update on ${a.ref_number} at ${a.site_name}: ${a.title}`,
+      body: [
+        `Dear ${c.name},`,
+        '',
+        `An update on incident ${a.ref_number} at ${a.site_name}. This is now done:`,
+        '',
+        `  ${a.title}`,
+        '',
+        open.length
+          ? `Still in hand:\n${open.map((o) => `  - ${o.title}`).join('\n')}`
+          : 'That was the last thing we had open on this incident.',
+        '',
+        `The report and everything we are doing about it are in ${portalLink()} under Incidents.`,
+        '',
+        'You are receiving this because serious incident alerts are on for your account. You can turn them off in the portal.',
+      ].join('\n'),
     });
   }
   return contacts.length;
