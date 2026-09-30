@@ -621,7 +621,23 @@ const publicInvoice = (row) => ({
   paid_at: sqlToIso(row.paid_at),
   notes: row.notes,
   overdue_days: daysOverdue(row.due_on, row.status),
+  open_queries: Number(row.open_queries || 0),
 });
+
+/** Questions on an invoice as the client sees them: no name of ours on the answer. */
+async function queriesFor(invoiceId) {
+  const rows = await db
+    .prepare(
+      `SELECT q.id, q.line_id, l.description AS line_description, q.question, q.status, q.answer,
+              q.created_at, q.answered_at, c.name AS asked_by
+       FROM invoice_queries q
+       LEFT JOIN invoice_lines l ON l.id = q.line_id
+       LEFT JOIN client_users c ON c.id = q.client_user_id
+       WHERE q.invoice_id = ? ORDER BY q.created_at DESC, q.id DESC`
+    )
+    .all(invoiceId);
+  return rows.map((q) => isoFields(q, ['created_at', 'answered_at']));
+}
 
 clientRouter.get(
   '/invoices',
@@ -632,7 +648,8 @@ clientRouter.get(
     // to see yet.
     const rows = await db
       .prepare(
-        `SELECT i.*, s.name AS site_name, s.client_name
+        `SELECT i.*, s.name AS site_name, s.client_name,
+                (SELECT COUNT(*) FROM invoice_queries q WHERE q.invoice_id = i.id AND q.status = 'open') AS open_queries
          FROM invoices i JOIN sites s ON s.id = i.site_id
          WHERE s.id IN (${sql}) AND i.status IN ('sent','paid')
          ORDER BY i.period_end DESC, i.id DESC LIMIT 100`
@@ -650,19 +667,11 @@ clientRouter.get(
 clientRouter.get(
   '/invoices/:id',
   wrap(async (req, res) => {
-    const { sql, ids } = scope(req);
-    const row = await db
-      .prepare(
-        `SELECT i.*, s.name AS site_name, s.client_name, s.address, s.city, s.state, s.postal_code
-         FROM invoices i JOIN sites s ON s.id = i.site_id
-         WHERE i.id = ? AND s.id IN (${sql}) AND i.status IN ('sent','paid')`
-      )
-      .get(req.params.id, ...ids);
-    if (!row) throw new HttpError(404, 'Invoice not found.');
+    const row = await loadClientInvoice(req, req.params.id);
 
     const lines = await db
       .prepare(
-        `SELECT description, minutes, rate_cents, amount_cents
+        `SELECT id, description, minutes, rate_cents, amount_cents
          FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence, id`
       )
       .all(row.id);
@@ -676,7 +685,52 @@ clientRouter.get(
         postal_code: row.postal_code,
       },
       lines: lines.map((l) => ({ ...l, hours: toHours(l.minutes) })),
+      queries: await queriesFor(row.id),
     });
+  })
+);
+
+/** One of the client's own issued invoices, or a 404. */
+async function loadClientInvoice(req, idValue) {
+  const { sql, ids } = scope(req);
+  const row = await db
+    .prepare(
+      `SELECT i.*, s.name AS site_name, s.client_name, s.address, s.city, s.state, s.postal_code,
+              (SELECT COUNT(*) FROM invoice_queries q WHERE q.invoice_id = i.id AND q.status = 'open') AS open_queries
+       FROM invoices i JOIN sites s ON s.id = i.site_id
+       WHERE i.id = ? AND s.id IN (${sql}) AND i.status IN ('sent','paid')`
+    )
+    .get(idParam(idValue, 'invoice'), ...ids);
+  if (!row) throw new HttpError(404, 'Invoice not found.');
+  return row;
+}
+
+const MAX_OPEN_QUERIES = 3;
+
+/** Ask about an invoice, or one line of it. The office answers in the portal and by email. */
+clientRouter.post(
+  '/invoices/:id/queries',
+  wrap(async (req, res) => {
+    const invoice = await loadClientInvoice(req, req.params.id);
+    const body = parse(
+      z.object({
+        lineId: z.number().int().positive().optional().nullable(),
+        question: z.string().trim().min(10, 'Say what you would like to know.').max(1000),
+      }),
+      req.body
+    );
+    if (body.lineId) {
+      const line = await db.prepare(`SELECT id FROM invoice_lines WHERE id = ? AND invoice_id = ?`).get(body.lineId, invoice.id);
+      if (!line) throw new HttpError(422, 'That line is not on this invoice.', [{ field: 'lineId', message: 'Pick a line on this invoice.' }]);
+    }
+    if (Number(invoice.open_queries) >= MAX_OPEN_QUERIES) {
+      throw new HttpError(409, `There are already ${MAX_OPEN_QUERIES} questions waiting on this invoice. We will answer those first.`);
+    }
+    const info = await db
+      .prepare(`INSERT INTO invoice_queries (invoice_id, line_id, client_user_id, question) VALUES (?,?,?,?)`)
+      .run(invoice.id, body.lineId ?? null, req.client.id, body.question);
+    await audit(null, 'invoice_query.asked', 'invoice_query', Number(info.lastInsertRowid), { invoiceId: invoice.id, clientUserId: req.client.id }, req.ip);
+    res.status(201).json({ queries: await queriesFor(invoice.id) });
   })
 );
 

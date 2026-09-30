@@ -678,6 +678,12 @@ summary:focus-visible,
 .invoice-details { display: grid; grid-template-columns: auto auto; gap: 2px 14px; margin: 0; font-size: 0.82rem; }
 .invoice-details dt { color: var(--muted); }
 .invoice-details dd { margin: 0; text-align: right; }
+.incident-facts { grid-template-columns: max-content 1fr; margin: 18px 0; font-size: 0.9rem; }
+.incident-facts dd { text-align: left; }
+.incident-section { margin: 14px 0; break-inside: avoid; }
+.incident-section h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 4px; }
+.incident-section p { margin: 0; white-space: pre-wrap; }
+.incident-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 0.78rem; color: var(--muted); }
 
 .invoice-lines { width: 100%; border-collapse: collapse; margin-top: 4px; }
 .invoice-lines th, .invoice-lines td { padding: 9px 10px; text-align: left; }
@@ -988,3 +994,4 @@ kbd {
 .client-actions { margin: 4px 0 0; padding-left: 18px; }
 .client-actions li { margin: 4px 0; }
 .client-actions .done { text-decoration: line-through; color: var(--muted); }
+.invoice-answer { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--ok); background: var(--surface-2, transparent); border-radius: 0 6px 6px 0; }

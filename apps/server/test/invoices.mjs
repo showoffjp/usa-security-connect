@@ -293,6 +293,56 @@ log(crossInvoice.status === 404, "one client cannot open another's invoice");
 const draftForClient = await call(`/client/invoices/${draft.data.invoice.id}`, { token: dana });
 log(draftForClient.status === 404, 'a voided invoice is not visible to the client either');
 
+/* ===================================================== client questions === */
+section('client questions about an invoice');
+
+const asked = clientInvoices.data.invoices.find((i) => i.status === 'sent') || clientInvoices.data.invoices[0];
+const askedDetail = (await call(`/client/invoices/${asked.id}`, { token: dana })).data;
+const ask = (body, token = dana, id = asked.id) => call(`/client/invoices/${id}/queries`, { token, method: 'POST', body });
+const lineId = askedDetail.lines[0].id;
+log(askedDetail.lines.every((l) => Number.isInteger(l.id)) && Array.isArray(askedDetail.queries), 'the client sees each line and any questions so far');
+log((await ask({ question: 'Why?' })).status === 422, 'a question has to say something');
+log((await ask({ question: 'What is this line for exactly?', lineId: 999999 })).status === 422, 'a line has to be on this invoice');
+log((await ask({ question: 'What is this line for exactly?' }, marcus)).status === 404, "a client cannot ask about another client's invoice");
+log((await ask({ question: 'What is this line for exactly?' }, dana, draft.data.invoice.id)).status === 404, 'or one that was never issued to them');
+log((await ask({ question: 'What is this line for exactly?' }, dana, 'abc')).status === 422, 'a junk invoice id is refused');
+const before = askedDetail.queries.filter((q) => q.status === 'open').length;
+const first = await ask({ question: 'Were the Sunday hours billed at the holiday rate?', lineId });
+log(first.status === 201 && first.data.queries.some((q) => q.question.startsWith('Were the Sunday') && q.line_id === lineId && q.status === 'open'),
+  'a client asks about a line');
+log(first.data.queries.every((q) => !('answered_by' in q) && !('answered_by_name' in q)), 'without learning who on our side answers');
+for (let n = before + 1; n < 3; n++) await ask({ question: `Filler question number ${n} about this invoice.` });
+log((await ask({ question: 'One question too many about this invoice.' })).status === 409, 'no more than three waiting on one invoice');
+const clientList = (await call('/client/invoices', { token: dana })).data.invoices;
+log(clientList.find((i) => i.id === asked.id)?.open_queries === 3, 'the invoice list shows questions waiting');
+
+const staffQueue = await call('/invoices/queries', { token: supervisor });
+const theirs = staffQueue.data.queries.find((q) => q.question.startsWith('Were the Sunday'));
+log(staffQueue.status === 200 && theirs && theirs.asked_by_email === 'dana.whitfield@riverfrontholdings.com' && theirs.line_description,
+  'the office sees the question, who asked and which line');
+log(staffQueue.data.open === staffQueue.data.queries.length && staffQueue.data.queries.every((q) => q.status === 'open'), 'waiting ones by default, counted');
+log((await call('/invoices/queries', { token: officer })).status === 403, 'officers do not see them');
+const staffInvoice = await call(`/invoices/${asked.id}`, { token: admin });
+log(staffInvoice.data.queries.some((q) => q.id === theirs.id), 'and they show on the invoice itself');
+const alerts = (await call('/admin/alerts', { token: supervisor })).data.alerts;
+log(alerts.some((a) => a.key === `invoice-query:${theirs.id}` && a.kind === 'invoice_query'), 'a waiting question is in the alerts inbox');
+
+const answer = (id, body, token = supervisor) => call(`/invoices/queries/${id}/answer`, { token, method: 'POST', body });
+log((await answer(theirs.id, { answer: 'No' })).status === 422, 'an answer has to be one the client can read');
+log((await answer(theirs.id, { answer: 'Sundays are billed at the standard rate.' }, officer)).status === 403, 'officers cannot answer');
+log((await answer(999999, { answer: 'Sundays are billed at the standard rate.' })).status === 404, 'an unknown question is not found');
+const answered = await answer(theirs.id, { answer: 'No - Sundays are billed at the standard rate; only the six public holidays carry the premium.' });
+log(answered.status === 200 && answered.data.query.status === 'answered' && answered.data.query.answered_by_name === 'Renata Diaz',
+  'a supervisor answers');
+log((await answer(theirs.id, { answer: 'Answering the same question again.' })).status === 409, 'and cannot answer it twice');
+const mail = ((await call('/admin/emails?limit=300', { token: admin })).data.emails || [])
+  .filter((e) => e.kind === 'invoice_query_answered' && /dana\.whitfield@/.test(e.to_email));
+log(mail.length === 1 && mail[0].subject.includes(asked.number), 'the client is emailed the answer', mail[0]?.subject);
+const seen = (await call(`/client/invoices/${asked.id}`, { token: dana })).data.queries.find((q) => q.id === theirs.id);
+log(seen?.status === 'answered' && /public holidays/.test(seen.answer) && !('answered_by_name' in seen), 'and reads it in the portal');
+log(!(await call('/admin/alerts', { token: supervisor })).data.alerts.some((a) => a.key === `invoice-query:${theirs.id}`), 'it leaves the alerts inbox');
+log((await ask({ question: 'Now there is room for one more question.' })).status === 201, 'answering one makes room for another');
+
 /* =============================================================== audit === */
 section('audit trail');
 
@@ -302,5 +352,6 @@ log(actions.has('invoice.created'), 'raising an invoice is audited');
 log(actions.has('invoice.sent'), 'sending one is audited');
 log(actions.has('invoice.paid'), 'payment is audited');
 log(actions.has('export.invoice'), 'the CSV export is audited');
+log(actions.has('invoice_query.answered'), 'answering a client question is audited');
 
 finish('invoices');

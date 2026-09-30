@@ -14,6 +14,7 @@ import {
 } from '../../components/ui.jsx';
 import { AuthedImage } from '../../components/AuthedImage.jsx';
 import { InvoiceSheet, printInvoice } from '../../components/InvoiceSheet.jsx';
+import { PrintableIncident, printIncident } from '../../components/IncidentSheet.jsx';
 
 /* ------------------------------------------------------------ shared -- */
 
@@ -884,10 +885,22 @@ function IncidentDialog({ id, onClose }) {
   const { data, error, loading, reload } = usePortal(`/client/incidents/${id}`, [id]);
 
   return (
-    <Modal title="Incident report" onClose={onClose} wide>
+    <Modal
+      title="Incident report"
+      onClose={onClose}
+      wide
+      footer={
+        data && (
+          <button className="btn btn-ghost" onClick={printIncident}>
+            <Icon name="print" size={16} /> Print / save PDF
+          </button>
+        )
+      }
+    >
       <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading the report">
         {data && (
           <div className="stack">
+            <PrintableIncident incident={data.incident} actions={data.actions || []} photos={data.photos.length} />
             <div className="row" style={{ gap: 8 }}>
               <Chip kind="navy">{data.incident.ref_number}</Chip>
               <StatusChip value={data.incident.severity} />
@@ -1090,8 +1103,94 @@ export function PortalIncidents({ sites }) {
 
 /* ---------------------------------------------------------- invoices -- */
 
+/** Questions about one invoice: what was asked, what we said, and a form to ask another. */
+function InvoiceQuestions({ invoiceId, lines, queries, onChange }) {
+  const [lineId, setLineId] = useState('');
+  const [question, setQuestion] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const openCount = queries.filter((q) => q.status === 'open').length;
+
+  const ask = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const d = await clientApi.post(`/client/invoices/${invoiceId}/queries`, {
+        lineId: lineId ? Number(lineId) : null,
+        question,
+      });
+      setQuestion('');
+      setLineId('');
+      onChange(d.queries);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="invoice-questions" aria-labelledby="invoice-questions-title">
+      <h3 id="invoice-questions-title" className="small strong" style={{ margin: '0 0 6px' }}>
+        Questions about this invoice
+      </h3>
+      {queries.length > 0 && (
+        <ul className="list" style={{ marginBottom: 10 }}>
+          {queries.map((q) => (
+            <li key={q.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+              <div className="grow">
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {q.status === 'open' ? <Chip kind="warn">Waiting for our answer</Chip> : <Chip kind="ok">Answered</Chip>}
+                  {q.line_description && <span className="tiny muted">{q.line_description}</span>}
+                </div>
+                <div className="small" style={{ marginTop: 4 }}>{q.question}</div>
+                <div className="tiny muted">
+                  {q.asked_by || 'You'}, {fmtDateTime(q.created_at)}
+                </div>
+                {q.answer && (
+                  <div className="invoice-answer small">
+                    <strong>Our answer:</strong> {q.answer}
+                    <div className="tiny muted">{fmtDateTime(q.answered_at)}</div>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {openCount >= 3 ? (
+        <p className="small muted">Three questions are waiting on this invoice. We will answer those before taking another.</p>
+      ) : (
+        <form className="stack-sm" onSubmit={ask}>
+          <Field label="About">
+            <select value={lineId} onChange={(e) => setLineId(e.target.value)}>
+              <option value="">The whole invoice</option>
+              {lines.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.description}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Your question" error={error || undefined} hint="Your account manager answers here and by email.">
+            <textarea rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={1000} />
+          </Field>
+          <div>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={busy || question.trim().length < 10}>
+              {busy ? 'Sending...' : 'Ask about this invoice'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function InvoiceDialog({ id, onClose }) {
   const { data, error, loading, reload } = usePortal(`/client/invoices/${id}`, [id]);
+  const [queries, setQueries] = useState(null);
+  useEffect(() => setQueries(data?.queries ?? null), [data]);
 
   return (
     <Modal
@@ -1114,6 +1213,7 @@ function InvoiceDialog({ id, onClose }) {
             )}
             {/* The same document the account manager sends, so they cannot differ. */}
             <InvoiceSheet invoice={data.invoice} lines={data.lines} site={data.invoice} />
+            <InvoiceQuestions invoiceId={data.invoice.id} lines={data.lines} queries={queries || data.queries || []} onChange={setQueries} />
           </div>
         )}
       </Loaded>
@@ -1161,6 +1261,7 @@ export function PortalInvoices() {
                           <span className="mono small strong">{i.number}</span>
                           <StatusChip value={i.status} />
                           {i.overdue_days > 0 && <Chip kind="danger">{i.overdue_days}d overdue</Chip>}
+                          {i.open_queries > 0 && <Chip kind="warn">Question waiting</Chip>}
                         </div>
                         <div className="tiny muted" style={{ marginTop: 3 }}>
                           {i.site_name} &middot; {fmtDate(i.period_start)} to {fmtDate(i.period_end)}

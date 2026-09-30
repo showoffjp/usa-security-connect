@@ -79,6 +79,7 @@ const STAFF_PAGES = [
   ['Field visits', '/admin/visits'],
   ['Field visits: problems', '/admin/visits?issues=1'],
   ['Report: supervisor visits', '/admin/reports?report=visits-by-site'],
+  ['Invoices: client questions', '/admin/invoices?tab=questions'],
 ];
 
 const PORTAL_PAGES = [
@@ -267,6 +268,16 @@ await page.goto(`${WEB}/portal`, { waitUntil: 'networkidle' });
 await page.click('button[aria-label="Account menu"]');
 await page.waitForSelector('text=Email me');
 await audit(page, 'Portal account menu, with email settings', null);
+await page.keyboard.press('Escape');
+await page.goto(`${WEB}/portal/invoices`, { waitUntil: 'networkidle' });
+await page.locator('li.list-item button:has-text("View")').first().click();
+await page.waitForSelector('#invoice-questions-title');
+await audit(page, 'Portal invoice, with questions', null);
+await page.keyboard.press('Escape');
+await page.goto(`${WEB}/portal/incidents`, { waitUntil: 'networkidle' });
+await page.locator('button:has-text("Read")').first().click();
+await page.waitForSelector('[role="dialog"] .incident-sheet', { state: 'attached' });
+await audit(page, 'Portal incident report, with print', null);
 await page.keyboard.press('Escape');
 
 // --- night mode ------------------------------------------------------------

@@ -1,12 +1,149 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, tokenStore } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { fmtDate, fmtMoney, fmtHours, toDateInput } from '../../lib/format.js';
+import { fmtDate, fmtDateTime, fmtMoney, fmtHours, toDateInput } from '../../lib/format.js';
+import { useSearchParams } from 'react-router-dom';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, Spinner, StatusChip, Stat, useToast,
 } from '../../components/ui.jsx';
 import { InvoiceSheet, printInvoice } from '../../components/InvoiceSheet.jsx';
 import { missingCompanyDetails } from '@shared/domain.js';
+
+/* ------------------------------------------------------ client questions -- */
+
+function AnswerDialog({ query, onClose, onAnswered }) {
+  const toast = useToast();
+  const [answer, setAnswer] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/invoices/queries/${query.id}/answer`, { answer });
+      toast.success('Answer sent to the client.');
+      onAnswered();
+    } catch (err) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Answer about ${query.number}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || answer.trim().length < 5}>
+            {busy ? 'Sending...' : 'Send answer'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="small">
+          <strong>{query.asked_by || 'The client'}</strong> asked
+          {query.line_description ? ` about "${query.line_description}"` : ''}:
+          <p style={{ margin: '4px 0 0' }}>{query.question}</p>
+        </div>
+        <Field label="Your answer" required hint="The client reads this in the portal and by email.">
+          <textarea rows={4} value={answer} onChange={(e) => setAnswer(e.target.value)} maxLength={2000} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/** Clients' questions, with the answer or a button to give one. */
+function QueryList({ queries, onChanged, showInvoice = false, onOpenInvoice }) {
+  const [answering, setAnswering] = useState(null);
+  if (!queries.length) return <Empty icon="message" title="No questions" />;
+  return (
+    <>
+      <ul className="list">
+        {queries.map((q) => (
+          <li key={q.id} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+            <div className="grow">
+              <div className="row wrap" style={{ gap: 6 }}>
+                {showInvoice && (
+                  <button className="btn btn-sm btn-ghost mono" onClick={() => onOpenInvoice(q.invoice_id)}>
+                    {q.number}
+                  </button>
+                )}
+                {q.status === 'open' ? <Chip kind="warn">Waiting</Chip> : <Chip kind="ok">Answered</Chip>}
+                {q.line_description && <span className="tiny muted">{q.line_description}</span>}
+              </div>
+              <div className="small" style={{ marginTop: 4 }}>{q.question}</div>
+              <div className="tiny muted">
+                {q.asked_by || 'Client'}
+                {q.asked_by_email ? ` (${q.asked_by_email})` : ''} · {showInvoice ? `${q.site_name} · ` : ''}
+                {fmtDateTime(q.created_at)}
+              </div>
+              {q.answer && (
+                <div className="invoice-answer small">
+                  {q.answer}
+                  <div className="tiny muted">
+                    {q.answered_by_name}, {fmtDateTime(q.answered_at)}
+                  </div>
+                </div>
+              )}
+            </div>
+            {q.status === 'open' && (
+              <button className="btn btn-sm btn-primary" onClick={() => setAnswering(q)}>
+                Answer
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {answering && (
+        <AnswerDialog
+          query={answering}
+          onClose={() => setAnswering(null)}
+          onAnswered={() => {
+            setAnswering(null);
+            onChanged();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function QuestionsTab({ onOpenInvoice }) {
+  const toast = useToast();
+  const [show, setShow] = useState('open');
+  const [data, setData] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get(`/invoices/queries?status=${show}`));
+    } catch (err) {
+      toast.error(err.message);
+      setData({ queries: [], open: 0 });
+    }
+  }, [show, toast]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <div className="stack">
+      <Segmented
+        label="Which questions"
+        value={show}
+        onChange={setShow}
+        options={[
+          { value: 'open', label: `Waiting${data ? ` (${data.open})` : ''}` },
+          { value: 'answered', label: 'Answered' },
+          { value: 'all', label: 'All' },
+        ]}
+      />
+      <div className="card">
+        {!data ? <LoadingPage label="Loading questions" /> : <QueryList queries={data.queries} onChanged={load} showInvoice onOpenInvoice={onOpenInvoice} />}
+      </div>
+    </div>
+  );
+}
 
 /* --------------------------------------------------------- raise dialog -- */
 
@@ -149,7 +286,7 @@ function RaiseDialog({ sites, onClose, onCreated }) {
           </Empty>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="data">
               <thead>
                 <tr>
                   <th scope="col">Post</th>
@@ -350,6 +487,21 @@ function InvoiceDialog({ id, onClose, onChanged }) {
           {/* The document itself, so what is reviewed is what gets sent. */}
           <InvoiceSheet invoice={invoice} lines={data.lines} site={invoice} />
 
+          {data.queries?.length > 0 && (
+            <section aria-labelledby="invoice-queries-title">
+              <h3 id="invoice-queries-title" className="small strong" style={{ margin: '0 0 6px' }}>
+                Client questions
+              </h3>
+              <QueryList
+                queries={data.queries}
+                onChanged={() => {
+                  load();
+                  onChanged();
+                }}
+              />
+            </section>
+          )}
+
           <Banner kind="info" title="Internal only">
             Direct labour cost {fmtMoney(invoice.cost_cents)}, margin {fmtMoney(invoice.subtotal_cents - invoice.cost_cents)}
             {margin != null ? ` (${margin}%)` : ''}. This is officers' base hourly pay for the period and does not
@@ -372,6 +524,8 @@ export default function InvoicesPage() {
   const [error, setError] = useState('');
   const [raising, setRaising] = useState(false);
   const [open, setOpen] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'questions' ? 'questions' : 'invoices';
 
   const load = useCallback(async () => {
     try {
@@ -395,6 +549,7 @@ export default function InvoicesPage() {
   if (!data) return <LoadingPage label="Loading invoices" />;
 
   const { summary } = data;
+  const openQueries = data.invoices.reduce((n, i) => n + (i.open_queries || 0), 0);
 
   return (
     <div className="page">
@@ -412,6 +567,22 @@ export default function InvoicesPage() {
 
       {error && <Banner kind="danger">{error}</Banner>}
 
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          label="Invoices view"
+          value={tab}
+          onChange={(v) => setParams(v === 'invoices' ? {} : { tab: v }, { replace: true })}
+          options={[
+            { value: 'invoices', label: 'Invoices' },
+            { value: 'questions', label: `Client questions${openQueries ? ` (${openQueries})` : ''}` },
+          ]}
+        />
+      </div>
+
+      {tab === 'questions' ? (
+        <QuestionsTab onOpenInvoice={setOpen} />
+      ) : (
+      <>
       <div className="grid grid-4" style={{ marginBottom: 16 }}>
         <Stat label="Outstanding" value={fmtMoney(summary.outstanding_cents)} foot="sent, not yet paid" />
         <Stat label="Drafts" value={fmtMoney(summary.draft_cents)} foot="not issued" />
@@ -458,7 +629,7 @@ export default function InvoicesPage() {
         </div>
       ) : (
         <div className="card table-wrap">
-          <table>
+          <table className="data">
             <thead>
               <tr>
                 <th scope="col">Number</th>
@@ -492,6 +663,11 @@ export default function InvoicesPage() {
                         <Chip kind="danger">{i.overdue_days}d overdue</Chip>
                       </div>
                     )}
+                    {i.open_queries > 0 && (
+                      <div>
+                        <Chip kind="warn">Question waiting</Chip>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <button className="btn btn-sm btn-ghost" onClick={() => setOpen(i.id)}>
@@ -503,6 +679,9 @@ export default function InvoicesPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      </>
       )}
 
       {raising && (

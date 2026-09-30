@@ -6,6 +6,7 @@ import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Segmented, Stat, useToast, Banner,
 } from '../../components/ui.jsx';
 import { AuthedImage } from '../../components/AuthedImage.jsx';
+import { PrintableIncident, printIncident } from '../../components/IncidentSheet.jsx';
 import { INCIDENT_SEVERITY } from '@shared/domain.js';
 import { AddFollowUp, FollowUpList, FollowUpsTab, useOwners } from './FollowUps.jsx';
 
@@ -60,6 +61,9 @@ function ReviewDialog({ id, onClose, onSaved }) {
       wide
       footer={
         <>
+          <button className="btn btn-ghost" onClick={printIncident}>
+            <Icon name="print" size={16} /> Print report
+          </button>
           <button className="btn btn-ghost" onClick={onClose}>
             Close
           </button>
@@ -70,6 +74,7 @@ function ReviewDialog({ id, onClose, onSaved }) {
       }
     >
       <div className="stack">
+        <PrintableIncident incident={i} actions={data.actions || []} photos={data.photos.length} showOwners />
         <div className="row wrap">
           <StatusChip value={i.status} />
           <StatusChip value={i.severity} />

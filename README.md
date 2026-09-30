@@ -389,7 +389,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   one line per post. Preview before committing, tax and payment terms per invoice, a
   printable invoice document and CSV export, and a receivables view with margin and an
   overdue count. A period that overlaps an existing invoice is flagged before the same
-  hours get billed twice.
+  hours get billed twice. **Client questions** (a tab, and on each invoice) lists what
+  clients have asked, waiting ones first, each answered in place; a waiting question is
+  in the alerts inbox.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
 - **Outbox** — every message the system decided to send: invoice notices to client
@@ -409,6 +411,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Flags** — the compliance queue: late clock-in, missed check-in, geofence violation,
   missed clock-out, early departure, no-show. Closing one requires a written outcome.
 - **Incidents** — review queue with severity adjustment and notes back to the officer.
+  **Print report** turns an incident into a one-page document for an insurer, the police
+  or the client's file: the facts, what happened, how it was resolved, who was notified
+  and the shared follow-ups with their owners. Review notes, cost recovery and internal
+  follow-ups stay off it. Clients print the same document from the portal, without the
+  owners.
   **Follow-ups** turn a serious incident into the things that have to happen next
   ("get the fence panel repaired", "pull the camera footage for the police"): each has
   an owner (a supervisor or administrator), a due date, and is marked done only with a
@@ -452,7 +459,10 @@ a PIN — and sees, for their own properties only:
   property that day is listed too, along with the officers' activity log (without
   entries marked internal) and any building issues reported.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
-  printable document they can save as a PDF.
+  printable document they can save as a PDF. **Ask about an invoice** — the whole of it
+  or one line — and the answer arrives in the portal and by email; up to three
+  questions can wait on one invoice at a time, and the list shows which have one
+  waiting.
 - **Building issues** — on the overview: whatever our officers found wrong with the
   property, urgent first. The client marks each one "seen, it's in hand" or "fixed",
   with a note for the officer on post. The officer who reported it stays internal.
@@ -650,6 +660,9 @@ the server is running corrupts the data directory.
   and that no pay or personnel field appears in any response.
 - **`test/invoices.mjs`** — the billing arithmetic, recomputed from the hours rather
   than trusted; status transitions; and that cost and margin never reach the portal.
+  Client questions: only about their own issued invoices and lines on them, three
+  waiting at most, answered once by a supervisor or administrator, emailed, audited,
+  raised in the alerts inbox until answered, and never naming who answered.
 - **`test/email.mjs`** — what gets composed, who it is addressed to, and above all that
   no generated password appears in any message.
 - **`test/tracking.mjs`** — location reports (thinned, judged, never stored off duty),
@@ -736,7 +749,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 94 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 97 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

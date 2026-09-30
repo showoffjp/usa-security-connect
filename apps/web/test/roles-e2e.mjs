@@ -788,6 +788,58 @@ for (const u of STAFF) {
   await officer.context.close();
 }
 
+/* ----------------------------- round 12: invoice questions, incident print --- */
+{
+  console.log('\n--- Invoice questions and printable incident reports ---');
+  const client = await watchedPage({ width: 1280, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'carla.mendez@harborviewhealth.org');
+  await client.page.fill('input[type="password"]', 'harborview-portal-04');
+  await client.page.click('button[type="submit"]');
+  await settle(client.page);
+  await client.page.goto(WEB + '/portal/invoices');
+  await settle(client.page);
+  await client.page.locator('li.list-item button:has-text("View")').first().click();
+  await client.page.waitForSelector('#invoice-questions-title', { timeout: 10000 });
+  const q = `E2E ${Date.now() % 100000}: were the overnight hours billed at the night rate?`;
+  await client.page.getByLabel('Your question').fill(q);
+  await client.page.click('button:has-text("Ask about this invoice")');
+  await client.page.waitForTimeout(1200);
+  log(await client.page.locator('[role="dialog"] li', { hasText: q }).locator('text=Waiting for our answer').count() === 1,
+    'a client asks a question about an invoice');
+  await checkScreen('client: invoice question', client.page, client.problems);
+  await client.page.keyboard.press('Escape');
+
+  const staff = await watchedPage({ width: 1366, height: 900 });
+  await staffSignIn(staff.page, '1002', '3571');
+  await staff.page.goto(WEB + '/admin/invoices?tab=questions');
+  await settle(staff.page);
+  const row = staff.page.locator('li.list-item', { hasText: q });
+  log(await row.count() === 1, 'the office sees it under Client questions');
+  await checkScreen('supervisor: client questions', staff.page, staff.problems);
+  await row.locator('button:has-text("Answer")').click();
+  await staff.page.getByLabel('Your answer').fill('Yes - overnight hours carry the agreed night rate from 22:00.');
+  await staff.page.click('[role="dialog"] button:has-text("Send answer")');
+  await staff.page.waitForTimeout(1200);
+  log(await staff.page.locator('li.list-item', { hasText: q }).count() === 0, 'and answers it');
+
+  await client.page.reload();
+  await settle(client.page);
+  await client.page.locator('li.list-item button:has-text("View")').first().click();
+  await client.page.waitForSelector('#invoice-questions-title', { timeout: 10000 });
+  log(await client.page.locator('.invoice-answer', { hasText: 'agreed night rate' }).count() === 1, 'the client reads the answer');
+
+  await client.page.keyboard.press('Escape');
+  await client.page.goto(WEB + '/portal/incidents');
+  await settle(client.page);
+  await client.page.locator('button:has-text("Read")').first().click();
+  await client.page.waitForSelector('[role="dialog"] .incident-sheet', { state: 'attached', timeout: 10000 });
+  log(await client.page.locator('[role="dialog"] button:has-text("Print / save PDF")').count() === 1
+    && await client.page.locator('.incident-sheet').isHidden(), 'an incident report is ready to print, kept off the screen');
+  await staff.context.close();
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

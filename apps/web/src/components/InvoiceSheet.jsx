@@ -141,8 +141,14 @@ export function InvoiceSheet({ invoice, lines, site }) {
  * shows that and nothing else. Cloning also guarantees the internal cost and
  * margin panel beside it cannot reach the page - it is not copied.
  */
-export function printInvoice() {
-  const source = document.querySelector('.invoice-sheet');
+export const printInvoice = () => printSheet('.invoice-sheet:not(.incident-sheet)');
+
+/**
+ * Print one document on its own: clone it onto <body>, hide everything else
+ * for the print, and put the page back afterwards.
+ */
+export function printSheet(selector) {
+  const source = document.querySelector(selector);
   if (!source) return;
 
   const holder = document.createElement('div');
