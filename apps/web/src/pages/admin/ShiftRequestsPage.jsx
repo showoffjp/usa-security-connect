@@ -214,7 +214,7 @@ export default function ShiftRequestsPage() {
                         ? { background: 'var(--warn-bg)', color: 'var(--warn)' }
                         : r.kind === 'swap'
                           ? { background: 'var(--navy-100)', color: 'var(--navy-700)' }
-                          : { background: 'var(--brand-100)', color: 'var(--brand-600)' }
+                          : { background: 'var(--brand-100)', color: 'var(--brand-text)' }
                     }
                   >
                     <Icon name={r.kind === 'swap' ? 'route' : r.kind === 'drop' ? 'x' : 'plus'} size={18} />

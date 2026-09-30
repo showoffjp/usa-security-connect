@@ -225,7 +225,7 @@ export function Field({ label, error, hint, children, required, id }) {
     <>
       {label}
       {required && (
-        <span style={{ color: 'var(--brand-600)' }} aria-hidden="true">
+        <span style={{ color: 'var(--brand-text)' }} aria-hidden="true">
           {' '}
           *
         </span>

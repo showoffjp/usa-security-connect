@@ -63,7 +63,7 @@ export function CredentialsDialog({ credentials, onClose }) {
             </div>
             <div
               className="mono"
-              style={{ fontSize: '1.9rem', fontWeight: 700, letterSpacing: '0.16em', color: 'var(--brand-600)' }}
+              style={{ fontSize: '1.9rem', fontWeight: 700, letterSpacing: '0.16em', color: 'var(--brand-text)' }}
             >
               {credentials.pin}
             </div>

@@ -85,7 +85,7 @@ function BroadcastList() {
                   {b.author} &middot; {fmtRelative(b.published_at)}
                 </div>
               </div>
-              {b.unread && <span className="dot" style={{ color: 'var(--brand-600)' }} />}
+              {b.unread && <span className="dot" style={{ color: 'var(--brand-text)' }} />}
             </button>
           ))}
         </div>
@@ -240,7 +240,7 @@ function TrainingPlayer({ training, onClose, onDone }) {
         <div
           style={{
             aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden',
-            background: 'linear-gradient(140deg, var(--navy-900), var(--navy-700))',
+            background: 'linear-gradient(140deg, #00152b, #062e58)',
             display: 'grid', placeItems: 'center', color: '#fff', position: 'relative',
           }}
         >

@@ -173,6 +173,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   orders, until the officer confirms "I have read these orders". Only the version
   in force can be acknowledged. The mobile app's home screen shows the same card, the
   unread pass-down notes (each with **Got it**) and the site's contacts, tap to call.
+- **Post log in the mobile app** — who is signed in on site (sign them out with a tap),
+  sign someone in with the same watchlist check as the web (a match stops it; letting
+  them in anyway needs a reason), and log patrols, alarms and observations, marked
+  internal when the client should not see them.
+- **Night mode** — the account menu has Auto, Light and Night. Auto follows the
+  device, so a phone set to dark at night gets a dark screen without asking. The
+  choice is kept per device and applied before the first paint, so there is no
+  white flash. Street maps are dimmed to match. Printing is always on white.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
@@ -407,6 +415,12 @@ a PIN — and sees, for their own properties only:
   can **ask for a change**, up to three waiting per post; a supervisor applies it as a
   new version or declines it with a reason, and the client sees the answer in the
   portal and by email. A request nobody has answered can be withdrawn.
+- **Monthly service report** (Report → Monthly report) — one property's month on a page:
+  shifts covered and hours on site, per post; patrols and the share of checkpoints
+  scanned; every incident by severity; visitors, parking violations, activity entries,
+  supervisor visits and lost property; building issues reported, fixed and still open;
+  and their own rating. The current month runs to today. Laid out to print or save as a
+  PDF.
 - **Extra coverage requests** — officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
@@ -620,7 +634,9 @@ the server is running corrupts the data directory.
   properties' contacts, and officers read those for the site they are on. Feedback
   is one rating per contact, property and month; a low rating needs a reason, and
   the reply reaches the client without our staff member's name. Every export
-  downloads as a real CSV, with formulas neutralised.
+  downloads as a real CSV, with formulas neutralised. The monthly service report is
+  scoped to the client's own property, its posts add up to its totals, the counts are
+  consistent, the month is validated, and it carries no pay, rate or staff detail.
 - **`test/orders.mjs`** — post orders, the alerts inbox and QR tags. An officer can
   acknowledge only the version in force, for their own post; a new version, from the
   orders screen or the Sites screen, has to be read again, and the supervisor's list of
@@ -643,9 +659,10 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 72 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 83 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
-client. It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
+client, then audits eleven screens again in night mode with colour contrast enforced
+(the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
 the sign-in screen in place of the real ones. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
 

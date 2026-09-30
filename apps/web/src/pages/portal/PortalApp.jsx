@@ -14,6 +14,8 @@ import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
 import PortalRequests from './PortalRequests.jsx';
 import PortalOrders from './PortalOrders.jsx';
+import PortalMonthly from './PortalMonthly.jsx';
+import ThemeChoice from '../../components/ThemeChoice.jsx';
 import { useDemo } from '../../lib/demo.js';
 import {
   PortalOverview, PortalCoverage, PortalPatrols, PortalIncidents, PortalReport, PortalInvoices,
@@ -152,6 +154,8 @@ function AccountMenu({ onClose }) {
           </ul>
         </div>
 
+        <ThemeChoice />
+
         <div className="stack-sm">
           <button className="btn btn-ghost btn-block" onClick={() => setPassword(true)}>
             <Icon name="shield" size={16} /> Change password
@@ -278,6 +282,7 @@ function PortalRoutes() {
         <Route path="invoices" element={<PortalInvoices />} />
         <Route path="requests" element={<PortalRequests sites={sites} />} />
         <Route path="orders" element={<PortalOrders />} />
+        <Route path="monthly" element={<PortalMonthly sites={sites} />} />
       </Route>
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

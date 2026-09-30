@@ -7,6 +7,7 @@ import { AuthProvider } from './lib/auth.jsx';
 import { ToastProvider } from './components/ui.jsx';
 import DemoStrip from './components/DemoStrip.jsx';
 import './styles/app.css';
+import './lib/theme.js';
 
 /**
  * Two applications in one bundle.

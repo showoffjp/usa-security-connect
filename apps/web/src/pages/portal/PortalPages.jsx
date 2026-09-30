@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { clientApi } from '../../lib/api.js';
 import { fmtDate, fmtDateTime, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
 import {
@@ -1191,9 +1192,14 @@ export function PortalReport({ sites }) {
           <h1>Daily activity report</h1>
           <p className="muted">The same document your account manager reviews.</p>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>
-          <Icon name="download" size={16} /> Print / save PDF
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          <Link className="btn btn-ghost btn-sm" to="/portal/monthly">
+            <Icon name="calendar" size={16} /> Monthly report
+          </Link>
+          <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>
+            <Icon name="download" size={16} /> Print / save PDF
+          </button>
+        </div>
       </div>
 
       <div className="row wrap" style={{ gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>

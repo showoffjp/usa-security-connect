@@ -578,6 +578,28 @@ for (const u of STAFF) {
   await settle(client.page);
   log(await client.page.locator('li', { hasText: ask }).locator('text=Not changed').count() >= 1, 'and the client reads the answer');
 
+  // The month on a page, from the daily report.
+  await client.page.goto(WEB + '/portal/report');
+  await settle(client.page);
+  await client.page.click('a:has-text("Monthly report")');
+  await client.page.waitForSelector('text=Coverage by post', { timeout: 10000 });
+  log(/\d/.test(await client.page.locator('.stat').first().innerText()), 'the client opens the monthly service report');
+  await checkScreen('client: monthly report', client.page, client.problems);
+
+  // Night mode: chosen in the account menu, remembered on the device.
+  await staff.page.click('button[aria-label="Account menu"]');
+  await staff.page.click('[role="radio"]:has-text("Night")');
+  log(await staff.page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'a supervisor switches to night mode');
+  await staff.page.keyboard.press('Escape');
+  await staff.page.reload();
+  await settle(staff.page);
+  log(await staff.page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'and it stays on after a reload');
+  await checkScreen('supervisor: dashboard at night', staff.page, staff.problems);
+  await staff.page.click('button[aria-label="Account menu"]');
+  await staff.page.click('[role="radio"]:has-text("Light")');
+  log(await staff.page.evaluate(() => document.documentElement.dataset.theme) === 'light', 'and back to light');
+  await staff.page.keyboard.press('Escape');
+
   await officer.page.goto(WEB + '/post-log?tab=visitors');
   await settle(officer.page);
 
