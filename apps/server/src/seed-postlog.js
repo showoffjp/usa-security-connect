@@ -574,10 +574,43 @@ export async function seedPostLog({ db }) {
     notices++;
   }
 
+  // People who have applied to work for us, at every stage of the pipeline.
+  const hours = (n) => toSql(new Date(now.getTime() - n * 3600000));
+  const APPLICANTS = [
+    ['Jordan', 'Hayes', 'jordan.hayes@example.com', '(904) 555-0311', 'Jacksonville', 'D', 'D3412987', 400, 'Two years retail loss prevention at a big-box store.', 'Nights and weekends', 'website', 'applied', 5, [], []],
+    ['Priya', 'Natarajan', 'priya.n@example.com', '(813) 555-0377', 'Tampa', 'none', null, null, 'Hotel front desk, three years. Looking to move into security.', 'Any shift', 'website', 'applied', 30, [], []],
+    ['Carlos', 'Mendoza', 'cmendoza@example.com', '(305) 555-0144', 'Miami', 'DG', 'G2210458', 650, 'Former Army MP, four years. Armed post experience at a port.', 'Days', 'referral', 'screening', 50, ['licence'], ['Phone screen booked for Thursday.']],
+    ['Ashley', 'Burke', 'aburke@example.com', '(850) 555-0199', 'Tallahassee', 'D', 'D3398812', 210, 'Event security at the stadium, seasonal.', 'Evenings', 'job_board', 'screening', 80, [], []],
+    ['Terrell', 'Owens', 'towens@example.com', '(904) 555-0161', 'Jacksonville', 'D', 'D3377105', 520, 'Six years commercial building security, lobby and patrol.', 'Nights', 'website', 'interview', 120, ['licence', 'references'], ['Strong phone screen. Interview with Renata on Monday 10:00.']],
+    ['Monica', 'Reyes', 'mreyes@example.com', '(321) 555-0108', 'Orlando', 'D', 'D3401276', 700, 'Gated community gate officer, two years. Bilingual English/Spanish.', 'Days and evenings', 'referral', 'offer', 72, ['licence', 'background', 'right_to_work', 'drug_test'], ['Interviewed well; good fit for Palmetto Ridge gate.', 'Offer made at $19.50/h, starting next Monday.']],
+    ['Derek', 'Simmons', 'dsimmons@example.com', '(727) 555-0122', 'St. Petersburg', 'none', null, null, 'No security experience.', 'Weekends only', 'walk_in', 'rejected', 200, [], ['Not taken on: only available four hours a week; our posts need full shifts.']],
+  ];
+  let applicants = 0;
+  for (const [first, last, email, phone, city, cls, number, expiresInDays, experience, availability, source, stage, ageHours, checks, notes] of APPLICANTS) {
+    const expires = expiresInDays ? new Date(now.getTime() + expiresInDays * 86400000).toISOString().slice(0, 10) : null;
+    const info = await db
+      .prepare(
+        `INSERT INTO applicants (first_name, last_name, email, phone, city, licence_class, licence_number, licence_expires_on,
+           experience, availability, source, referred_by, stage, stage_changed_at, rejected_reason, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(first, last, email, phone, city, cls, number, expires, experience, availability, source,
+        source === 'referral' ? 'Marcus Bell' : null, stage, hours(Math.round(ageHours / 2)),
+        stage === 'rejected' ? 'Only available four hours a week; our posts need full shifts.' : null, hours(ageHours));
+    const id = Number(info.lastInsertRowid);
+    for (const key of checks) {
+      await db.prepare(`INSERT INTO applicant_checks (applicant_id, key, done_by, done_at) VALUES (?,?,?,?)`).run(id, key, sup.id, hours(Math.round(ageHours / 3)));
+    }
+    for (const [i, body] of notes.entries()) {
+      await db.prepare(`INSERT INTO applicant_notes (applicant_id, author_id, body, created_at) VALUES (?,?,?,?)`).run(id, sup.id, body, hours(Math.round(ageHours / (i + 2))));
+    }
+    applicants++;
+  }
+
   // The incidents seeded above are history: their clients were told at the time.
   await db.prepare(`UPDATE incidents SET client_notified_at = occurred_at WHERE severity IN ('high', 'critical')`).run();
   // One contact takes the daily report email, so the morning sweep has someone to send it to.
   await db.prepare(`UPDATE client_users SET notify_daily_report = true WHERE email = ?`).run('dana.whitfield@riverfrontholdings.com');
 
-  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps, invoiceQueries, notices };
+  return { visitors, notes, watchlist: 7, violations, activity, issues, found, contacts, feedback, orders, orderRequests, followUps, invoiceQueries, notices, applicants };
 }

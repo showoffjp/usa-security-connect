@@ -246,6 +246,8 @@ export default function LoginPage() {
         <p className="tiny muted center" style={{ marginTop: 20, marginBottom: 0 }}>
           Forgotten your PIN? Contact your field supervisor for a reset.
           <br />
+          Looking for work? <a href="/apply">Apply to join us</a>
+          <br />
           Licensed Florida security agency &middot; B 3400341
         </p>
       </div>

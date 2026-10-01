@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import App from './App.jsx';
 import PortalApp from './pages/portal/PortalApp.jsx';
+import ApplyPage from './pages/ApplyPage.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 import { ToastProvider } from './components/ui.jsx';
 import DemoStrip from './components/DemoStrip.jsx';
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')).render(
         <DemoStrip />
         <Routes>
           <Route path="/portal/*" element={<PortalApp />} />
+          <Route path="/apply" element={<ApplyPage />} />
           <Route
             path="*"
             element={

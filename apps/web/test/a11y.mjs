@@ -81,6 +81,7 @@ const STAFF_PAGES = [
   ['Report: supervisor visits', '/admin/reports?report=visits-by-site'],
   ['Invoices: client questions', '/admin/invoices?tab=questions'],
   ['Client portal: notices', '/admin/clients?tab=notices'],
+  ['Hiring', '/admin/hiring'],
 ];
 
 const PORTAL_PAGES = [
@@ -190,6 +191,7 @@ console.log('--- sign-in screens ---');
 await audit(page, 'Staff sign-in', '/');
 await audit(page, 'Portal sign-in', '/portal');
 await audit(page, 'Set password (bad link)', '/portal/set-password?token=nope');
+await audit(page, 'Job application', '/apply');
 
 // --- staff ----------------------------------------------------------------
 console.log('\n--- officer and admin ---');
@@ -225,6 +227,13 @@ await page.keyboard.press('Control+k');
 await page.fill('[role="combobox"]', 'bell');
 await page.waitForTimeout(800);
 await audit(page, 'Quick search, with results', null);
+await page.keyboard.press('Escape');
+
+// An applicant, with the pre-hire checklist and notes.
+await page.goto(`${WEB}/admin/hiring`, { waitUntil: 'networkidle' });
+await page.locator('.hiring-card').first().click();
+await page.waitForSelector('[role="dialog"]:has-text("Before they can start")');
+await audit(page, 'Hiring: an applicant', null);
 await page.keyboard.press('Escape');
 
 // The alerts inbox is another dialog from the top bar.

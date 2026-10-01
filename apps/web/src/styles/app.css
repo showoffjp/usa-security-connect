@@ -999,3 +999,20 @@ kbd {
 .notices-bar + .page { padding-top: 12px; }
 @media print { .notices-bar { display: none; } }
 .notice-sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 14px; padding-left: 26px; }
+.apply-card { max-width: 560px; }
+.hp-field { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.hiring-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 1000px) { .hiring-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hiring-board { grid-template-columns: minmax(0, 1fr); } }
+.hiring-column { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-lg, 12px); padding: 12px; }
+.hiring-column h2 { margin: 0 0 10px; }
+.hiring-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hiring-card {
+  width: 100%; text-align: left; display: grid; gap: 4px; padding: 10px 12px; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font: inherit;
+}
+.hiring-card:hover { border-color: var(--line-2); box-shadow: var(--shadow-1, none); }
+.hiring-card:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }
+.applicant-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.applicant-notes li { border-left: 3px solid var(--line-2); padding-left: 10px; }
+.apply-done-icon { width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: var(--ok-bg); color: var(--ok-strong); }
