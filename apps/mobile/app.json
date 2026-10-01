@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/shield.png",
       "resizeMode": "contain",
       "backgroundColor": "#001F3F"
     },
@@ -31,6 +32,7 @@
     "android": {
       "package": "com.usasecuritygroup.connect",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#001F3F"
       },
       "permissions": [
@@ -75,6 +77,7 @@
     },
     "notification": {
       "iosDisplayInForeground": true
-    }
+    },
+    "icon": "./assets/icon.png"
   }
 }

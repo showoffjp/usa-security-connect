@@ -30,7 +30,7 @@ export default function PortalLogin() {
     <div className="auth-screen">
       <div className="auth-card">
         <div className="auth-brand">
-          <Shield size={56} />
+          <Shield size={72} shine />
           <div className="center">
             <div className="name">Client Portal</div>
             <div className="sub">USA Security &amp; Protection Group</div>

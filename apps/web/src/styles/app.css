@@ -283,7 +283,7 @@ table.data tr.clickable { cursor: pointer; }
   position: sticky; top: 0; z-index: 30;
 }
 .topbar .brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: #fff; }
-.topbar .brand svg { width: 30px; height: 30px; flex: none; }
+.topbar .brand .shield-mark { height: 34px; width: auto; }
 .topbar .brand .name { font-weight: 800; font-size: 0.95rem; letter-spacing: -0.01em; line-height: 1.1; }
 .topbar .brand .sub { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.68; }
 .topbar .spacer { flex: 1; }
@@ -402,7 +402,7 @@ table.data tr.clickable { cursor: pointer; }
   padding: 30px 26px 26px; box-shadow: var(--shadow-3);
 }
 .auth-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 22px; }
-.auth-brand svg { width: 56px; height: 56px; }
+.auth-brand .shield-mark { height: 72px; width: 60px; }
 .auth-brand .name { font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; }
 .auth-brand .sub {
   font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
@@ -1032,3 +1032,25 @@ kbd {
 .agreement-weeks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .agreement-weeks li { display: grid; grid-template-columns: 7.5em minmax(60px, 1fr) 6.5em; align-items: center; gap: 12px; }
 .agreement-weeks li > :last-child { text-align: right; }
+/* The mark: a bar of light crosses the chrome shield on hover, and once as a
+   sign-in screen opens. Nothing moves for anyone who prefers less motion. */
+.shield-mark { display: block; flex: none; overflow: visible; }
+.shield-mark .gleam { transform: translateX(-90px) skewX(-22deg); opacity: 0; }
+.shield-mark:hover .gleam,
+.brand:hover .shield-mark .gleam,
+.auth-brand:hover .shield-mark .gleam,
+.shield-mark.shine-once .gleam { animation: shield-sweep 1.25s cubic-bezier(.35, .1, .25, 1) both; }
+.shield-mark.shine-once .gleam { animation-delay: .45s; }
+.shield-mark:hover .gleam-late,
+.brand:hover .shield-mark .gleam-late,
+.auth-brand:hover .shield-mark .gleam-late { animation-delay: .12s; }
+.shield-mark.shine-once .gleam-late { animation-delay: .57s; }
+@keyframes shield-sweep {
+  0% { transform: translateX(-90px) skewX(-22deg); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateX(330px) skewX(-22deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shield-mark .gleam { animation: none !important; }
+}

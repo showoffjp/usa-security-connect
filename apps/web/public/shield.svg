@@ -1,5 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="USA Security Connect">
-  <path d="M32 3 8 12v22c0 14 10 23 24 27 14-4 24-13 24-27V12L32 3Z" fill="#001F3F"/>
-  <path d="M32 9 14 16v18c0 11 7.6 17.8 18 21.3 10.4-3.5 18-10.3 18-21.3V16L32 9Z" fill="#AA2F19"/>
-  <path d="M32 20a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2Z" fill="#fff"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" role="img" aria-label="USA Security Connect">
+  <defs>
+    <linearGradient id="usc-cr" x1="0" y1="0" x2=".25" y2="1">
+  <stop offset="0" stop-color="#fbfcfe"/><stop offset=".16" stop-color="#cfd6df"/>
+  <stop offset=".33" stop-color="#6f7a87"/><stop offset=".47" stop-color="#f3f6f9"/>
+  <stop offset=".6" stop-color="#a3adb8"/><stop offset=".78" stop-color="#3f4752"/>
+  <stop offset=".9" stop-color="#9ba5b0"/><stop offset="1" stop-color="#e3e7ec"/></linearGradient>
+    <linearGradient id="usc-crr" x1=".25" y1="1" x2="0" y2="0">
+  <stop offset="0" stop-color="#fbfcfe"/><stop offset=".16" stop-color="#cfd6df"/>
+  <stop offset=".33" stop-color="#6f7a87"/><stop offset=".47" stop-color="#f3f6f9"/>
+  <stop offset=".6" stop-color="#a3adb8"/><stop offset=".78" stop-color="#3f4752"/>
+  <stop offset=".9" stop-color="#9ba5b0"/><stop offset="1" stop-color="#e3e7ec"/></linearGradient>
+    <radialGradient id="usc-nv" cx=".42" cy=".3" r=".85">
+      <stop offset="0" stop-color="#2b63a3"/><stop offset=".45" stop-color="#0b2f5c"/><stop offset="1" stop-color="#010f22"/>
+    </radialGradient>
+    <radialGradient id="usc-rd" cx=".4" cy=".28" r=".9">
+      <stop offset="0" stop-color="#f06a4c"/><stop offset=".5" stop-color="#aa2f19"/><stop offset="1" stop-color="#4f1007"/>
+    </radialGradient>
+    <linearGradient id="usc-pin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#e2e7ee"/><stop offset=".56" stop-color="#b8c1cc"/><stop offset="1" stop-color="#f4f7fa"/>
+    </linearGradient>
+    <linearGradient id="usc-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="usc-gl" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".3" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset=".7" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="usc-turn" width="8" height="8" patternUnits="userSpaceOnUse">
+      <circle cx="4" cy="4" r="3.2" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width=".7"/>
+    </pattern>
+    <clipPath id="usc-mid"><path d="M100 17 L175 43.5 V112 C175 163 143 199 100 219 C57 199 25 163 25 112 V43.5 Z"/></clipPath>
+    <clipPath id="usc-clip"><path d="M100 6 L186 36 V112 C186 170 150 210 100 232 C50 210 14 170 14 112 V36 Z"/></clipPath>
+    <filter id="usc-bev" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.6" result="b"/>
+      <feSpecularLighting in="b" surfaceScale="6" specularConstant="1.15" specularExponent="26" lighting-color="#ffffff" result="s">
+        <fePointLight x="55" y="10" z="160"/>
+      </feSpecularLighting>
+      <feComposite in="s" in2="SourceAlpha" operator="in" result="si"/>
+      <feComposite in="SourceGraphic" in2="si" operator="arithmetic" k1="0" k2="1" k3="1" k4="0"/>
+    </filter>
+    
+  </defs>
+  <g >
+    <g filter="url(#usc-bev)">
+      <path d="M100 6 L186 36 V112 C186 170 150 210 100 232 C50 210 14 170 14 112 V36 Z" fill="url(#usc-cr)"/>
+      <path d="M100 11 L181 39.2 V112 C181 166.5 147 204.5 100 225.5 C53 204.5 19 166.5 19 112 V39.2 Z" fill="url(#usc-crr)"/>
+    </g>
+    <path d="M100 6 L186 36 V112 C186 170 150 210 100 232 C50 210 14 170 14 112 V36 Z" fill="none" stroke="#0a0d12" stroke-opacity=".7" stroke-width="1.4"/>
+    <path d="M100 17 L175 43.5 V112 C175 163 143 199 100 219 C57 199 25 163 25 112 V43.5 Z" fill="url(#usc-nv)" stroke="#05080c" stroke-width="1.2"/>
+    <polygon points="100.00,20.40 100.77,22.45 102.95,22.54 101.24,23.90 101.82,26.01 100.00,24.80 98.18,26.01 98.76,23.90 97.05,22.54 99.23,22.45" fill="#e9eef4"/><polygon points="44.00,43.40 44.77,45.45 46.95,45.54 45.24,46.90 45.82,49.01 44.00,47.80 42.18,49.01 42.76,46.90 41.05,45.54 43.23,45.45" fill="#e9eef4"/><polygon points="156.00,43.40 156.77,45.45 158.95,45.54 157.24,46.90 157.82,49.01 156.00,47.80 154.18,49.01 154.76,46.90 153.05,45.54 155.23,45.45" fill="#e9eef4"/>
+    <g filter="url(#usc-bev)"><path d="M100 27 L165 50 V112 C165 157 137 189 100 207 C63 189 35 157 35 112 V50 Z" fill="url(#usc-rd)"/></g>
+    <path d="M100 27 L165 50 V112 C165 157 137 189 100 207 C63 189 35 157 35 112 V50 Z" fill="url(#usc-turn)"/>
+    <path d="M100 27 L165 50 V112 C165 157 137 189 100 207 C63 189 35 157 35 112 V50 Z" fill="none" stroke="url(#usc-cr)" stroke-width="3"/>
+    <g transform="translate(0 14)">
+      <path d="M100 66 C86 66 75 77 75 91 C75 110 100 140 100 140 C100 140 125 110 125 91 C125 77 114 66 100 66 Z M100 101 C94.5 101 90 96.5 90 91 C90 85.5 94.5 81 100 81 C105.5 81 110 85.5 110 91 C110 96.5 105.5 101 100 101 Z" fill-rule="evenodd" fill="#000" opacity=".35" transform="translate(1.5 3)"/>
+      <g filter="url(#usc-bev)"><path d="M100 66 C86 66 75 77 75 91 C75 110 100 140 100 140 C100 140 125 110 125 91 C125 77 114 66 100 66 Z M100 101 C94.5 101 90 96.5 90 91 C90 85.5 94.5 81 100 81 C105.5 81 110 85.5 110 91 C110 96.5 105.5 101 100 101 Z" fill-rule="evenodd" fill="url(#usc-pin)"/></g>
+      <path d="M100 66 C86 66 75 77 75 91 C75 110 100 140 100 140 C100 140 125 110 125 91 C125 77 114 66 100 66 Z M100 101 C94.5 101 90 96.5 90 91 C90 85.5 94.5 81 100 81 C105.5 81 110 85.5 110 91 C110 96.5 105.5 101 100 101 Z" fill-rule="evenodd" fill="none" stroke="#5e6a77" stroke-width=".8"/>
+    </g>
+    <g clip-path="url(#usc-mid)">
+      <path d="M20 40 L100 12 L180 40 V98 C145 82 55 82 20 104 Z" fill="url(#usc-gloss)" opacity=".55"/>
+    </g>
+    
+  </g></svg>

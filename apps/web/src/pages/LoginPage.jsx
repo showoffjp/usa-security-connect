@@ -99,7 +99,7 @@ export default function LoginPage() {
     <div className="auth-screen">
       <div className="auth-card">
         <div className="auth-brand">
-          <Shield size={56} />
+          <Shield size={72} shine />
           <div className="center">
             <div className="name">USA Security Connect</div>
             <div className="sub">Protection Group</div>

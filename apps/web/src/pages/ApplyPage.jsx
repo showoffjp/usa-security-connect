@@ -57,7 +57,7 @@ export default function ApplyPage() {
     <div className="auth-screen">
       <main className="auth-card apply-card" id="main">
         <div className="auth-brand">
-          <Shield size={56} />
+          <Shield size={72} shine />
           <div className="center">
             <h1 className="name" style={{ margin: 0, fontSize: '1.3rem' }}>Work with us</h1>
             <div className="sub">USA Security &amp; Protection Group</div>

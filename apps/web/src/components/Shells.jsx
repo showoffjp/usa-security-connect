@@ -70,7 +70,7 @@ function TopBar({ onMenu, dutyState, onSearch, alerts = false }) {
         </button>
       )}
       <Link className="brand" to="/">
-        <Shield size={30} />
+        <Shield size={34} />
         <span className="hide-mobile">
           <span className="name">USA Security Connect</span>
           <br />

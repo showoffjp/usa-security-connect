@@ -7,7 +7,7 @@
  * check-in or a post order must always be the live one - and it serves the
  * app itself from the network first, so a new deploy is picked up at once.
  */
-const CACHE = 'usc-shell-v1';
+const CACHE = 'usc-shell-v2';
 const OFFLINE = ['/offline.html', '/icon-192.png', '/shield.svg'];
 
 self.addEventListener('install', (event) => {

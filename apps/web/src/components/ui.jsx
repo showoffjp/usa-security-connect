@@ -1,27 +1,36 @@
 import {
-  Children, cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState,
+  Children, cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useMemo, useRef, useState,
 } from 'react';
+import { shieldInner, SHIELD_VIEWBOX, SHIELD_RATIO } from './shieldMark.js';
 
 /* ------------------------------------------------------------------ mark -- */
 
-/** Original shield mark for USA Security Connect. */
-export function Shield({ size = 32, className }) {
+/**
+ * The USA Security Connect mark: the Chrome Guardian shield. Sized by height;
+ * the width follows the shield's proportions. A gleam crosses it on hover
+ * (and once on load where `shine` is set), unless the viewer prefers less
+ * motion. The drawing itself lives in shieldMark.js, shared with the icons.
+ */
+export function Shield({ size = 32, className = '', shine = false, title = 'USA Security Connect' }) {
+  const prefix = `sm${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const inner = useMemo(() => shieldInner(prefix, { shadow: size >= 40 }), [prefix, size]);
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} className={className} role="img" aria-label="USA Security Connect">
-      <path d="M32 3 8 12v22c0 14 10 23 24 27 14-4 24-13 24-27V12L32 3Z" fill="#001F3F" />
-      <path d="M32 9 14 16v18c0 11 7.6 17.8 18 21.3 10.4-3.5 18-10.3 18-21.3V16L32 9Z" fill="#AA2F19" />
-      <path
-        d="M32 20a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2Z"
-        fill="#fff"
-      />
-    </svg>
+    <svg
+      viewBox={SHIELD_VIEWBOX}
+      width={Math.round(size * SHIELD_RATIO)}
+      height={size}
+      className={`shield-mark${shine ? ' shine-once' : ''}${className ? ` ${className}` : ''}`}
+      role="img"
+      aria-label={title}
+      dangerouslySetInnerHTML={{ __html: inner }}
+    />
   );
 }
 
 export function Wordmark() {
   return (
     <>
-      <Shield size={30} />
+      <Shield size={34} />
       <span>
         <span className="name">USA Security Connect</span>
         <br />
