@@ -1016,3 +1016,11 @@ kbd {
 .applicant-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .applicant-notes li { border-left: 3px solid var(--line-2); padding-left: 10px; }
 .apply-done-icon { width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: var(--ok-bg); color: var(--ok-strong); }
+/* Dispatch: the call log and the officer's call card. */
+.call-log { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line-2); display: grid; gap: 4px; }
+.call-log li { position: relative; padding-left: 6px; }
+.call-log li::before { content: ''; position: absolute; left: -20px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--brand-600); }
+.call-list .list-item { cursor: pointer; }
+.call-card { border: 2px solid var(--danger); }
+.call-card.call-routine { border-color: var(--warn); }
+.call-card .call-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

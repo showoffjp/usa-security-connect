@@ -82,6 +82,9 @@ const STAFF_PAGES = [
   ['Invoices: client questions', '/admin/invoices?tab=questions'],
   ['Client portal: notices', '/admin/clients?tab=notices'],
   ['Hiring', '/admin/hiring'],
+  ['Dispatch', '/admin/dispatch'],
+  ['Dispatch: closed calls', '/admin/dispatch?view=closed'],
+  ['Report: call response times', '/admin/reports?report=calls-by-site'],
 ];
 
 const PORTAL_PAGES = [
@@ -93,6 +96,7 @@ const PORTAL_PAGES = [
   ['Portal daily report', '/portal/report'],
   ['Portal invoices', '/portal/invoices'],
   ['Portal coverage requests', '/portal/requests'],
+  ['Portal calls', '/portal/calls'],
   ['Portal post orders', '/portal/orders'],
   ['Portal monthly report', '/portal/monthly'],
 ];
@@ -234,6 +238,13 @@ await page.goto(`${WEB}/admin/hiring`, { waitUntil: 'networkidle' });
 await page.locator('.hiring-card').first().click();
 await page.waitForSelector('[role="dialog"]:has-text("Before they can start")');
 await audit(page, 'Hiring: an applicant', null);
+await page.keyboard.press('Escape');
+
+// A call on the dispatch board, with the officers who could take it and its log.
+await page.goto(`${WEB}/admin/dispatch`, { waitUntil: 'networkidle' });
+await page.locator('.call-list .list-item button:has-text("Open")').first().click();
+await page.waitForSelector('[role="dialog"] .call-log');
+await audit(page, 'Dispatch: a call', null);
 await page.keyboard.press('Escape');
 
 // The alerts inbox is another dialog from the top bar.

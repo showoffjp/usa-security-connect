@@ -14,6 +14,7 @@ import { clientApi } from '../../lib/api.js';
 import PortalLogin from './PortalLogin.jsx';
 import SetPassword from './SetPassword.jsx';
 import PortalRequests from './PortalRequests.jsx';
+import PortalCalls from './PortalCalls.jsx';
 import PortalOrders from './PortalOrders.jsx';
 import PortalMonthly from './PortalMonthly.jsx';
 import ThemeChoice from '../../components/ThemeChoice.jsx';
@@ -278,6 +279,7 @@ function PortalShell() {
     { to: '/portal/report', icon: 'clipboard', label: 'Report' },
     { to: '/portal/invoices', icon: 'chart', label: 'Invoices' },
     { to: '/portal/orders', icon: 'clipboard', label: 'Orders' },
+    { to: '/portal/calls', icon: 'phone', label: 'Calls' },
     { to: '/portal/requests', icon: 'plus', label: 'Requests' },
   ];
 
@@ -376,6 +378,7 @@ function PortalRoutes() {
         <Route path="incidents" element={<PortalIncidents sites={sites} />} />
         <Route path="report" element={<PortalReport sites={sites} />} />
         <Route path="invoices" element={<PortalInvoices />} />
+        <Route path="calls" element={<PortalCalls sites={sites} />} />
         <Route path="requests" element={<PortalRequests sites={sites} />} />
         <Route path="orders" element={<PortalOrders />} />
         <Route path="monthly" element={<PortalMonthly sites={sites} />} />

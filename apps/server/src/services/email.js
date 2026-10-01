@@ -346,3 +346,42 @@ export async function notifyInvoiceQueryAnswered(query) {
   });
   return 1;
 }
+
+/** A call the client raised from the portal has been cleared: who went, how long it took, what they found. */
+export async function notifyCallCleared(call) {
+  const contact = call.client_user_id
+    ? await db.prepare(`SELECT id, email, name FROM client_users WHERE id = ? AND status = 'active'`).get(call.client_user_id)
+    : null;
+  if (!contact) return 0;
+  const minutes = (a, b) => (a && b ? Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000)) : null);
+  const created = new Date(call.created_at);
+  const arrived = call.arrived_at ? new Date(call.arrived_at) : null;
+  const when = created.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+  });
+  const toArrive = minutes(created, arrived);
+  await send({
+    to: contact.email,
+    name: contact.name,
+    kind: 'call_cleared',
+    entity: 'service_call',
+    entityId: call.id,
+    subject: `Your call at ${call.site_name} has been dealt with`,
+    body: [
+      `Dear ${contact.name},`,
+      '',
+      `The call you raised at ${call.site_name} on ${when} has been cleared.`,
+      '',
+      `  You told us  ${call.description}`,
+      call.officer_first ? `  Officer     ${call.officer_first} ${String(call.officer_last || '').slice(0, 1)}.` : null,
+      toArrive != null ? `  On scene    ${toArrive} minute${toArrive === 1 ? '' : 's'} after your call` : null,
+      `  What we found  ${call.outcome}`,
+      '',
+      'Every call and its times are in your portal under Calls. Reply to this email if anything is still not right.',
+      signOff(),
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
+  });
+  return 1;
+}

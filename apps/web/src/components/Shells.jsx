@@ -116,6 +116,7 @@ const GO_TO = [
   ['r', '/admin/reports', 'Reports'],
   ['h', '/admin/site-health', 'Site health'],
   ['v', '/admin/visits', 'Field visits'],
+  ['k', '/admin/dispatch', 'Dispatch'],
   ['c', '/admin/clients', 'Client portal'],
 ];
 
@@ -291,6 +292,7 @@ export function AdminShell() {
         { to: '/admin', icon: 'chart', label: 'Dashboard', end: true },
         { to: '/admin/live', icon: 'gps', label: 'Live tracking', count: counts.lateOrOff, urgent: true },
         { to: '/admin/safety', icon: 'shield', label: 'Safety & map', count: counts.activeAlerts, urgent: true },
+        { to: '/admin/dispatch', icon: 'phone', label: 'Dispatch', count: counts.activeCalls, urgent: counts.waitingCalls > 0 },
         { to: '/admin/flags', icon: 'flag', label: 'Flags', count: counts.openFlags },
         { to: '/admin/incidents', icon: 'alert', label: 'Incidents', count: counts.openIncidents },
         { to: '/admin/tours', icon: 'route', label: 'Tours' },

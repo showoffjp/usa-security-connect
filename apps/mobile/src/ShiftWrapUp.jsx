@@ -3,7 +3,7 @@ import { Switch, Text, View } from 'react-native';
 import { api } from './api.js';
 import { fmtTime } from './format.js';
 import { formatDuration } from './shared.js';
-import { Button, Field, Input, KeyValue, Loading, Sheet } from './ui.jsx';
+import { Banner, Button, Field, Input, KeyValue, Loading, Sheet } from './ui.jsx';
 import { C, S } from './theme.js';
 
 const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
@@ -75,8 +75,14 @@ export function ShiftWrapUp({ visible, onClose, onClockOut, busy, notify }) {
               ['Visitors', `${summary.visitorsIn} in, ${summary.visitorsOut} out`],
               ['Activity log', plural(summary.activity, 'entry', 'entries')],
               ['Incidents', summary.incidents ? plural(summary.incidents, 'report') : 'None'],
+              ...(summary.calls?.cleared ? [['Calls', `${plural(summary.calls.cleared, 'call')} cleared`]] : []),
             ]}
           />
+          {summary.calls?.open > 0 && (
+            <Banner tone="warn" title={`You still have ${plural(summary.calls.open, 'open call')}`}>
+              If you clock out now it goes back to the office for someone else.
+            </Banner>
+          )}
           {summary.passdownWritten === 0 ? (
             <>
               <Field label="Anything the next shift should know?" hint="Optional. It goes to the pass-down for this post.">

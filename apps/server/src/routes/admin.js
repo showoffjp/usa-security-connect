@@ -20,6 +20,9 @@ import {
   payrollWeekOf,
   distanceMeters,
   VISIT_CHECKS,
+  CALL_ACK_MINUTES,
+  CALL_PRIORITY_LABEL,
+  CALL_TYPE_LABEL,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -31,6 +34,7 @@ import { siteMonth, monthKey } from '../services/siteMonth.js';
 import { visitBoard } from './visits.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
+import { OPEN_SQL } from '../services/dispatch.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -225,6 +229,10 @@ adminRouter.get(
     const visitsDue = (await visitBoard()).due;
     // Applications nobody has picked up yet.
     const newApplicants = Number((await db.prepare(`SELECT COUNT(*) AS n FROM applicants WHERE stage = 'applied'`).get()).n);
+    // Calls for service still open, and how many of them nobody has been sent to.
+    const callRows = await db.prepare(`SELECT status, COUNT(*) AS n FROM service_calls WHERE status IN (${OPEN_SQL}) GROUP BY status`).all();
+    const activeCalls = callRows.reduce((n, r) => n + Number(r.n), 0);
+    const waitingCalls = Number(callRows.find((r) => r.status === 'open')?.n || 0);
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -263,6 +271,8 @@ adminRouter.get(
         unhappyClients,
         visitsDue,
         newApplicants,
+        activeCalls,
+        waitingCalls,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -2161,6 +2171,25 @@ async function buildAlerts(userId) {
     .all(since)) {
     push({ key: `flag:${f.id}`, kind: 'flag', severity: f.severity === 'critical' ? 'critical' : 'warning', at: f.occurred_at, link: '/admin/flags',
       title: `${FLAG_LABEL[f.type] || f.type}: ${f.officer}`, detail: 'Open compliance flag, not yet resolved' });
+  }
+
+  // A call for service nobody has been sent to, or one sent and not acknowledged.
+  for (const c of await db
+    .prepare(
+      `SELECT c.id, c.status, c.priority, c.call_type, c.created_at, c.assigned_at, c.description, s.name AS site_name,
+              u.first_name || ' ' || u.last_name AS officer
+       FROM service_calls c JOIN sites s ON s.id = c.site_id LEFT JOIN users u ON u.id = c.assigned_to
+       WHERE c.status = 'open' OR (c.status = 'assigned' AND c.assigned_at < ?)
+       ORDER BY c.priority, c.created_at`
+    )
+    .all(toSql(new Date(Date.now() - CALL_ACK_MINUTES * 60000)))) {
+    const waiting = c.status === 'open';
+    push({ key: `call:${c.id}:${waiting ? 'open' : `ack:${sqlToIso(c.assigned_at)}`}`, kind: 'call',
+      severity: c.priority <= 2 ? 'critical' : 'warning', at: waiting ? c.created_at : c.assigned_at, link: `/admin/dispatch?call=${c.id}`,
+      title: waiting
+        ? `${CALL_PRIORITY_LABEL[c.priority]} call waiting: ${CALL_TYPE_LABEL[c.call_type] || c.call_type}`
+        : `${c.officer} has not acknowledged a call`,
+      detail: `${c.site_name} · ${String(c.description).slice(0, 80)}` });
   }
 
   for (const v of await db

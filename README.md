@@ -242,6 +242,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   first.
 - **Your last supervisor visit** — for a week after a visit, the officer's home screen
   shows who came, how it was rated, which checks passed and what the supervisor said.
+- **Calls sent to you** — when the office sends the officer a call for service (an
+  alarm, someone suspicious, a lockout, an escort), it goes to the top of the home
+  screen (web and mobile, with a push) until it is cleared: **On my way**, **I'm on
+  scene**, then **Clear call** with how it ended and what they found, which the client
+  reads. **I can't take it** turns it back with a reason. Clocking out with a call open
+  hands it back to the office, and "Before you go" warns first.
 - **Duress button** — one tap plus a confirmation alerts every supervisor with the
   officer's name, post and position. It fires immediately rather than waiting on GPS,
   repeat presses update the same alert instead of flooding the board, and the officer
@@ -308,6 +314,16 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
   issues, lost and found), the scorecards and client feedback. Any cell starting
   with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
+- **Dispatch** (Operations → Dispatch, **g k**) — calls for service: raise one the office
+  took by phone (site, post, type, emergency/urgent/routine, where, what, caller), or
+  pick up one a client raised in the portal. Each call lists every officer on duty,
+  whoever is already at the property first, then by distance from their last GPS
+  position, marked if they are on a break or another call; send it with one click,
+  re-send it, clear it from the desk or cancel it. Every step is timed (to send, to
+  acknowledge, to on scene, against a 5/15/45-minute target by priority) and logged,
+  including an officer turning it back. A call nobody has been sent to, or one not
+  acknowledged within three minutes, is in the alerts inbox; the sidebar counts open
+  calls. The **call response times** report breaks it down by site.
 - **Field visits** (Operations → Field visits) — every active site with its last
   supervisor visit, longest first; a site with no visit in 14 days is **due** (a badge in
   the sidebar, an alert in the inbox, a line on site health) until someone goes. Every
@@ -359,7 +375,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
   1099 separately.
-- **Reports** — twelve reports over any period, site, officer or classification, each
+- **Reports** — thirteen reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
   1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
@@ -508,6 +524,12 @@ a PIN — and sees, for their own properties only:
   note. **The daily report** (opt-in): each morning's sweep emails yesterday at each
   of their properties (officers and hours, patrols and checkpoints, incidents,
   visitors, activity, open building issues), once per contact, site and day.
+- **Calls** — ask for an officer now: urgent or routine (an emergency is a 911 call, and
+  the form says so first), what it is about, where and what is happening. The client
+  follows it from called in to officer sent, on the way and on scene, can cancel it
+  until the officer arrives, and is emailed when it is cleared with what was found.
+  The calls the office raised for their property are listed too, with how long our
+  officers took to get there.
 - **Extra coverage requests** — officers beyond the
   standing roster for an event or a stretch of extra risk (date, times, how many, armed
   or not, and what it is for). The office schedules it or declines it with a reason;
@@ -658,7 +680,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 24 steps and stops it:
+One command reseeds the database, starts the API, runs all 25 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -706,7 +728,10 @@ the server is running corrupts the data directory.
   an officer on post signs a visitor in, which the supervisor sees under Post logs and
   the client sees in the day's report. The supervisor also finds the officer with
   Ctrl+K, issues new post orders the officer then reads and acknowledges, opens an
-  alert from the bell, and prints a tour's QR tags.
+  alert from the bell, and prints a tour's QR tags. Last, a client asks for an officer
+  from the portal, a supervisor sends the call to the officer at the property, who
+  acknowledges, arrives and clears it from their phone, and the client sees it cleared
+  with the response time.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -767,6 +792,14 @@ the server is running corrupts the data directory.
   licence over, returns a code and a PIN that sign in and must be changed, and never
   the PIN hash. Moves, checks, notes, rejections with a reason and reopening are
   checked, and audited.
+- **`test/dispatch.mjs`** — a call goes only to an officer on the clock; only that
+  officer or a supervisor can move it on, one step at a time, and it cannot be cleared
+  before they are on scene; turning it back needs a reason; every step is timed and
+  logged. Clients raise urgent or routine calls (never emergencies) at their own sites
+  only, three open at a time, see the officer by first name but no phone numbers or
+  internal log, cannot cancel once the officer is there, and are emailed when it is
+  cleared. Clocking out puts an open call back on the board. Alerts, the sidebar
+  count, the report and the audit trail are checked.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -780,7 +813,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 102 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 107 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

@@ -15,6 +15,7 @@ import { PostLogCards, SiteContactsCard, usePostLog } from '../../src/PostLogCar
 import { ShiftWrapUp } from '../../src/ShiftWrapUp.jsx';
 import { ExpiryReminder } from '../../src/ExpiryReminder.jsx';
 import { LastVisitCard } from '../../src/LastVisitCard.jsx';
+import { CallsCard } from '../../src/CallsCard.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -181,6 +182,7 @@ export default function HomeScreen() {
         </View>
 
         {checkIn?.is_open && <CheckInCard checkIn={checkIn} onAnswered={load} notify={notify} />}
+        <CallsCard onDuty={onDuty} notify={notify} refreshKey={pulls} />
 
         {/* Changed orders and unread pass-down come before anything else on post. */}
         <PostLogCards postLog={postLog} notify={notify} />

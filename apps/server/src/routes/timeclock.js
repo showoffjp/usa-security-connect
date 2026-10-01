@@ -12,6 +12,7 @@ import {
 } from '../shared.js';
 import { recordPing } from '../services/tracking.js';
 import { flagOutstanding, outstandingForShift } from '../services/equipment.js';
+import { releaseCallsOnClockOut, OPEN_SQL } from '../services/dispatch.js';
 import {
   toSql,
   raiseFlag,
@@ -411,6 +412,9 @@ timeclockRouter.post(
 
     await audit(req.user.id, 'timeclock.out', 'time_entry', entry.id, { minutes }, req.ip);
 
+    // A call cannot go home with the officer: back on the board for someone else.
+    const callsReturned = await releaseCallsOnClockOut(req.user.id, now);
+
     // Anything that should have gone back in the locker. Flagged now rather
     // than waiting for the nightly sweep, and handed back in the response so
     // the officer is told before they walk away rather than the next morning.
@@ -422,6 +426,7 @@ timeclockRouter.post(
       entry: isoFields(updated, ENTRY_TIMES),
       minutesWorked: minutes,
       geofence: fence,
+      callsReturned,
       stillHolding: stillHolding.map((h) => ({
         id: h.id,
         category: h.category,
@@ -697,6 +702,10 @@ timeclockRouter.get(
       incidents: await n(`SELECT COUNT(*) AS n FROM incidents WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?`, uid, from, to),
       tours: { runs: Number(tours.runs || 0), completed: Number(tours.completed || 0), checkpoints: Number(tours.scanned || 0) },
       checkIns: { answered: Number(checks.answered || 0), missed: Number(checks.missed || 0) },
+      calls: {
+        cleared: await n(`SELECT COUNT(*) AS n FROM service_calls WHERE assigned_to = ? AND status = 'cleared' AND cleared_at >= ? AND cleared_at <= ?`, uid, from, to),
+        open: entry.clock_out_at ? 0 : await n(`SELECT COUNT(*) AS n FROM service_calls WHERE assigned_to = ? AND status IN (${OPEN_SQL})`, uid),
+      },
       passdownWritten: await n(`SELECT COUNT(*) AS n FROM passdown_notes WHERE author_id = ? AND time_entry_id = ?`, uid, entry.id),
     });
   })

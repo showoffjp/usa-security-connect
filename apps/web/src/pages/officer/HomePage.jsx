@@ -8,7 +8,7 @@ import {
   Icon, Banner, Chip, StatusChip, Modal, Field, SlideToAction,
   LoadingPage, useToast, Empty,
 } from '../../components/ui.jsx';
-import { formatDuration, toHours, expiryState, VISIT_CHECKS } from '@shared/domain.js';
+import { formatDuration, toHours, expiryState, VISIT_CHECKS, CALL_DISPOSITIONS, CALL_DISPOSITION_LABEL } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
@@ -108,6 +108,172 @@ function LastVisitCard() {
   );
 }
 
+/* ------------------------------------------------------------ calls -- */
+
+const CALL_KIND = { 1: 'danger', 2: 'warn', 3: '' };
+
+/**
+ * A call the office has sent to this officer: an alarm, someone suspicious,
+ * a door to open. It sits at the top of the home screen until it is cleared,
+ * one button at a time: on my way, on scene, clear.
+ */
+function CallsCard({ onDuty }) {
+  const toast = useToast();
+  const [calls, setCalls] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const [clearing, setClearing] = useState(null);
+  const [declining, setDeclining] = useState(null);
+  const [form, setForm] = useState({ disposition: 'resolved', outcome: '', reason: '' });
+
+  const load = useCallback(() => {
+    if (!onDuty) {
+      setCalls([]);
+      return;
+    }
+    api.get('/dispatch/mine').then((d) => setCalls(d.active || []), () => {});
+  }, [onDuty]);
+
+  useEffect(() => {
+    load();
+    if (!onDuty) return undefined;
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [load, onDuty]);
+
+  const act = async (call, step, body, message) => {
+    setBusy(`${call.id}:${step}`);
+    try {
+      await api.post(`/dispatch/${call.id}/${step}`, body);
+      toast.success(message);
+      setClearing(null);
+      setDeclining(null);
+      setForm({ disposition: 'resolved', outcome: '', reason: '' });
+      load();
+    } catch (err) {
+      toast.error(err.message);
+      load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!calls.length) return null;
+  return (
+    <>
+      {calls.map((c) => (
+        <section key={c.id} className={`card call-card ${c.priority === 3 ? 'call-routine' : ''}`} aria-labelledby={`call-${c.id}`}>
+          <div className="card-head">
+            <div className="row">
+              <Icon name="phone" size={18} style={{ color: c.priority === 3 ? 'var(--warn)' : 'var(--danger)' }} />
+              <h3 id={`call-${c.id}`}>
+                {c.priority_label} call: {c.type_label}
+              </h3>
+            </div>
+            <Chip kind={CALL_KIND[c.priority]}>{c.status_label}</Chip>
+          </div>
+          <div className="card-body">
+            <div className="strong">
+              {c.site_name}
+              {c.post_name ? ` · ${c.post_name}` : ''}
+            </div>
+            {c.location && <div className="small">{c.location}</div>}
+            <p className="small" style={{ margin: '6px 0 0' }}>{c.description}</p>
+            <div className="tiny muted" style={{ marginTop: 4 }}>
+              Called in {fmtRelative(c.created_at)}
+              {c.caller_name ? ` by ${c.caller_name}` : ''}
+              {c.caller_phone ? ' · ' : ''}
+              {c.caller_phone && <a href={`tel:${c.caller_phone}`}>{c.caller_phone}</a>}
+            </div>
+            <div className="call-actions">
+              {c.status === 'assigned' && (
+                <button className="btn btn-primary" disabled={busy != null} onClick={() => act(c, 'acknowledge', {}, 'The office knows you are on the way.')}>
+                  On my way
+                </button>
+              )}
+              {['assigned', 'en_route'].includes(c.status) && (
+                <button className="btn btn-primary" disabled={busy != null} onClick={() => act(c, 'arrive', {}, 'Marked on scene.')}>
+                  I'm on scene
+                </button>
+              )}
+              {c.status === 'on_scene' && (
+                <button className="btn btn-primary" disabled={busy != null} onClick={() => setClearing(c)}>
+                  Clear call
+                </button>
+              )}
+              {['assigned', 'en_route'].includes(c.status) && (
+                <button className="btn btn-ghost" disabled={busy != null} onClick={() => setDeclining(c)}>
+                  I can't take it
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      ))}
+
+      {clearing && (
+        <Modal
+          title="Clear the call"
+          onClose={() => setClearing(null)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setClearing(null)}>
+                Back
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy != null || form.outcome.trim().length < 5}
+                onClick={() => act(clearing, 'clear', { disposition: form.disposition, outcome: form.outcome }, 'Call cleared.')}
+              >
+                Clear call
+              </button>
+            </>
+          }
+        >
+          <div className="stack">
+            <Field label="How did it end?">
+              <select value={form.disposition} onChange={(e) => setForm((f) => ({ ...f, disposition: e.target.value }))}>
+                {CALL_DISPOSITIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {CALL_DISPOSITION_LABEL[d]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="What you found and what you did" hint="The client reads this. Write an incident report as well for anything serious.">
+              <textarea rows={3} value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} maxLength={1000} />
+            </Field>
+          </div>
+        </Modal>
+      )}
+
+      {declining && (
+        <Modal
+          title="Turn the call back"
+          onClose={() => setDeclining(null)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setDeclining(null)}>
+                Back
+              </button>
+              <button
+                className="btn btn-danger"
+                disabled={busy != null || form.reason.trim().length < 3}
+                onClick={() => act(declining, 'decline', { reason: form.reason }, 'The call is back with the office.')}
+              >
+                Turn it back
+              </button>
+            </>
+          }
+        >
+          <Field label="Why can't you take it?" hint="So the supervisor can send someone else straight away.">
+            <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} maxLength={300} />
+          </Field>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 /* ------------------------------------------------------ end of shift -- */
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -148,6 +314,7 @@ function ShiftWrapUp({ onClose, onClockOut, busy }) {
         ['Visitors', `${summary.visitorsIn} signed in, ${summary.visitorsOut} signed out`],
         ['Activity log', plural(summary.activity, 'entry').replace('entrys', 'entries')],
         ['Incidents', summary.incidents ? plural(summary.incidents, 'report') : 'None'],
+        ...(summary.calls?.cleared ? [['Calls', `${plural(summary.calls.cleared, 'call')} cleared`]] : []),
       ]
     : [];
   return (
@@ -175,6 +342,12 @@ function ShiftWrapUp({ onClose, onClockOut, busy }) {
             <div className="small muted">
               {summary.entry.post_name}, {summary.entry.site_name}. Since {fmtTime(summary.entry.clock_in_at)}.
             </div>
+            {summary.calls?.open > 0 && (
+              <Banner kind="warn">
+                You still have {plural(summary.calls.open, 'open call')}. If you clock out now it goes back to the office for
+                someone else.
+              </Banner>
+            )}
             <dl className="kv">
               {rows.map(([k, v]) => (
                 <Fragment key={k}>
@@ -566,6 +739,7 @@ export default function HomePage() {
       </div>
 
       {checkIn?.is_open && <CheckInPrompt checkIn={checkIn} onAnswered={load} />}
+      <CallsCard onDuty={onDuty} />
 
       {/* Changed orders come before anything else on post. */}
       <PostOrdersCard onDuty={onDuty} />
