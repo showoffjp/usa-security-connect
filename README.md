@@ -195,6 +195,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   choice is kept per device and applied before the first paint, so there is no
   white flash. Street maps are dimmed to match. Printing is always on white.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
+- **Fix a time** — under Schedule → Worked (web and mobile), the officer's punches from
+  the last 14 days, each marked if the system closed it, it was late or it has been
+  corrected. A wrong one can be sent to the office: the clock-in or clock-out it should
+  have been (a date-time on the web, a few minutes either way on the phone) and what
+  happened. They see it waiting, can withdraw it, and see the answer, with the office's
+  note if it was declined. A shift still running cannot have its clock-out changed, and
+  hours in a closed pay period have been paid, so those go to the office instead.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
   where they worked, exactly as payroll approved it. A 1099 contractor sees *My
@@ -370,7 +377,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Payroll** — weekly (or up to four-week) pay periods, each reviewed officer by
   officer: hours, regular and overtime pay, gross, sites worked, and what needs a second
   look (open shifts, corrected punches, off-site clock-ins, unresolved flags, missing
-  W-9s). Approve one, a selection or everyone ready; an approval is pinned to the exact
+  W-9s, corrections still waiting). A time correction waiting on hours in the period
+  stops it closing until it is decided. Approve one, a selection or everyone ready; an approval is pinned to the exact
   hours and rates, so a later correction shows as **changed since approval**. Closing
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
@@ -431,7 +439,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   with the text ready to copy. Passwords are never included in a message.
 - **Timesheets** — hours by officer with the regular/overtime split **driven by
   classification**, unpaid break deductions, exception badges, estimated pay, client
-  billing and margin, every individual punch, and **CSV export for payroll**.
+  billing and margin, every individual punch, and **CSV export for payroll**. The
+  **Corrections** tab lists officers' requests to fix a punch, as recorded and as they
+  should be, with the hours either way and why. An administrator approves (the shift is
+  corrected the same way as their own corrections, the recorded times kept, a late flag
+  or a system-closed flag resolved when the new times settle it) or declines with a
+  reason the officer reads; supervisors see the queue. Waiting requests are in the
+  alerts inbox and counted on the sidebar.
 - **Time off** — approve or deny with a note; approving reports how many rostered
   shifts still need re-covering.
 - **Licensing &amp; certifications** — one board for state licences, certifications and
@@ -680,7 +694,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 25 steps and stops it:
+One command reseeds the database, starts the API, runs all 26 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -731,7 +745,8 @@ the server is running corrupts the data directory.
   alert from the bell, and prints a tour's QR tags. Last, a client asks for an officer
   from the portal, a supervisor sends the call to the officer at the property, who
   acknowledges, arrives and clears it from their phone, and the client sees it cleared
-  with the response time.
+  with the response time. Then an officer asks for a clock-out to be fixed and an
+  administrator approves it.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -800,6 +815,13 @@ the server is running corrupts the data directory.
   internal log, cannot cancel once the officer is there, and are emailed when it is
   cleared. Clocking out puts an open call back on the board. Alerts, the sidebar
   count, the report and the audit trail are checked.
+- **`test/corrections.mjs`** — an officer can ask about only their own finished shifts
+  from the last 14 days, once at a time per shift, with a reason and times that are not
+  in the future, not the ones recorded and not hours already paid. Supervisors see the
+  queue; only an administrator decides, once. Approving moves the shift and keeps the
+  recorded time; declining leaves it and tells the officer why; a withdrawn request
+  cannot be approved. A waiting request holds up that week's pay period. Every step
+  is audited.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -813,7 +835,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 107 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 110 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

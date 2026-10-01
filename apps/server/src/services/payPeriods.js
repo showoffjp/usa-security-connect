@@ -178,6 +178,16 @@ export async function reviewPeriod(period) {
     .all(toSql(start), toSql(end));
   const flagsBy = new Map(flags.map((f) => [f.user_id, Number(f.n)]));
 
+  // Officers waiting on an answer about hours in this period.
+  const corrections = await db
+    .prepare(
+      `SELECT c.user_id, COUNT(*) AS n FROM time_corrections c JOIN time_entries te ON te.id = c.time_entry_id
+       WHERE c.status = 'pending' AND te.clock_in_at >= ? AND te.clock_in_at < ?
+       GROUP BY c.user_id`
+    )
+    .all(toSql(start), toSql(end));
+  const correctionsBy = new Map(corrections.map((c) => [c.user_id, Number(c.n)]));
+
   const approvals = await db
     .prepare(
       `SELECT l.*, a.first_name || ' ' || a.last_name AS approved_by_name
@@ -231,6 +241,10 @@ export async function reviewPeriod(period) {
     if (outside) issues.push(issue('outside', 'warn', `${outside} clock-in${outside === 1 ? '' : 's'} outside the post's geofence.`));
     const openFlags = flagsBy.get(person.id) || 0;
     if (openFlags) issues.push(issue('flags', 'warn', `${openFlags} unresolved flag${openFlags === 1 ? '' : 's'} in this period.`));
+    const pendingCorrections = correctionsBy.get(person.id) || 0;
+    if (pendingCorrections) {
+      issues.push(issue('correction', 'warn', `${pendingCorrections} time correction${pendingCorrections === 1 ? '' : 's'} asked for and not yet decided.`));
+    }
     if (pay.overtimeMinutes > 0) issues.push(issue('overtime', 'info', `${toHours(pay.overtimeMinutes)} h of overtime.`));
     if (person.employment_type === '1099' && !person.w9_on_file) {
       issues.push(issue('no_w9', 'warn', 'Contractor with no W-9 on file.'));
@@ -263,6 +277,7 @@ export async function reviewPeriod(period) {
       gross_pay: dollars(pay.payCents),
       sites,
       issues,
+      pending_corrections: pendingCorrections,
       blocked: issues.some((i) => i.level === 'block'),
       fingerprint,
       approval: {
@@ -361,6 +376,15 @@ export function closeBlockers(period, lines) {
     blockers.push({
       code: 'blocked',
       message: `${blocked.length} officer${blocked.length === 1 ? ' has' : 's have'} hours that cannot be paid yet (open shifts or no pay rate).`,
+    });
+  }
+  // An officer has asked for hours in this period to be changed; paying them
+  // first would mean paying the wrong hours, or reopening the period.
+  const corrections = lines.reduce((n, l) => n + (l.pending_corrections || 0), 0);
+  if (corrections) {
+    blockers.push({
+      code: 'corrections',
+      message: `${corrections} time correction${corrections === 1 ? ' is' : 's are'} waiting for a decision.`,
     });
   }
   const unapproved = lines.filter((l) => l.approval.state !== 'approved');

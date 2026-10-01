@@ -7,6 +7,7 @@ import {
   Card, Chip, StatusChip, Empty, Loading, Segmented, Toast, useToastState,
 } from '../../src/ui.jsx';
 import { OpenShifts, MyShiftRequests, ShiftActionSheet } from '../../src/ShiftActions.jsx';
+import { RecentPunches } from '../../src/RecentPunches.jsx';
 import { C, S } from '../../src/theme.js';
 import { toHours, formatDuration } from '../../src/shared.js';
 
@@ -101,6 +102,8 @@ export default function ScheduleScreen() {
             { value: 'past', label: 'Worked' },
           ]}
         />
+
+        {view === 'past' && <RecentPunches notify={(message, tone) => setToast({ message, tone })} />}
 
         {view === 'open' ? (
           <>

@@ -101,6 +101,7 @@ export function pathForNotification(data) {
     case 'message':
       return data.threadId ? `/thread/${data.threadId}` : '/updates';
     case 'flag':
+    case 'correction':
       return '/schedule';
     default:
       return null;

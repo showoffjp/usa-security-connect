@@ -85,6 +85,7 @@ const STAFF_PAGES = [
   ['Dispatch', '/admin/dispatch'],
   ['Dispatch: closed calls', '/admin/dispatch?view=closed'],
   ['Report: call response times', '/admin/reports?report=calls-by-site'],
+  ['Timesheets: corrections', '/admin/timesheets?view=corrections'],
 ];
 
 const PORTAL_PAGES = [
@@ -282,6 +283,17 @@ await audit(page, 'Post log: building issues', '/post-log?tab=issues');
 await page.click('button:has-text("Report issue")');
 await page.waitForSelector('[role="dialog"]');
 await audit(page, 'Post log: report an issue', null);
+await page.keyboard.press('Escape');
+
+// The officer's own punches, and asking for one to be fixed.
+await page.goto(`${WEB}/schedule`, { waitUntil: 'networkidle' });
+await page.click('button:has-text("Worked")');
+await page.waitForSelector('#punches-title');
+await audit(page, 'Schedule: your punches', null);
+await page.locator('.punch-row button:has-text("Fix a time")').first().click();
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Schedule: fix a time', null);
+await page.keyboard.press('Escape');
 
 // --- client portal --------------------------------------------------------
 console.log('\n--- client portal ---');

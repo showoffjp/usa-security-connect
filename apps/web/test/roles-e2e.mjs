@@ -1007,6 +1007,50 @@ for (const u of STAFF) {
   await officer.context.close();
 }
 
+/* --------------------------------------- round 16: time corrections --- */
+{
+  console.log('\n--- Time corrections: an officer asks, an administrator approves ---');
+  const why = `E2E ${Date.now() % 100000}: relief was late, I stayed at the desk until they arrived.`;
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await officer.page.goto(WEB + '/schedule');
+  await settle(officer.page);
+  await officer.page.click('button:has-text("Worked")');
+  await officer.page.waitForSelector('#punches-title');
+  await checkScreen('officer: punches', officer.page, officer.problems);
+  const row = officer.page.locator('.punch-row:not(:has-text("now")):has(button:has-text("Fix a time"))').first();
+  await row.locator('button:has-text("Fix a time")').click();
+  const out = officer.page.getByLabel('Clock-out should be');
+  const was = await out.inputValue();
+  const later = new Date(new Date(was).getTime() + 15 * 60000);
+  const pad = (n) => String(n).padStart(2, '0');
+  await out.fill(`${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}T${pad(later.getHours())}:${pad(later.getMinutes())}`);
+  await officer.page.getByLabel('What happened?').fill(why);
+  await officer.page.click('button:has-text("Send to the office")');
+  await officer.page.waitForSelector('.punch-row >> text=Correction waiting', { timeout: 10000 });
+  log(await officer.page.locator('.punch-row', { hasText: 'Correction waiting' }).count() >= 1, 'an officer asks for a clock-out 15 minutes later');
+
+  const admin = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(admin.page, '1001', '2468');
+  await admin.page.goto(WEB + '/admin/timesheets?view=corrections');
+  await settle(admin.page);
+  const req = admin.page.locator('tr', { hasText: why });
+  log(await req.count() === 1, 'the request waits under Timesheets → Corrections');
+  await checkScreen('admin: time corrections', admin.page, admin.problems);
+  await req.locator('button:has-text("Approve")').click();
+  await admin.page.click('button:has-text("Approve and correct the shift")');
+  await admin.page.waitForTimeout(1200);
+  log(await admin.page.locator('tr', { hasText: why }).count() === 0, 'an administrator approves it and it leaves the queue');
+
+  await officer.page.reload();
+  await settle(officer.page);
+  await officer.page.click('button:has-text("Worked")');
+  await officer.page.waitForSelector('#punches-title');
+  log(await officer.page.locator('.punch-row', { hasText: 'Correction approved' }).count() >= 1, 'and the officer sees it approved');
+  await officer.context.close();
+  await admin.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);
