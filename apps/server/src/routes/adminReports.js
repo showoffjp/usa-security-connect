@@ -97,6 +97,12 @@ export const REPORTS = [
     group: 'Incidents',
   },
   {
+    id: 'agreement-hours',
+    title: 'Hours against agreements',
+    description: 'For each site with a service agreement: the hours it pays for over the range, the hours worked, and the difference.',
+    group: 'Clients',
+  },
+  {
     id: 'calls-by-site',
     title: 'Call response times by site',
     description: 'Calls for service at each site, how fast an officer was on scene, and how many were inside the target for their priority.',
@@ -827,6 +833,66 @@ Object.assign(builders, {
       notes: [
         `A site is due a visit after ${VISIT_DUE_DAYS} days without one. Last visit and days since count from any date, not just this range.`,
         'A problem is a failed check (uniform, post orders, equipment, site secure) or a rating of 2 or less.',
+      ],
+    };
+  },
+
+  async 'agreement-hours'(f) {
+    const days = Math.round((f.to - f.from) / 86400000);
+    const agreements = await db
+      .prepare(
+        `SELECT a.*, s.name AS site, s.client_name FROM site_agreements a JOIN sites s ON s.id = a.site_id
+         ${f.siteId ? 'WHERE a.site_id = ?' : ''} ORDER BY s.name`
+      )
+      .all(...(f.siteId ? [f.siteId] : []));
+    const worked = new Map(
+      (await db
+        .prepare(
+          `SELECT p.site_id, SUM(te.minutes_worked) AS minutes FROM time_entries te JOIN posts p ON p.id = te.post_id
+           WHERE te.clock_in_at >= ? AND te.clock_in_at < ? AND te.clock_out_at IS NOT NULL GROUP BY p.site_id`
+        )
+        .all(toSql(f.from), toSql(f.to))).map((r) => [r.site_id, Number(r.minutes) || 0])
+    );
+    const rows = agreements.map((a) => {
+      const contracted = Math.round(Number(a.weekly_hours) * (days / 7) * 10) / 10;
+      const delivered = Math.round((worked.get(a.site_id) || 0) / 6) / 10;
+      return {
+        site: a.site,
+        client: a.client_name,
+        weekly_hours: Number(a.weekly_hours),
+        contracted,
+        delivered,
+        difference: Math.round((delivered - contracted) * 10) / 10,
+        pct: pct(delivered, contracted),
+        ends_on: a.ends_on ? String(a.ends_on).slice(0, 10) : null,
+      };
+    });
+    rows.sort((a, b) => (a.pct ?? 0) - (b.pct ?? 0));
+    const columns = [
+      C('site', 'Site'),
+      C('client', 'Client'),
+      C('weekly_hours', 'Hours a week', 'decimal'),
+      C('contracted', 'Contracted hours', 'decimal', { sum: true }),
+      C('delivered', 'Hours worked', 'decimal', { sum: true, bar: true }),
+      C('difference', 'Difference', 'decimal', { sum: true }),
+      C('pct', 'Delivered', 'percent'),
+      C('ends_on', 'Agreement ends', 'date'),
+    ];
+    const totals = sumColumns(rows, columns);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Sites with an agreement', value: rows.length, type: 'int' },
+        { label: 'Contracted hours', value: totals.contracted || 0 },
+        { label: 'Hours worked', value: totals.delivered || 0 },
+        { label: 'Delivered', value: totals.contracted ? `${pct(totals.delivered, totals.contracted)}%` : '--' },
+      ],
+      chart: { label: 'site', value: 'delivered', type: 'decimal' },
+      notes: [
+        `Contracted hours are the weekly figure spread over the ${days} days in the range. Worked hours are finished shifts that started in the range.`,
+        'Sites without a service agreement are left out; set one under Billing → Service agreements.',
       ],
     };
   },

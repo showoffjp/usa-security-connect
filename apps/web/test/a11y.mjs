@@ -86,6 +86,8 @@ const STAFF_PAGES = [
   ['Dispatch: closed calls', '/admin/dispatch?view=closed'],
   ['Report: call response times', '/admin/reports?report=calls-by-site'],
   ['Timesheets: corrections', '/admin/timesheets?view=corrections'],
+  ['Service agreements', '/admin/agreements'],
+  ['Report: hours against agreements', '/admin/reports?report=agreement-hours'],
 ];
 
 const PORTAL_PAGES = [
@@ -246,6 +248,13 @@ await page.goto(`${WEB}/admin/dispatch`, { waitUntil: 'networkidle' });
 await page.locator('.call-list .list-item button:has-text("Open")').first().click();
 await page.waitForSelector('[role="dialog"] .call-log');
 await audit(page, 'Dispatch: a call', null);
+await page.keyboard.press('Escape');
+
+// Setting a site's service agreement.
+await page.goto(`${WEB}/admin/agreements`, { waitUntil: 'networkidle' });
+await page.locator('button[aria-label^="Edit the agreement"]').first().click();
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Service agreements: edit', null);
 await page.keyboard.press('Escape');
 
 // The alerts inbox is another dialog from the top bar.

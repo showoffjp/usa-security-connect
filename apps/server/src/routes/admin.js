@@ -35,6 +35,7 @@ import { visitBoard } from './visits.js';
 import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 import { OPEN_SQL } from '../services/dispatch.js';
+import { agreementBoard } from '../services/agreements.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -235,6 +236,8 @@ adminRouter.get(
     const waitingCalls = Number(callRows.find((r) => r.status === 'open')?.n || 0);
     // Officers' requests to fix a punch, waiting on an administrator.
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
+    // Sites rostered short of their agreement, or with one about to run out.
+    const agreementSummary = (await agreementBoard()).summary;
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -276,6 +279,8 @@ adminRouter.get(
         activeCalls,
         waitingCalls,
         pendingCorrections,
+        agreementsShort: agreementSummary.short,
+        agreementRenewals: agreementSummary.renewals,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -2270,6 +2275,24 @@ async function buildAlerts(userId) {
     push({ key: `applicant:${a.id}`, kind: 'applicant', severity: 'info', at: a.created_at, link: '/admin/hiring',
       title: `New applicant: ${a.first_name} ${a.last_name}`,
       detail: [a.licence_class === 'none' ? 'No licence yet' : `Class ${a.licence_class === 'DG' ? 'D and G' : a.licence_class}`, a.city].filter(Boolean).join(' · ') });
+  }
+
+  // A site rostered short of the hours its agreement pays for, next seven
+  // days; and an agreement inside its notice period.
+  const board = await agreementBoard();
+  const weekKey = toDateString(new Date());
+  for (const site of board.sites) {
+    if (site.short) {
+      push({ key: `agreement-short:${site.id}:${weekKey}`, kind: 'agreement', severity: 'warning', at: new Date().toISOString(),
+        link: '/admin/agreements', title: `${site.name} is rostered ${site.shortfall_hours} h short of its agreement`,
+        detail: `${site.rostered_hours} of ${site.agreement.weekly_hours} h a week in the next 7 days` });
+    }
+    if (site.agreement?.renewal_due) {
+      const a = site.agreement;
+      push({ key: `agreement-renewal:${site.id}:${a.ends_on}`, kind: 'agreement', severity: a.expired ? 'warning' : 'info', at: new Date().toISOString(),
+        link: '/admin/agreements', title: a.expired ? `The agreement for ${site.name} has ended` : `The agreement for ${site.name} ends in ${a.days_left} days`,
+        detail: `Ends ${a.ends_on} · ${site.client_name || ''}`.trim() });
+    }
   }
 
   // An officer asking for one of their punches to be fixed.
