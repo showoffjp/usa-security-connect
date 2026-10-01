@@ -383,7 +383,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
   1099 separately.
-- **Reports** — thirteen reports over any period, site, officer or classification, each
+- **Reports** — fourteen reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
   1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
@@ -431,6 +431,15 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   hours get billed twice. **Client questions** (a tab, and on each invoice) lists what
   clients have asked, waiting ones first, each answered in place; a waiting question is
   in the alerts inbox.
+- **Service agreements** (Billing → Service agreements) — the hours a week each property
+  pays for, its start and end dates, notice period and whether it renews on its own,
+  with internal notes. Each site is shown against the next 7 days' roster (filled
+  shifts, then open ones nobody has taken, against the contracted line) and the hours
+  worked in the last 7. A site rostered more than half an hour short of its agreement,
+  and an agreement inside its notice period, are in the alerts inbox and counted on the
+  sidebar. The **hours against agreements** report spreads the weekly figure over any
+  date range and sets the hours worked against it. Administrators edit; supervisors
+  read.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
 - **Outbox** — every message the system decided to send: invoice notices to client
@@ -538,6 +547,10 @@ a PIN — and sees, for their own properties only:
   note. **The daily report** (opt-in): each morning's sweep emails yesterday at each
   of their properties (officers and hours, patrols and checkpoints, incidents,
   visitors, activity, open building issues), once per contact, site and day.
+- **Hours against your agreement** (on the overview) — for each property with a
+  service agreement: the hours a week it pays for, when it runs to, the hours worked in
+  each of the last four weeks we have records for (as a bar against the contracted
+  line and a percentage) and what is rostered for the next 7 days.
 - **Calls** — ask for an officer now: urgent or routine (an emergency is a 911 call, and
   the form says so first), what it is about, where and what is happening. The client
   follows it from called in to officer sent, on the way and on scene, can cancel it
@@ -694,7 +707,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 26 steps and stops it:
+One command reseeds the database, starts the API, runs all 27 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -746,7 +759,8 @@ the server is running corrupts the data directory.
   from the portal, a supervisor sends the call to the officer at the property, who
   acknowledges, arrives and clears it from their phone, and the client sees it cleared
   with the response time. Then an officer asks for a clock-out to be fixed and an
-  administrator approves it.
+  administrator approves it, and an administrator sets a service agreement for a
+  month-to-month site.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -822,6 +836,12 @@ the server is running corrupts the data directory.
   recorded time; declining leaves it and tells the officer why; a withdrawn request
   cannot be approved. A waiting request holds up that week's pay period. Every step
   is audited.
+- **`test/agreements.mjs`** — supervisors read the board, officers and visitors cannot;
+  only an administrator sets or removes an agreement, with real hours and dates. A site
+  rostered short is flagged, raised and counted, and the alert clears when the roster
+  meets it; an agreement in its notice period is due for renewal unless it renews on
+  its own. A client sees their own properties' agreements and weekly hours without our
+  notes. The report and the audit trail are checked.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -835,7 +855,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 110 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 113 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

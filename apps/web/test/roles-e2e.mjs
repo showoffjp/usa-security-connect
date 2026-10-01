@@ -1051,6 +1051,26 @@ for (const u of STAFF) {
   await admin.context.close();
 }
 
+/* ------------------------------------- round 17: service agreements --- */
+{
+  console.log('\n--- Service agreements: what each site pays for ---');
+  const admin = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(admin.page, '1001', '2468');
+  await admin.page.goto(WEB + '/admin/agreements');
+  await settle(admin.page);
+  await checkScreen('admin: service agreements', admin.page, admin.problems);
+  const gulfport = admin.page.locator('tr', { hasText: 'Gulfport Logistics Yard' });
+  log(await gulfport.locator('text=/\\d+ h short/').count() === 1, 'a site rostered below its agreement is marked short');
+  await admin.page.click('button[aria-label="Set the agreement for Coral Bay Retail Plaza"]');
+  await admin.page.getByLabel('Hours a week the client pays for').fill('24');
+  await admin.page.click('button:has-text("Save agreement")');
+  await admin.page.waitForTimeout(1200);
+  const coral = admin.page.locator('tr', { hasText: 'Coral Bay Retail Plaza' });
+  log((await coral.innerText()).includes('24 h') && await coral.locator('button:has-text("Edit")').count() === 1,
+    'an administrator sets an agreement for a month-to-month site');
+  await admin.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

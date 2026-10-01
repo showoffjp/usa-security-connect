@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../lib/api.js';
-import { fmtDate, fmtDateTime, fmtDay, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
+import { fmtDate, fmtDateShort, fmtDateTime, fmtDay, fmtMoney, fmtRange, fmtTime, fmtHours, toDateInput } from '../../lib/format.js';
 import {
   Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Progress, Segmented, Spinner, StatusChip, Stat,
 } from '../../components/ui.jsx';
@@ -477,6 +477,58 @@ function OfficerContacts() {
 
 /* ---------------------------------------------------------- overview -- */
 
+/**
+ * What each property pays for against what we worked, week by week: the
+ * number a client checks their invoice against.
+ */
+function AgreementHours() {
+  const { data } = usePortal('/client/agreement', []);
+  const sites = (data?.sites || []).filter((s) => s.agreement);
+  if (!sites.length) return null;
+  return (
+    <section className="card" aria-labelledby="agreement-title">
+      <div className="card-head">
+        <h2 id="agreement-title">Hours against your agreement</h2>
+      </div>
+      <div className="card-pad stack">
+        {sites.map((s) => {
+          const target = s.agreement.weekly_hours;
+          const max = Math.max(target, ...s.weeks.map((w) => w.hours), 1);
+          return (
+            <div key={s.id} className="stack-sm">
+              <div className="row-between wrap" style={{ gap: 6 }}>
+                <span className="strong">{s.name}</span>
+                <span className="small muted">
+                  {target} h a week
+                  {s.agreement.ends_on ? ` · runs to ${fmtDate(`${s.agreement.ends_on}T12:00:00`)}` : ''}
+                </span>
+              </div>
+              <ul className="agreement-weeks">
+                {s.weeks.map((w) => {
+                  const pct = target ? Math.round((w.hours / target) * 100) : null;
+                  return (
+                    <li key={w.week_of}>
+                      <span className="small nowrap">Week of {fmtDateShort(`${w.week_of}T12:00:00`)}</span>
+                      <span className="ag-bar" aria-hidden="true">
+                        <span className="ag-filled" style={{ width: `${(w.hours / max) * 100}%` }} />
+                        <span className="ag-target" style={{ left: `${(target / max) * 100}%` }} />
+                      </span>
+                      <span className="small num nowrap">
+                        {w.hours} h{pct != null ? ` · ${pct}%` : ''}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="tiny muted">{s.rostered_hours} h rostered for the next 7 days.</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function PortalOverview({ sites }) {
   const { data, error, loading, reload } = usePortal('/client/overview?days=7', []);
 
@@ -563,6 +615,7 @@ export function PortalOverview({ sites }) {
               </Banner>
             )}
 
+            <AgreementHours />
             <RateUs sites={sites} />
             <OfficerContacts />
 

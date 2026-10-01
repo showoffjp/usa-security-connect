@@ -1028,6 +1028,22 @@ CREATE TABLE IF NOT EXISTS applicant_notes (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
+/* ------------------------------------------------ service agreements --- */
+
+-- What each property pays us for: hours of guarding a week, and when the
+-- agreement runs out. One current agreement per site; the notes are ours.
+CREATE TABLE IF NOT EXISTS site_agreements (
+  site_id       integer PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+  weekly_hours  numeric(7,1) NOT NULL,
+  starts_on     date,
+  ends_on       date,
+  notice_days   integer NOT NULL DEFAULT 60,
+  auto_renew    boolean NOT NULL DEFAULT false,
+  notes         text,
+  updated_by    integer REFERENCES users(id) ON DELETE SET NULL,
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
 /* ------------------------------------------------ time corrections ----- */
 
 -- An officer's request to fix one of their punches. Approving it applies the

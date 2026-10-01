@@ -321,6 +321,7 @@ export function AdminShell() {
       title: 'Billing',
       items: [
         { to: '/admin/invoices', icon: 'chart', label: 'Invoices', count: counts.overdueInvoices, urgent: true },
+        { to: '/admin/agreements', icon: 'clipboard', label: 'Service agreements', count: (counts.agreementsShort || 0) + (counts.agreementRenewals || 0) },
         { to: '/admin/clients', icon: 'users', label: 'Client portal' },
         { to: '/admin/feedback', icon: 'message', label: 'Client feedback', count: counts.unhappyClients, urgent: true },
         { to: '/admin/emails', icon: 'megaphone', label: 'Outbox' },

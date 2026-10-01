@@ -30,6 +30,7 @@ import {
 import { toHours, daysOverdue, CALL_TYPES } from '../shared.js';
 import { callSelect, loadCall, logEvent, presentCallForClient, pushToSupervisors, OPEN_SQL } from '../services/dispatch.js';
 import { pushAsync } from '../services/push.js';
+import { agreementBoard, deliveredByWeek } from '../services/agreements.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
 import { contactsFor, contactSchema } from './siteLog.js';
@@ -1255,6 +1256,34 @@ clientRouter.post(
     await db.prepare(`UPDATE coverage_requests SET status = 'cancelled' WHERE id = ?`).run(row.id);
     await audit(null, 'coverage_request.cancelled', 'coverage_request', row.id, { client: req.client.id }, req.ip);
     res.json({ ok: true });
+  })
+);
+
+/* ===================================================== service agreement === */
+
+/**
+ * The hours a week each of their properties is contracted for, what was
+ * worked in each of the last four weeks and what is rostered for the next
+ * seven days. Our internal notes on the agreement stay with us.
+ */
+clientRouter.get(
+  '/agreement',
+  requireClient,
+  wrap(async (req, res) => {
+    const board = await agreementBoard();
+    const mine = board.sites.filter((s) => req.clientSiteIds.includes(s.id));
+    const sites = [];
+    for (const s of mine) {
+      const { notes: _internal, ...agreement } = s.agreement || {};
+      sites.push({
+        id: s.id,
+        name: s.name,
+        agreement: s.agreement ? agreement : null,
+        rostered_hours: s.rostered_hours + s.open_hours,
+        weeks: s.agreement ? await deliveredByWeek(s.id, 4) : [],
+      });
+    }
+    res.json({ sites });
   })
 );
 
