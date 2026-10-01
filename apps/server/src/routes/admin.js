@@ -28,7 +28,7 @@ import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
-import { assertHoursOpen } from '../services/payPeriods.js';
+import { adjustEntry } from '../services/timeEntries.js';
 import { currentOrders, reviseOrders } from '../services/postOrders.js';
 import { siteMonth, monthKey } from '../services/siteMonth.js';
 import { visitBoard } from './visits.js';
@@ -233,6 +233,8 @@ adminRouter.get(
     const callRows = await db.prepare(`SELECT status, COUNT(*) AS n FROM service_calls WHERE status IN (${OPEN_SQL}) GROUP BY status`).all();
     const activeCalls = callRows.reduce((n, r) => n + Number(r.n), 0);
     const waitingCalls = Number(callRows.find((r) => r.status === 'open')?.n || 0);
+    // Officers' requests to fix a punch, waiting on an administrator.
+    const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -273,6 +275,7 @@ adminRouter.get(
         newApplicants,
         activeCalls,
         waitingCalls,
+        pendingCorrections,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -1429,42 +1432,16 @@ adminRouter.patch(
     const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(req.params.id));
     if (!entry) throw new HttpError(404, 'Time entry not found.');
 
-    const clockIn = body.clockInAt ? new Date(body.clockInAt) : new Date(sqlToIso(entry.clock_in_at));
-    const clockOut =
-      body.clockOutAt === undefined
-        ? entry.clock_out_at
-          ? new Date(sqlToIso(entry.clock_out_at))
-          : null
-        : body.clockOutAt
-          ? new Date(body.clockOutAt)
-          : null;
-
-    if (clockOut && clockOut <= clockIn) throw new HttpError(422, 'Clock-out must be after clock-in.');
-    // Hours in a closed payroll period are what was paid; moving an entry
-    // into one would be the same change by the back door.
-    await assertHoursOpen(entry.clock_in_at, 'correct a punch');
-    await assertHoursOpen(clockIn, 'correct a punch');
-
-    (await db.prepare(
-      `UPDATE time_entries
-       SET clock_in_at = ?, clock_out_at = ?, minutes_worked = ?,
-           original_clock_in_at = COALESCE(original_clock_in_at, ?),
-           original_clock_out_at = COALESCE(original_clock_out_at, ?),
-           adjusted_by = ?, adjustment_reason = ?
-       WHERE id = ?`
-    ).run(
-      toSql(clockIn),
-      clockOut ? toSql(clockOut) : null,
-      clockOut ? minutesBetween(clockIn.toISOString(), clockOut.toISOString()) : null,
-      entry.clock_in_at,
-      entry.clock_out_at,
-      req.user.id,
-      body.reason,
-      entry.id
-    ));
-
-    await audit(req.user.id, 'time_entry.adjusted', 'time_entry', entry.id, { reason: body.reason }, req.ip);
-    res.json({ entry: isoFields((await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(entry.id)), ['clock_in_at', 'clock_out_at']) });
+    // The same path an approved officer request takes: original times kept,
+    // closed pay periods refused.
+    const updated = await adjustEntry(entry, {
+      clockInAt: body.clockInAt,
+      clockOutAt: body.clockOutAt,
+      reason: body.reason,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ entry: isoFields(updated, ['clock_in_at', 'clock_out_at']) });
   })
 );
 
@@ -2293,6 +2270,21 @@ async function buildAlerts(userId) {
     push({ key: `applicant:${a.id}`, kind: 'applicant', severity: 'info', at: a.created_at, link: '/admin/hiring',
       title: `New applicant: ${a.first_name} ${a.last_name}`,
       detail: [a.licence_class === 'none' ? 'No licence yet' : `Class ${a.licence_class === 'DG' ? 'D and G' : a.licence_class}`, a.city].filter(Boolean).join(' · ') });
+  }
+
+  // An officer asking for one of their punches to be fixed.
+  for (const c of await db
+    .prepare(
+      `SELECT c.id, c.created_at, c.proposed_clock_in_at, c.proposed_clock_out_at, u.first_name || ' ' || u.last_name AS officer,
+              p.name AS post_name
+       FROM time_corrections c JOIN users u ON u.id = c.user_id JOIN time_entries te ON te.id = c.time_entry_id
+       JOIN posts p ON p.id = te.post_id
+       WHERE c.status = 'pending' ORDER BY c.created_at LIMIT 25`
+    )
+    .all()) {
+    const what = c.proposed_clock_in_at && c.proposed_clock_out_at ? 'clock-in and clock-out' : c.proposed_clock_in_at ? 'clock-in' : 'clock-out';
+    push({ key: `correction:${c.id}`, kind: 'correction', severity: 'warning', at: c.created_at, link: '/admin/timesheets?view=corrections',
+      title: `${c.officer} asked to correct a ${what}`, detail: c.post_name });
   }
 
   // A client's question about an invoice, waiting on us.

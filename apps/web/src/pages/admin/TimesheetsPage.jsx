@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, tokenStore } from '../../lib/api.js';
 import { fmtDate, fmtTime, toDateInput, fmtMoney } from '../../lib/format.js';
 import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Segmented, useToast,
 } from '../../components/ui.jsx';
 import { toHours } from '@shared/domain.js';
+import CorrectionsTab from './CorrectionsTab.jsx';
 
 /** Payroll periods people actually run. */
 const PRESETS = {
@@ -32,7 +33,14 @@ export default function TimesheetsPage() {
   const [range, setRange] = useState(PRESETS.twoWeeks());
   const [summary, setSummary] = useState(null);
   const [entries, setEntries] = useState([]);
-  const [view, setView] = useState('summary');
+  const [params, setParams] = useSearchParams();
+  const view = ['summary', 'entries', 'corrections'].includes(params.get('view')) ? params.get('view') : 'summary';
+  const setView = (v) => setParams(v === 'summary' ? {} : { view: v }, { replace: true });
+  const [waiting, setWaiting] = useState(0);
+  const loadWaiting = () => api.get('/time-corrections').then((d) => setWaiting(d.pending || 0), () => {});
+  useEffect(() => {
+    loadWaiting();
+  }, []);
 
   useEffect(() => {
     setRange(PRESETS[preset] ? PRESETS[preset]() : range);
@@ -152,10 +160,13 @@ export default function TimesheetsPage() {
         options={[
           { value: 'summary', label: 'By officer' },
           { value: 'entries', label: `Every punch (${entries.length})` },
+          { value: 'corrections', label: waiting ? `Corrections (${waiting})` : 'Corrections' },
         ]}
       />
 
-      {view === 'summary' ? (
+      {view === 'corrections' ? (
+        <CorrectionsTab onChanged={loadWaiting} />
+      ) : view === 'summary' ? (
         <div className="card">
           {summary.rows.length === 0 ? (
             <Empty icon="clock" title="No hours in this period" />

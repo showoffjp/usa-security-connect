@@ -23,6 +23,7 @@ import { seedExpansion } from './seed-expansion.js';
 import { seedPayroll } from './seed-payroll.js';
 import { seedPostLog } from './seed-postlog.js';
 import { seedDispatch } from './seed-dispatch.js';
+import { seedCorrections } from './seed-corrections.js';
 
 /**
  * Load the demo company. With `reset`, every table is emptied first.
@@ -57,7 +58,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'shift_requests', 'invoice_queries', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
-      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'applicant_notes', 'applicant_checks', 'applicants', 'service_call_events', 'service_calls', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
+      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'applicant_notes', 'applicant_checks', 'applicants', 'service_call_events', 'service_calls', 'time_corrections', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -1192,6 +1193,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const postLog = await seedPostLog({ db });
   // Calls for service, answered by the officers who were on duty.
   const dispatch = await seedDispatch({ db });
+  // Officers asking for punches to be fixed, on this week's shifts.
+  const corrections = await seedCorrections({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1206,7 +1209,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live)
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

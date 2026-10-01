@@ -261,6 +261,14 @@ export const CALL_DISPOSITION_LABEL = {
   fire_ems: 'Fire or EMS called', referred: 'Passed to the property',
 };
 
+/**
+ * An officer asking for a punch to be fixed: a forgotten clock-out, a clock-in
+ * the app missed. Only recent shifts, and an administrator decides.
+ */
+export const CORRECTION_WINDOW_DAYS = 14;
+export const CORRECTION_STATUSES = ['pending', 'approved', 'declined', 'withdrawn'];
+export const CORRECTION_STATUS_LABEL = { pending: 'Waiting for the office', approved: 'Approved', declined: 'Declined', withdrawn: 'Withdrawn' };
+
 export const INCIDENT_SEVERITY = ['low', 'medium', 'high', 'critical'];
 export const INCIDENT_STATUS = ['submitted', 'under_review', 'closed'];
 
@@ -325,6 +333,8 @@ export const RULES = {
   lockoutMinutes: 15,
   /** Hours past this in a week count as overtime. */
   overtimeWeeklyHours: 40,
+  /** The longest a single shift can be, as recorded or corrected. */
+  maxShiftHours: 16,
   /** How often an on-duty device reports its position. */
   locationPingSeconds: 60,
   /** Pings closer together than this are acknowledged but not stored. */

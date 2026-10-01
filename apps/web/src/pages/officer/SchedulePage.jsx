@@ -3,6 +3,7 @@ import { api } from '../../lib/api.js';
 import { fmtDay, fmtRange, fmtTime, fmtDate } from '../../lib/format.js';
 import { LoadingPage, Empty, Chip, StatusChip, Icon, Segmented, useToast } from '../../components/ui.jsx';
 import { formatDuration, toHours } from '@shared/domain.js';
+import RecentPunches from './RecentPunches.jsx';
 
 export default function SchedulePage() {
   const toast = useToast();
@@ -81,6 +82,8 @@ export default function SchedulePage() {
           { value: 'past', label: 'Worked' },
         ]}
       />
+
+      {view === 'past' && <RecentPunches />}
 
       {groups.length === 0 ? (
         <div className="card">
