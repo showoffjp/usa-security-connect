@@ -542,7 +542,7 @@ for (const u of STAFF) {
   const before = staff.page.url();
   await staff.page.locator('.alerts-list button').first().click();
   await staff.page.waitForTimeout(1200);
-  log(staff.page.url() !== before && /\/admin\//.test(staff.page.url()), 'opening an alert goes to where it is dealt with', new URL(staff.page.url()).pathname);
+  log(staff.page.url() !== before && /\/admin(\/|#)/.test(staff.page.url()), 'opening an alert goes to where it is dealt with', new URL(staff.page.url()).pathname);
   await checkScreen('supervisor: screen opened from an alert', staff.page, staff.problems);
 
   // Printable QR tags for a tour's checkpoints.
@@ -1069,6 +1069,61 @@ for (const u of STAFF) {
   log((await coral.innerText()).includes('24 h') && await coral.locator('button:has-text("Edit")').count() === 1,
     'an administrator sets an agreement for a month-to-month site');
   await admin.context.close();
+}
+
+/* ------------------------------------ round 18: shift confirmations --- */
+{
+  console.log('\n--- Shift confirmations: an officer confirms, a supervisor chases the rest ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await settle(officer.page);
+  const confirmBtn = officer.page.locator('button:has-text("Confirm I\'ll be there")').first();
+  if (await confirmBtn.count()) {
+    await confirmBtn.click();
+    await officer.page.waitForSelector('text=Your supervisor knows you will be there.', { timeout: 10000 });
+    log(true, 'an officer confirms their next shift from the home screen');
+  } else {
+    log(await officer.page.locator('text=Your supervisor knows you will be there.').count() === 1, 'the officer\'s next shift is already confirmed (rerun)');
+  }
+  await officer.page.goto(WEB + '/schedule');
+  await settle(officer.page);
+  log(await officer.page.locator('.chip', { hasText: 'Confirmed' }).count() >= 1, 'and the schedule shows it confirmed');
+  await checkScreen('officer: schedule with confirmations', officer.page, officer.problems);
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin#unconfirmed');
+  await settle(sup.page);
+  const card = sup.page.locator('#unconfirmed');
+  if (await card.count()) {
+    const rows = card.locator('.list-item');
+    const before = await rows.count();
+    log(before >= 1 && await card.locator('a[href^="tel:"]').count() >= 1, 'the dashboard lists who has not confirmed, with a number to call', `${before}`);
+    await checkScreen('supervisor: unconfirmed shifts', sup.page, sup.problems);
+    await rows.first().locator('button:has-text("Confirmed by phone")').click();
+    await sup.page.getByLabel('Note').fill('E2E: spoke to them, on the way.');
+    await sup.page.click('button:has-text("Mark confirmed")');
+    await sup.page.waitForTimeout(1500);
+    log((await card.count()) === 0 || (await rows.count()) === before - 1, 'a supervisor records a confirmation taken by phone');
+  } else {
+    log(true, 'nobody unconfirmed inside 12 hours right now');
+  }
+  log(await sup.page.locator('th', { hasText: 'Confirmed' }).count() === 1, 'the next-12-hours table shows who has confirmed');
+
+  const client = await watchedPage({ width: 390, height: 844 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal/coverage', { waitUntil: 'networkidle' });
+  await client.page.click('button:has-text("Coming up")');
+  await settle(client.page);
+  log(await client.page.locator('.chip', { hasText: 'Confirmed' }).count() >= 1, 'the client sees which upcoming shifts the officer has confirmed');
+  await checkScreen('client: coming up with confirmations', client.page, client.problems);
+  await client.context.close();
+  await sup.context.close();
+  await officer.context.close();
 }
 
 await browser.close();

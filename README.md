@@ -195,6 +195,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   choice is kept per device and applied before the first paint, so there is no
   white flash. Street maps are dimmed to match. Printing is always on white.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
+- **Confirm a shift** — each upcoming shift in the next 7 days has **Confirm I'll be
+  there** (web and mobile, on the schedule and the home screen's next-shift card). A
+  day ahead, an officer who has not confirmed gets one push reminder that opens the
+  schedule. A confirmation is for that officer, post and time: if the shift is moved or
+  handed to someone else it needs confirming again.
 - **Fix a time** — under Schedule → Worked (web and mobile), the officer's punches from
   the last 14 days, each marked if the system closed it, it was late or it has been
   corrected. A wrong one can be sent to the office: the clock-in or clock-out it should
@@ -440,6 +445,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   sidebar. The **hours against agreements** report spreads the weekly figure over any
   date range and sets the hours worked against it. Administrators edit; supervisors
   read.
+- **Shift confirmations** — the dashboard's **Not confirmed yet** card lists every
+  officer due on post in the next 12 hours who has not confirmed, critical inside 2
+  hours, with whether the reminder went out, a tap-to-call number and **Confirmed by
+  phone** (with an optional note) for the answer taken on the phone. Each is also in the
+  alerts inbox, and the next-12-hours table and the schedule board show who has
+  confirmed.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
 - **Outbox** — every message the system decided to send: invoice notices to client
@@ -547,6 +558,8 @@ a PIN — and sees, for their own properties only:
   note. **The daily report** (opt-in): each morning's sweep emails yesterday at each
   of their properties (officers and hours, patrols and checkpoints, incidents,
   visitors, activity, open building issues), once per contact, site and day.
+- **Confirmed shifts** — under Coverage → Coming up, a shift whose officer has told us
+  they will be there is marked **Confirmed** (how and by whom stays internal).
 - **Hours against your agreement** (on the overview) — for each property with a
   service agreement: the hours a week it pays for, when it runs to, the hours worked in
   each of the last four weeks we have records for (as a bar against the contracted
@@ -724,7 +737,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 27 steps and stops it:
+One command reseeds the database, starts the API, runs all 28 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -776,8 +789,9 @@ the server is running corrupts the data directory.
   from the portal, a supervisor sends the call to the officer at the property, who
   acknowledges, arrives and clears it from their phone, and the client sees it cleared
   with the response time. Then an officer asks for a clock-out to be fixed and an
-  administrator approves it, and an administrator sets a service agreement for a
-  month-to-month site.
+  administrator approves it, an administrator sets a service agreement for a
+  month-to-month site, and an officer confirms their next shift, a supervisor records
+  another confirmed by phone and the client sees which shifts are confirmed.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -859,6 +873,12 @@ the server is running corrupts the data directory.
   meets it; an agreement in its notice period is due for renewal unless it renews on
   its own. A client sees their own properties' agreements and weekly hours without our
   notes. The report and the audit trail are checked.
+- **`test/confirmations.mjs`** — an officer confirms only their own shifts, within a
+  week and before they start; a clocked-in or cancelled shift cannot be. Unconfirmed
+  shifts inside 12 hours are listed, alerted (critical inside 2) and counted; the sweep
+  reminds once a day ahead. A supervisor records a phone confirmation; the client sees
+  which shifts are confirmed but not how. Moving a shift, or handing it away and back,
+  drops the confirmation.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every

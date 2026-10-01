@@ -10,6 +10,7 @@ import {
 } from '../../components/ui.jsx';
 import { formatDuration, toHours, expiryState, VISIT_CHECKS, CALL_DISPOSITIONS, CALL_DISPOSITION_LABEL } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
+import ConfirmShift from './ConfirmShift.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
 
@@ -934,6 +935,14 @@ export default function HomePage() {
               <div className="small muted">{fmtRange(nextShift.starts_at, nextShift.ends_at)}</div>
             </div>
           </div>
+          {(nextShift.confirmed || nextShift.confirmable) && (
+            <div className="card-body row-between wrap" style={{ paddingTop: 0 }}>
+              <span className="tiny muted">
+                {nextShift.confirmed ? 'Your supervisor knows you will be there.' : 'Let your supervisor know you will be there.'}
+              </span>
+              <ConfirmShift shift={nextShift} />
+            </div>
+          )}
         </div>
       )}
 

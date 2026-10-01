@@ -724,6 +724,8 @@ function UpcomingCoverage({ sites, switcher }) {
               <p className="small muted" style={{ margin: 0 }}>
                 {data.summary.assigned} of {data.summary.total} shift{data.summary.total === 1 ? '' : 's'} booked
                 {data.summary.total > data.summary.assigned ? `; ${data.summary.total - data.summary.assigned} still being arranged` : ''}.
+                {data.summary.confirmed > 0 &&
+                  ` ${data.summary.confirmed} confirmed by the officer, who has told us they will be there.`}
               </p>
               {byDay.map((d) => (
                 <section key={d.key} className="card" aria-label={fmtDay(d.day)}>
@@ -744,7 +746,14 @@ function UpcomingCoverage({ sites, switcher }) {
                           </div>
                         </div>
                         {s.assigned ? (
-                          <span className="small">{s.officer_name}</span>
+                          <span className="row wrap" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                            <span className="small">{s.officer_name}</span>
+                            {s.confirmed && (
+                              <Chip kind="ok">
+                                <Icon name="check" size={12} /> Confirmed
+                              </Chip>
+                            )}
+                          </span>
                         ) : (
                           <Chip kind="warn">Being arranged</Chip>
                         )}

@@ -23,6 +23,8 @@ import {
   CALL_ACK_MINUTES,
   CALL_PRIORITY_LABEL,
   CALL_TYPE_LABEL,
+  CONFIRM_ALERT_HOURS,
+  CONFIRM_AHEAD_DAYS,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -36,6 +38,7 @@ import { checkEligibility } from './shiftRequests.js';
 import { pushAsync } from '../services/push.js';
 import { OPEN_SQL } from '../services/dispatch.js';
 import { agreementBoard } from '../services/agreements.js';
+import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confirmations.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -238,6 +241,8 @@ adminRouter.get(
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
     // Sites rostered short of their agreement, or with one about to run out.
     const agreementSummary = (await agreementBoard()).summary;
+    // Officers due on post soon who have not said they will be there.
+    const unconfirmed = await unconfirmedSoon();
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -281,7 +286,9 @@ adminRouter.get(
         pendingCorrections,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
+        unconfirmedShifts: unconfirmed.length,
       },
+      unconfirmed,
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
         ...isoFields(r, ['clock_in_at', 'next_check_due']),
@@ -291,7 +298,7 @@ adminRouter.get(
         ...isoFields(f, ['occurred_at', 'created_at']),
         label: FLAG_LABEL[f.type] || f.type,
       })),
-      upcoming: upcoming.map((s) => isoFields(s, ['starts_at', 'ends_at'])),
+      upcoming: upcoming.map((s) => ({ ...isoFields(s, ['starts_at', 'ends_at']), ...confirmationOf(s) })),
     });
   })
 );
@@ -930,8 +937,40 @@ adminRouter.get(
       ));
 
     res.json({
-      shifts: rows.map((s) => isoFields(s, ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at'])),
+      shifts: rows.map((s) => ({
+        ...isoFields(s, ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
+        ...confirmationOf(s),
+      })),
     });
+  })
+);
+
+/** Upcoming shifts whose officer has not confirmed, soonest first (`hours` ahead, 12 by default). */
+adminRouter.get(
+  '/confirmations',
+  wrap(async (req, res) => {
+    const hours = Math.min(Math.max(Number(req.query.hours) || CONFIRM_ALERT_HOURS, 1), CONFIRM_AHEAD_DAYS * 24);
+    res.json({ hours, shifts: await unconfirmedSoon(hours) });
+  })
+);
+
+/**
+ * A supervisor records that the officer confirmed some other way - usually a
+ * phone call after the reminder went unanswered.
+ */
+adminRouter.post(
+  '/shifts/:id/confirm',
+  wrap(async (req, res) => {
+    const id = idParam(req.params.id, 'shift');
+    const body = parse(z.object({ note: z.string().trim().max(300).optional() }), req.body || {});
+    const shift = await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(id);
+    if (!shift) throw new HttpError(404, 'Shift not found.');
+    if (!shift.user_id) throw new HttpError(409, 'Nobody is assigned to that shift yet.');
+    if (shift.status !== 'scheduled') throw new HttpError(409, 'That shift is no longer scheduled.');
+    if (new Date(sqlToIso(shift.ends_at)) <= new Date()) throw new HttpError(409, 'That shift is over.');
+    const updated = await confirmShift(shift, { byUserId: req.user.id, method: 'phone', note: body.note || null });
+    await audit(req.user.id, 'shift.confirmed', 'shift', id, { method: 'phone', note: body.note || null }, req.ip);
+    res.json({ shift: { id, ...confirmationOf(updated) } });
   })
 );
 
@@ -1256,6 +1295,12 @@ adminRouter.patch(
         ? await checkAssignment(req, { ...body, userId, postId, startsAt, endsAt, excludeShiftId: shift.id })
         : { warnings: [] };
 
+    // A confirmation is for who, where and when it was given: the key already
+    // stops it carrying over, and clearing it here means handing a shift away
+    // and back again does not bring it back either.
+    if (moved || reassigned) {
+      await db.prepare(`UPDATE shifts SET confirmed_key = NULL, reminded_key = NULL WHERE id = ?`).run(shift.id);
+    }
     (await db.prepare(
       `UPDATE shifts SET user_id = ?, post_id = ?, starts_at = ?, ends_at = ?, notes = ?, status = ?, is_open = ? WHERE id = ?`
     ).run(
@@ -2293,6 +2338,15 @@ async function buildAlerts(userId) {
         link: '/admin/agreements', title: a.expired ? `The agreement for ${site.name} has ended` : `The agreement for ${site.name} ends in ${a.days_left} days`,
         detail: `Ends ${a.ends_on} · ${site.client_name || ''}`.trim() });
     }
+  }
+
+  // An officer due on post within the next 12 hours who has not confirmed;
+  // critical inside the last two. The key carries the urgency, so the alert
+  // comes back unread when it turns critical.
+  for (const c of await unconfirmedSoon()) {
+    push({ key: `confirm:${c.id}:${c.starts_at}:${c.urgent ? 'urgent' : 'soon'}`, kind: 'confirm', severity: c.urgent ? 'critical' : 'warning',
+      at: c.starts_at, link: '/admin#unconfirmed', title: `${c.officer} has not confirmed their shift`,
+      detail: `${c.post_name} · ${c.site_name}` });
   }
 
   // An officer asking for one of their punches to be fixed.

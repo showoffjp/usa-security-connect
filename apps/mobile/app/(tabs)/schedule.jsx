@@ -8,6 +8,7 @@ import {
 } from '../../src/ui.jsx';
 import { OpenShifts, MyShiftRequests, ShiftActionSheet } from '../../src/ShiftActions.jsx';
 import { RecentPunches } from '../../src/RecentPunches.jsx';
+import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { C, S } from '../../src/theme.js';
 import { toHours, formatDuration } from '../../src/shared.js';
 
@@ -155,7 +156,17 @@ export default function ScheduleScreen() {
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
                       <Text style={[S.small, S.strong]}>{fmtRange(s.starts_at, s.ends_at)}</Text>
                       {s.late_minutes > 0 && <Chip tone="warn">{s.late_minutes}m late</Chip>}
-                      {worked ? <Chip tone="ok">{toHours(s.minutes_worked)}h</Chip> : <StatusChip value={s.status} />}
+                      {worked ? (
+                        <Chip tone="ok">{toHours(s.minutes_worked)}h</Chip>
+                      ) : view === 'upcoming' && (s.confirmed || s.confirmable) ? (
+                        <ConfirmShift
+                          shift={s}
+                          notify={(message, tone) => setToast({ message, tone })}
+                          onConfirmed={() => setShifts((all) => all.map((x) => (x.id === s.id ? { ...x, confirmed: true } : x)))}
+                        />
+                      ) : (
+                        <StatusChip value={s.status} />
+                      )}
                     </View>
                   </Pressable>
                 );

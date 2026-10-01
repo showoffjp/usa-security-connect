@@ -805,6 +805,7 @@ export default function AdminSchedulePage() {
                       {s.clock_out_at && <Chip kind="ok">{toHours(s.minutes_worked)}h</Chip>}
                       {!s.clock_in_at && s.status === 'missed' && <Chip kind="danger">No show</Chip>}
                       {s.status === 'in_progress' && <Chip kind="brand" dot>On post</Chip>}
+                      {s.confirmed && !s.clock_in_at && s.status === 'scheduled' && <Chip kind="ok">Confirmed</Chip>}
                     </div>
                   </button>
                 ))}

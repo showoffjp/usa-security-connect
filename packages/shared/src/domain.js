@@ -269,6 +269,16 @@ export const CORRECTION_WINDOW_DAYS = 14;
 export const CORRECTION_STATUSES = ['pending', 'approved', 'declined', 'withdrawn'];
 export const CORRECTION_STATUS_LABEL = { pending: 'Waiting for the office', approved: 'Approved', declined: 'Declined', withdrawn: 'Withdrawn' };
 
+/**
+ * Shift confirmations: an officer says "I'll be there" for an upcoming shift.
+ * A reminder goes out a day before; an unconfirmed shift this close to its
+ * start is on the supervisors' list, and urgent once it is closer still.
+ */
+export const CONFIRM_AHEAD_DAYS = 7;
+export const CONFIRM_REMIND_HOURS = 24;
+export const CONFIRM_ALERT_HOURS = 12;
+export const CONFIRM_URGENT_HOURS = 2;
+
 export const INCIDENT_SEVERITY = ['low', 'medium', 'high', 'critical'];
 export const INCIDENT_STATUS = ['submitted', 'under_review', 'closed'];
 

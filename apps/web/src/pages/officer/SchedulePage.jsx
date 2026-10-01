@@ -4,6 +4,7 @@ import { fmtDay, fmtRange, fmtTime, fmtDate } from '../../lib/format.js';
 import { LoadingPage, Empty, Chip, StatusChip, Icon, Segmented, useToast } from '../../components/ui.jsx';
 import { formatDuration, toHours } from '@shared/domain.js';
 import RecentPunches from './RecentPunches.jsx';
+import ConfirmShift from './ConfirmShift.jsx';
 
 export default function SchedulePage() {
   const toast = useToast();
@@ -43,6 +44,7 @@ export default function SchedulePage() {
   }, [shifts, view]);
 
   if (!shifts || !hours) return <LoadingPage label="Loading your schedule" />;
+  const toConfirm = shifts.filter((s) => s.confirmable && !s.confirmed).length;
 
   return (
     <div className="page stack">
@@ -84,6 +86,13 @@ export default function SchedulePage() {
       />
 
       {view === 'past' && <RecentPunches />}
+
+      {view === 'upcoming' && toConfirm > 0 && (
+        <div className="small muted">
+          <Icon name="check" size={14} /> {toConfirm} shift{toConfirm === 1 ? '' : 's'} this week to confirm. Confirming tells your
+          supervisor you will be there, so nobody has to call round before the shift.
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="card">
@@ -141,6 +150,13 @@ export default function SchedulePage() {
                           {s.late_minutes > 0 && <Chip kind="warn">{s.late_minutes}m late</Chip>}
                           {worked ? (
                             <Chip kind="ok">{toHours(s.minutes_worked)}h</Chip>
+                          ) : view === 'upcoming' && (s.confirmed || s.confirmable) ? (
+                            <ConfirmShift
+                              shift={s}
+                              onConfirmed={() =>
+                                setShifts((all) => all.map((x) => (x.id === s.id ? { ...x, confirmed: true } : x)))
+                              }
+                            />
                           ) : (
                             <StatusChip value={s.status} />
                           )}

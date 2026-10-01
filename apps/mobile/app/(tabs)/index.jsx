@@ -16,6 +16,7 @@ import { ShiftWrapUp } from '../../src/ShiftWrapUp.jsx';
 import { ExpiryReminder } from '../../src/ExpiryReminder.jsx';
 import { LastVisitCard } from '../../src/LastVisitCard.jsx';
 import { CallsCard } from '../../src/CallsCard.jsx';
+import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -326,6 +327,14 @@ export default function HomeScreen() {
                 <Text style={[S.small, S.muted]}>{fmtRange(nextShift.starts_at, nextShift.ends_at)}</Text>
               </View>
             </View>
+            {(nextShift.confirmed || nextShift.confirmable) && (
+              <View style={[S.cardPad, S.rowBetween, { paddingTop: 0, gap: 10 }]}>
+                <Text style={[S.tiny, S.grow]}>
+                  {nextShift.confirmed ? 'Your supervisor knows you will be there.' : 'Let your supervisor know you will be there.'}
+                </Text>
+                <ConfirmShift shift={nextShift} notify={notify} />
+              </View>
+            )}
           </Card>
         )}
       </ScrollView>
