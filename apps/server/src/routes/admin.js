@@ -223,6 +223,8 @@ adminRouter.get(
 
     // Active sites no field supervisor has visited for too long.
     const visitsDue = (await visitBoard()).due;
+    // Applications nobody has picked up yet.
+    const newApplicants = Number((await db.prepare(`SELECT COUNT(*) AS n FROM applicants WHERE stage = 'applied'`).get()).n);
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -260,6 +262,7 @@ adminRouter.get(
         foundHeld,
         unhappyClients,
         visitsDue,
+        newApplicants,
       },
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
       onDuty: onDuty.map((r) => ({
@@ -2249,6 +2252,18 @@ async function buildAlerts(userId) {
     .all(since, toSql(new Date(Date.now() - 4 * 3600000)))) {
     push({ key: `tour-open:${r.id}`, kind: 'tour', severity: 'warning', at: r.started_at, link: '/admin/tours',
       title: `Tour not finished: ${r.tour_name}`, detail: `${r.officer} at ${r.site_name}, ${r.status === 'abandoned' ? 'abandoned' : 'still open after 4 hours'}` });
+  }
+
+  // Someone who applied to work for us and has not been picked up yet.
+  for (const a of await db
+    .prepare(
+      `SELECT id, first_name, last_name, licence_class, city, created_at FROM applicants
+       WHERE stage = 'applied' ORDER BY created_at LIMIT 25`
+    )
+    .all()) {
+    push({ key: `applicant:${a.id}`, kind: 'applicant', severity: 'info', at: a.created_at, link: '/admin/hiring',
+      title: `New applicant: ${a.first_name} ${a.last_name}`,
+      detail: [a.licence_class === 'none' ? 'No licence yet' : `Class ${a.licence_class === 'DG' ? 'D and G' : a.licence_class}`, a.city].filter(Boolean).join(' · ') });
   }
 
   // A client's question about an invoice, waiting on us.

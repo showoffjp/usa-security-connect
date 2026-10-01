@@ -189,6 +189,35 @@ export const INCIDENT_CATEGORIES = [
   'Other',
 ];
 
+/* ---------------------------------------------------------------- hiring -- */
+
+/** Where an applicant is. Hired and rejected are where an application ends. */
+export const HIRING_STAGES = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'];
+export const HIRING_STAGE_LABEL = {
+  applied: 'Applied', screening: 'Screening', interview: 'Interview', offer: 'Offer', hired: 'Hired', rejected: 'Not taken on',
+};
+/** The board's columns: everyone still in play. */
+export const OPEN_HIRING_STAGES = ['applied', 'screening', 'interview', 'offer'];
+
+/**
+ * What has to be checked before someone can be put on a post. The required
+ * ones block hiring: Florida needs a valid Class D (or G for armed posts)
+ * licence, and no client accepts an officer without a background check.
+ */
+export const HIRING_CHECKS = [
+  { key: 'licence', label: 'Security licence verified with FDACS', required: true },
+  { key: 'background', label: 'Background check clear', required: true },
+  { key: 'right_to_work', label: 'I-9 right to work on file', required: true },
+  { key: 'drug_test', label: 'Drug test passed', required: false },
+  { key: 'references', label: 'References checked', required: false },
+  { key: 'orientation', label: 'Orientation booked', required: false },
+];
+
+export const LICENCE_CLASSES = ['none', 'D', 'G', 'DG'];
+export const LICENCE_CLASS_LABEL = { none: 'No licence yet', D: 'Class D', G: 'Class G', DG: 'Class D and G' };
+export const APPLICANT_SOURCES = ['website', 'referral', 'job_board', 'walk_in', 'other'];
+export const APPLICANT_SOURCE_LABEL = { website: 'Website', referral: 'Referral', job_board: 'Job board', walk_in: 'Walk-in', other: 'Other' };
+
 /**
  * What a field supervisor checks on a post visit. Stored as one boolean column
  * each on supervisor_visits, so the keys are the column names.

@@ -303,6 +303,7 @@ export function AdminShell() {
       title: 'Workforce',
       items: [
         { to: '/admin/employees', icon: 'users', label: 'Employees' },
+        { to: '/admin/hiring', icon: 'user', label: 'Hiring', count: counts.newApplicants },
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
         { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
         { to: '/admin/coverage-requests', icon: 'plus', label: 'Client requests', count: counts.coverageRequests, urgent: true },

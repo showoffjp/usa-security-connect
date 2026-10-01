@@ -117,6 +117,7 @@ function makeApi(store) {
     get: (p, opts) => request(p, { ...opts, store }),
     post: (p, body, opts) => request(p, { ...opts, store, method: 'POST', body }),
     patch: (p, body, opts) => request(p, { ...opts, store, method: 'PATCH', body }),
+    put: (p, body, opts) => request(p, { ...opts, store, method: 'PUT', body }),
     del: (p, opts) => request(p, { ...opts, store, method: 'DELETE' }),
     upload: (p, formData) => request(p, { store, method: 'POST', formData }),
   };

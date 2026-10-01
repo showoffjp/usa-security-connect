@@ -258,6 +258,16 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   (d dashboard, l live tracking, f flags, i incidents, p post logs, s schedule,
   e employees, t timesheets, r reports, h site health, v field visits, c client portal). Off while
   typing in a field.
+- **Hiring** (Workforce → Hiring) — applications from the public form at **/apply** and
+  the walk-ins and referrals the office adds, on a board by stage: applied, screening,
+  interview, offer. Each applicant has their details, a pre-hire checklist (licence
+  verified with FDACS, background check and I-9 right to work are required; drug test,
+  references and orientation are tracked), notes, and a move to the next stage or a
+  close with a reason. An administrator hires from the offer stage once the required
+  checks are done: that makes the employee record, with the licence they applied with,
+  and shows the employee code and a starting PIN once. New applications are in the
+  alerts inbox and counted in the sidebar until someone picks them up. Applicants are
+  not users: no code, no PIN and no access until they are hired.
 - **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
   the search button in the header. Find an officer by name, code or phone, a site by
   name, city or client, an incident by its number, or any screen by name. Arrow keys
@@ -648,7 +658,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 23 steps and stops it:
+One command reseeds the database, starts the API, runs all 24 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -750,6 +760,13 @@ the server is running corrupts the data directory.
   report. Sites with no visit in 14 days are due on the board, the sidebar badge, the
   alerts and site health, and drop off all four once visited. The visits report covers
   every site, adds up, and exports.
+- **`test/hiring.mjs`** — the public form validates every field, emails a
+  confirmation, takes one open application per email, and thanks a bot that fills
+  the hidden field without keeping anything. The pipeline is staff-only; hiring needs
+  an offer, the required checks and an administrator, happens once, carries the
+  licence over, returns a code and a PIN that sign in and must be changed, and never
+  the PIN hash. Moves, checks, notes, rejections with a reason and reopening are
+  checked, and audited.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -763,7 +780,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 99 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 102 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit

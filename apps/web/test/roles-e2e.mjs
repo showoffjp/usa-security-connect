@@ -895,6 +895,62 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* ----------------------------------------------------- round 14: hiring --- */
+{
+  console.log('\n--- Hiring: from the public form to a login ---');
+  const visitor = await watchedPage({ width: 1280, height: 1000 });
+  const email = `e2e.apply.${Date.now() % 100000}@example.org`;
+  await visitor.page.goto(WEB + '/apply', { waitUntil: 'networkidle' });
+  await checkScreen('public: job application', visitor.page, visitor.problems);
+  await visitor.page.getByLabel('First name').fill('Quinn');
+  await visitor.page.getByLabel('Last name').fill('Avery');
+  await visitor.page.getByLabel('Email').fill(email);
+  await visitor.page.getByLabel('Phone').fill('(904) 555-0123');
+  await visitor.page.getByLabel('Licence number').fill('D3500123');
+  await visitor.page.click('button:has-text("Send my application")');
+  await visitor.page.waitForSelector('text=we have your application', { timeout: 10000 });
+  log(true, 'anyone can apply from the public page');
+
+  const staff = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(staff.page, '1001', '2468');
+  await staff.page.goto(WEB + '/admin/hiring');
+  await settle(staff.page);
+  const card = staff.page.locator('.hiring-card', { hasText: 'Quinn Avery' });
+  log(await card.count() === 1, 'the application is on the hiring board under Applied');
+  await checkScreen('admin: hiring board', staff.page, staff.problems);
+  await card.click();
+  await staff.page.waitForSelector('[role="dialog"]:has-text("Before they can start")');
+  for (const stage of ['screening', 'interview', 'offer']) {
+    await staff.page.click(`[role="dialog"] button:has-text("Move to ${stage}")`);
+    await staff.page.waitForTimeout(700);
+  }
+  for (const label of ['Security licence verified with FDACS', 'Background check clear', 'I-9 right to work on file']) {
+    await staff.page.locator('[role="dialog"] label.check', { hasText: label }).locator('input').check();
+    await staff.page.waitForTimeout(500);
+  }
+  await checkScreen('admin: applicant ready to hire', staff.page, staff.problems);
+  await staff.page.click('[role="dialog"] .modal-foot button:text-is("Hire")');
+  await staff.page.getByLabel('Rate per hour ($)').fill('18.75');
+  await staff.page.click('button:has-text("Hire and create login")');
+  await staff.page.waitForSelector('text=Starting PIN', { timeout: 10000 });
+  const pin = (await staff.page.locator('dt:has-text("Starting PIN") + dd').innerText()).trim();
+  const code = (await staff.page.locator('dt:has-text("Employee code") + dd').innerText()).trim();
+  log(/^\d{4}$/.test(code) && /^\d{4}$/.test(pin), 'an administrator takes them through the checks and hires them', code);
+
+  const newcomer = await watchedPage({ width: 390, height: 844 });
+  await newcomer.page.goto(WEB, { waitUntil: 'networkidle' });
+  await newcomer.page.fill('#employeeCode', code);
+  await newcomer.page.click('button[type="submit"]');
+  await newcomer.page.waitForSelector('.keypad');
+  for (const d of pin) await newcomer.page.click(`.keypad button:text-is("${d}")`);
+  await newcomer.page.click('button:text-is("Sign in")');
+  await newcomer.page.waitForTimeout(1500);
+  log(await newcomer.page.locator('text=/choose|new PIN/i').count() > 0, 'and the new officer signs in and is asked for their own PIN');
+  await visitor.context.close();
+  await staff.context.close();
+  await newcomer.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

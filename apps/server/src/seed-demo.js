@@ -27,6 +27,18 @@ import { seedPostLog } from './seed-postlog.js';
  * Load the demo company. With `reset`, every table is emptied first.
  * Returns false, having changed nothing, if there are users and no reset.
  */
+/**
+ * A date this many days from today. Licence and insurance expiries are
+ * relative so the demo company never drifts: Janelle's licence is always
+ * coming up for renewal and Dwayne's armed licence always weeks from lapsing,
+ * however long after this was written the seed runs.
+ */
+const fromToday = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
 export async function seedDemo({ reset = false, log = console.log } = {}) {
   await migrate();
 
@@ -44,7 +56,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'shift_requests', 'invoice_queries', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'equipment_assignments', 'equipment', 'coverage_requests',
-      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
+      'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'applicant_notes', 'applicant_checks', 'applicants', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
       // between processes and survive a restart. That also means they survive a
@@ -202,7 +214,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       code: '1002', first: 'Renata', last: 'Diaz', email: 'r.diaz@usasecuritygroup.com',
       phone: '(904) 555-0121', role: 'supervisor', hireDate: '2021-06-14',
       rate: 28, billRate: 46, employmentType: 'w2',
-      license: 'D-2214778', licenseType: 'Class D', licenseExpires: '2027-06-30',
+      license: 'D-2214778', licenseType: 'Class D', licenseExpires: fromToday(270),
       siteId: siteIds.riverfront, ecName: 'Luis Diaz', ecPhone: '(904) 555-0131', ecRelation: 'Spouse',
       address: '1140 Oak St', city: 'Jacksonville', zip: '32204', uniform: 'M',
       pin: '3571', mustChange: false,
@@ -211,7 +223,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       code: '1003', first: 'Marcus', last: 'Bell', email: 'm.bell@usasecuritygroup.com',
       phone: '(904) 555-0155', role: 'officer', hireDate: '2023-03-20',
       rate: 21, billRate: 34, employmentType: 'w2',
-      license: 'D-3391204', licenseType: 'Class D', licenseExpires: '2027-03-31',
+      license: 'D-3391204', licenseType: 'Class D', licenseExpires: fromToday(180),
       siteId: siteIds.riverfront, ecName: 'Tanya Bell', ecPhone: '(904) 555-0156', ecRelation: 'Spouse',
       address: '2218 Hendricks Ave', city: 'Jacksonville', zip: '32207', uniform: 'XL',
       pin: '4812', mustChange: false,
@@ -221,7 +233,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       phone: '(407) 555-0164', role: 'officer', hireDate: '2024-01-08',
       rate: 20.5, billRate: 33, employmentType: 'w2',
       // Licence lapses inside the warning window, so the compliance board has something real.
-      license: 'D-3410992', licenseType: 'Class D', licenseExpires: '2026-11-30',
+      license: 'D-3410992', licenseType: 'Class D', licenseExpires: fromToday(45),
       siteId: siteIds.palmetto, ecName: 'Rose Carter', ecPhone: '(407) 555-0165', ecRelation: 'Mother',
       address: '755 Sand Lake Rd', city: 'Orlando', zip: '32819', uniform: 'S',
       pin: '5930', mustChange: false,
@@ -232,8 +244,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       // An armed contractor: invoices for hours, carries his own insurance.
       rate: 34, billRate: 52, employmentType: '1099',
       businessName: 'Foster Protective Services LLC', taxIdLast4: '4821',
-      insuranceExpires: '2026-10-31',
-      license: 'G-1120384', licenseType: 'Class G (Armed)', licenseExpires: '2026-09-30',
+      insuranceExpires: fromToday(31),
+      license: 'G-1120384', licenseType: 'Class G (Armed)', licenseExpires: fromToday(21),
       siteId: siteIds.gulfport, ecName: 'Priya Foster', ecPhone: '(813) 555-0178', ecRelation: 'Spouse',
       address: '4410 Adamo Dr', city: 'Tampa', zip: '33605', uniform: '2XL',
       pin: '6174', mustChange: false,
@@ -242,7 +254,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       code: '1006', first: 'Alicia', last: 'Nunez', email: 'a.nunez@usasecuritygroup.com',
       phone: '(954) 555-0192', role: 'officer', hireDate: '2025-04-02',
       rate: 20, billRate: 32, employmentType: 'w2',
-      license: 'D-3501887', licenseType: 'Class D', licenseExpires: '2028-04-30',
+      license: 'D-3501887', licenseType: 'Class D', licenseExpires: fromToday(575),
       siteId: siteIds.coral, address: '612 SE 3rd Ave', city: 'Fort Lauderdale', zip: '33301',
       uniform: 'M', pin: '7285', mustChange: false,
     }),
@@ -258,8 +270,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       phone: '(407) 555-0210', role: 'officer', hireDate: '2026-02-17',
       rate: 30, billRate: 47, employmentType: '1099', payType: 'per_shift',
       businessName: 'Okafor Event Security', taxIdLast4: '9073',
-      insuranceExpires: '2027-02-28',
-      license: 'D-3520114', licenseType: 'Class D', licenseExpires: '2027-12-31',
+      insuranceExpires: fromToday(150),
+      license: 'D-3520114', licenseType: 'Class D', licenseExpires: fromToday(455),
       siteId: siteIds.palmetto, address: '90 Church St', city: 'Orlando', zip: '32801',
       uniform: 'S', pin: '9351', mustChange: false,
     }),
@@ -1191,7 +1203,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}
