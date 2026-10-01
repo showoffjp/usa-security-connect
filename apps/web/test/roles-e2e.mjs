@@ -951,6 +951,62 @@ for (const u of STAFF) {
   await newcomer.context.close();
 }
 
+/* ---------------------------------------------- round 15: dispatch --- */
+{
+  console.log('\n--- Dispatch: a client calls, an officer goes ---');
+  const stamp = Date.now() % 100000;
+  const what = `E2E ${stamp}: a man is trying the doors of the bike store.`;
+  const client = await watchedPage({ width: 390, height: 844 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal/calls', { waitUntil: 'networkidle' });
+  await checkScreen('client: calls', client.page, client.problems);
+  await client.page.getByLabel('Where on the property').fill('Bike store, level P1');
+  await client.page.getByLabel('What is happening?').fill(what);
+  await client.page.click('button:has-text("Send an officer")');
+  await client.page.locator('li.list-item', { hasText: what }).waitFor({ timeout: 10000 });
+  log(await client.page.locator('li.list-item', { hasText: what }).locator('text=Finding an officer').count() === 1, 'a client asks for an officer from the portal');
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/dispatch');
+  await settle(sup.page);
+  const row = sup.page.locator('.call-list .list-item', { hasText: what });
+  log(await row.count() === 1, 'the call is on the dispatch board, waiting');
+  await row.locator('button:has-text("Open")').click();
+  await sup.page.waitForSelector('[role="dialog"] .call-log');
+  await checkScreen('admin: a call', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button[aria-label="Send call to Marcus Bell"]');
+  await sup.page.waitForSelector('[role="dialog"] >> text=Has it', { timeout: 10000 });
+  log(true, 'a supervisor sends it to Marcus, at the property');
+
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  const card = officer.page.locator('.call-card', { hasText: what });
+  await card.waitFor({ timeout: 10000 });
+  await checkScreen('officer: a call sent to them', officer.page, officer.problems);
+  await card.locator('button:has-text("On my way")').click();
+  await officer.page.waitForTimeout(800);
+  await card.locator('button:has-text("I\'m on scene")').click();
+  await officer.page.waitForTimeout(800);
+  await card.locator('button:has-text("Clear call")').click();
+  await officer.page.getByLabel('What you found and what you did').fill('Cyclist locked out of his own bike store; checked his ID and let him in.');
+  await officer.page.click('[role="dialog"] button:has-text("Clear call")');
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('.call-card', { hasText: what }).count() === 0, 'Marcus acknowledges, arrives and clears it from his phone');
+
+  await client.page.reload({ waitUntil: 'networkidle' });
+  const done = client.page.locator('li', { hasText: what });
+  log(await done.locator('text=Cleared').count() > 0 && await done.locator('text=/On scene in \\d+ min/').count() === 1,
+    'and the client sees it cleared, with how long it took');
+  await client.context.close();
+  await sup.context.close();
+  await officer.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

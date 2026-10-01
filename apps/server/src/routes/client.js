@@ -27,7 +27,9 @@ import {
   readPasswordToken,
   consumePasswordToken,
 } from '../lib/clientAuth.js';
-import { toHours, daysOverdue } from '../shared.js';
+import { toHours, daysOverdue, CALL_TYPES } from '../shared.js';
+import { callSelect, loadCall, logEvent, presentCallForClient, pushToSupervisors, OPEN_SQL } from '../services/dispatch.js';
+import { pushAsync } from '../services/push.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
 import { contactsFor, contactSchema } from './siteLog.js';
@@ -1252,6 +1254,106 @@ clientRouter.post(
     }
     await db.prepare(`UPDATE coverage_requests SET status = 'cancelled' WHERE id = ?`).run(row.id);
     await audit(null, 'coverage_request.cancelled', 'coverage_request', row.id, { client: req.client.id }, req.ip);
+    res.json({ ok: true });
+  })
+);
+
+/* ===================================================== calls for service === */
+
+/**
+ * Their calls: what they raised from here and what the office raised for their
+ * property, with where each one has got to. A client can ask for an officer
+ * for something urgent or routine; an emergency is a 911 call, and the form
+ * says so rather than offering it.
+ */
+clientRouter.get(
+  '/calls',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = sitesFilter(req);
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 92);
+    const rows = await db
+      .prepare(
+        `${callSelect}
+         WHERE c.site_id IN (${sc.sql}) AND (c.status IN (${OPEN_SQL}) OR c.created_at >= ?)
+         ORDER BY CASE WHEN c.status IN (${OPEN_SQL}) THEN 0 ELSE 1 END, c.created_at DESC LIMIT 200`
+      )
+      .all(...sc.ids, toSql(new Date(Date.now() - days * 86400000)));
+    const now = new Date();
+    const calls = rows.map((c) => ({ ...presentCallForClient(c, now), raised_by_you: c.client_user_id === req.client.id }));
+    const timed = calls.filter((c) => c.minutes_to_arrive != null);
+    res.json({
+      calls,
+      summary: {
+        open: calls.filter((c) => c.open).length,
+        cleared: calls.filter((c) => c.status === 'cleared').length,
+        avgMinutesToArrive: timed.length ? Math.round(timed.reduce((n, c) => n + c.minutes_to_arrive, 0) / timed.length) : null,
+      },
+    });
+  })
+);
+
+const clientCallSchema = z.object({
+  siteId: z.number().int().positive(),
+  callType: z.enum(CALL_TYPES),
+  priority: z.number().int().refine((n) => n === 2 || n === 3, 'For an emergency, call 911 first, then the office.'),
+  location: z.string().trim().max(160).nullable().optional(),
+  description: z.string().trim().min(5, 'Tell us what is happening.').max(1000),
+  callerName: z.string().trim().max(80).nullable().optional(),
+  callerPhone: z.string().trim().max(30).nullable().optional(),
+});
+
+clientRouter.post(
+  '/calls',
+  requireClient,
+  rateLimit({ windowMs: 60 * 60000, max: 20, key: (req) => `calls:${req.client.id}` }),
+  wrap(async (req, res) => {
+    const body = parse(clientCallSchema, req.body);
+    const siteId = assertSite(req, body.siteId);
+    const mine = Number((await db
+      .prepare(`SELECT COUNT(*) AS n FROM service_calls WHERE client_user_id = ? AND status IN (${OPEN_SQL})`)
+      .get(req.client.id)).n);
+    if (mine >= 3) {
+      throw new HttpError(409, 'You have three calls open already. Call the office if something else needs an officer now.');
+    }
+    const info = await db
+      .prepare(
+        `INSERT INTO service_calls (site_id, call_type, priority, location, description, caller_name, caller_phone, source, client_user_id)
+         VALUES (?,?,?,?,?,?,?, 'client', ?)`
+      )
+      .run(siteId, body.callType, body.priority, body.location || null, body.description,
+        body.callerName || req.client.name, body.callerPhone || null, req.client.id);
+    const id = Number(info.lastInsertRowid);
+    await logEvent(id, 'raised', { clientUserId: req.client.id });
+    await audit(null, 'call.raised', 'service_call', id, { client: req.client.id, priority: body.priority }, req.ip);
+    const call = await loadCall(id);
+    await pushToSupervisors(call, `${body.priority === 2 ? 'Urgent call' : 'Call'} from ${call.site_name}`);
+    res.status(201).json({ call: presentCallForClient(call) });
+  })
+);
+
+clientRouter.post(
+  '/calls/:id/cancel',
+  requireClient,
+  wrap(async (req, res) => {
+    const sc = scope(req);
+    const call = await db
+      .prepare(`SELECT * FROM service_calls WHERE id = ? AND site_id IN (${sc.sql})`)
+      .get(idParam(req.params.id, 'call'), ...sc.ids);
+    if (!call) throw new HttpError(404, 'Call not found.');
+    if (!['open', 'assigned', 'en_route'].includes(call.status)) {
+      throw new HttpError(409, call.status === 'on_scene' ? 'Our officer is already there. Talk to them, or call the office.' : 'That call is already closed.');
+    }
+    const body = parse(z.object({ reason: z.string().trim().max(300).nullable().optional() }), req.body || {});
+    const reason = body.reason || 'No longer needed (cancelled by the client).';
+    await db.prepare(`UPDATE service_calls SET status = 'cancelled', cancelled_at = now(), cancel_reason = ? WHERE id = ?`).run(reason, call.id);
+    await logEvent(call.id, 'cancelled', { clientUserId: req.client.id, note: reason });
+    await audit(null, 'call.cancelled', 'service_call', call.id, { client: req.client.id }, req.ip);
+    // Whoever was on the way can stand down.
+    if (call.assigned_to) {
+      const loaded = await loadCall(call.id);
+      pushAsync([call.assigned_to], { title: 'Call cancelled', body: `${loaded.site_name}: ${reason}`.slice(0, 160), data: { type: 'call', id: call.id } });
+    }
     res.json({ ok: true });
   })
 );

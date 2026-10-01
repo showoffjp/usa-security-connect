@@ -231,6 +231,36 @@ export const VISIT_CHECKS = [
 /** A site with no supervisor visit for this long is due one. */
 export const VISIT_DUE_DAYS = 14;
 
+/**
+ * Calls for service: something at a property that needs an officer now - an
+ * alarm, a suspicious person, a door to unlock. Raised by the office or by a
+ * client from the portal, sent to an officer on duty, and timed from the call
+ * to the officer arriving.
+ */
+export const CALL_TYPES = ['alarm', 'suspicious', 'disturbance', 'medical', 'lockout', 'escort', 'parking', 'maintenance', 'other'];
+export const CALL_TYPE_LABEL = {
+  alarm: 'Alarm', suspicious: 'Suspicious person or activity', disturbance: 'Disturbance', medical: 'Medical',
+  lockout: 'Lockout or door', escort: 'Escort', parking: 'Parking problem', maintenance: 'Building problem', other: 'Other',
+};
+/** 1 is an emergency. Clients can raise 2 and 3; an emergency is a 911 call first. */
+export const CALL_PRIORITIES = [1, 2, 3];
+export const CALL_PRIORITY_LABEL = { 1: 'Emergency', 2: 'Urgent', 3: 'Routine' };
+/** Minutes from the call to an officer on scene that we aim for, by priority. */
+export const CALL_TARGET_MINUTES = { 1: 5, 2: 15, 3: 45 };
+/** An officer who has not acknowledged a call this long after it was sent to them is chased. */
+export const CALL_ACK_MINUTES = 3;
+export const CALL_STATUSES = ['open', 'assigned', 'en_route', 'on_scene', 'cleared', 'cancelled'];
+export const OPEN_CALL_STATUSES = ['open', 'assigned', 'en_route', 'on_scene'];
+export const CALL_STATUS_LABEL = {
+  open: 'Waiting for an officer', assigned: 'Sent to an officer', en_route: 'On the way', on_scene: 'On scene',
+  cleared: 'Cleared', cancelled: 'Cancelled',
+};
+export const CALL_DISPOSITIONS = ['resolved', 'nothing_found', 'report', 'police', 'fire_ems', 'referred'];
+export const CALL_DISPOSITION_LABEL = {
+  resolved: 'Dealt with', nothing_found: 'Nothing found', report: 'Incident report written', police: 'Police called',
+  fire_ems: 'Fire or EMS called', referred: 'Passed to the property',
+};
+
 export const INCIDENT_SEVERITY = ['low', 'medium', 'high', 'critical'];
 export const INCIDENT_STATUS = ['submitted', 'under_review', 'closed'];
 

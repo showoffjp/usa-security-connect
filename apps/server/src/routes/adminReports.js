@@ -14,8 +14,9 @@ import { Router } from 'express';
 import { db } from '../lib/db.js';
 import { HttpError, wrap, parseDay, toDateString, sqlToIso } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { ROLES, EMPLOYMENT_TYPES, toHours, RULES, VISIT_CHECKS, VISIT_DUE_DAYS } from '../shared.js';
+import { ROLES, EMPLOYMENT_TYPES, toHours, RULES, VISIT_CHECKS, VISIT_DUE_DAYS, CALL_TARGET_MINUTES } from '../shared.js';
 import { visitBoard } from './visits.js';
+import { callSelect, presentCall } from '../services/dispatch.js';
 import { toSql } from '../services/compliance.js';
 import { scope, loadPricedEntries as loadEntries, personPay, groupBy } from '../services/payroll.js';
 
@@ -94,6 +95,12 @@ export const REPORTS = [
     title: 'Incidents by day',
     description: 'Incidents reported each day in the range, and how many were serious, to spot a bad week or a pattern.',
     group: 'Incidents',
+  },
+  {
+    id: 'calls-by-site',
+    title: 'Call response times by site',
+    description: 'Calls for service at each site, how fast an officer was on scene, and how many were inside the target for their priority.',
+    group: 'Dispatch',
   },
 ];
 
@@ -820,6 +827,68 @@ Object.assign(builders, {
       notes: [
         `A site is due a visit after ${VISIT_DUE_DAYS} days without one. Last visit and days since count from any date, not just this range.`,
         'A problem is a failed check (uniform, post orders, equipment, site secure) or a rating of 2 or less.',
+      ],
+    };
+  },
+
+  async 'calls-by-site'(f) {
+    const params = [toSql(f.from), toSql(f.to)];
+    if (f.siteId) params.push(f.siteId);
+    if (f.userId) params.push(f.userId);
+    const calls = (await db
+      .prepare(
+        `${callSelect} WHERE c.created_at >= ? AND c.created_at < ?
+         ${f.siteId ? 'AND c.site_id = ?' : ''} ${f.userId ? 'AND c.assigned_to = ?' : ''}`
+      )
+      .all(...params)).map((c) => presentCall(c));
+    const median = (xs) => {
+      if (!xs.length) return null;
+      const a = [...xs].sort((x, y) => x - y);
+      const m = Math.floor(a.length / 2);
+      return a.length % 2 ? a[m] : Math.round(((a[m - 1] + a[m]) / 2) * 10) / 10;
+    };
+    const avg = (xs) => (xs.length ? Math.round((xs.reduce((n, x) => n + x, 0) / xs.length) * 10) / 10 : null);
+    const rows = [...groupBy(calls, 'site_id').values()].map((g) => {
+      const timed = g.map((c) => c.timings.toArrive).filter((m) => m != null);
+      return {
+        site: g[0].site_name,
+        calls: g.length,
+        urgent: g.filter((c) => c.priority <= 2).length,
+        from_client: g.filter((c) => c.source === 'client').length,
+        cleared: g.filter((c) => c.status === 'cleared').length,
+        cancelled: g.filter((c) => c.status === 'cancelled').length,
+        avg_arrive: avg(timed),
+        median_arrive: median(timed),
+        within_target: pct(g.filter((c) => c.timings.withinTarget).length, timed.length),
+      };
+    });
+    rows.sort((a, b) => b.calls - a.calls || a.site.localeCompare(b.site));
+    const columns = [
+      C('site', 'Site'),
+      C('calls', 'Calls', 'int', { sum: true, bar: true }),
+      C('urgent', 'Emergency or urgent', 'int', { sum: true }),
+      C('from_client', 'Raised by the client', 'int', { sum: true }),
+      C('cleared', 'Cleared', 'int', { sum: true }),
+      C('cancelled', 'Cancelled', 'int', { sum: true }),
+      C('avg_arrive', 'Average minutes to on scene', 'decimal'),
+      C('median_arrive', 'Median minutes', 'decimal'),
+      C('within_target', 'Within target', 'percent'),
+    ];
+    const timed = calls.map((c) => c.timings.toArrive).filter((m) => m != null);
+    return {
+      columns,
+      rows,
+      totals: sumColumns(rows, columns),
+      summary: [
+        { label: 'Calls', value: calls.length, type: 'int' },
+        { label: 'Average minutes to on scene', value: avg(timed) ?? '--' },
+        { label: 'Within target', value: timed.length ? `${pct(calls.filter((c) => c.timings.withinTarget).length, timed.length)}%` : '--' },
+        { label: 'Raised by clients', value: calls.filter((c) => c.source === 'client').length, type: 'int' },
+      ],
+      chart: { label: 'site', value: 'calls', type: 'int' },
+      notes: [
+        `Targets from the call to an officer on scene: emergency ${CALL_TARGET_MINUTES[1]} minutes, urgent ${CALL_TARGET_MINUTES[2]}, routine ${CALL_TARGET_MINUTES[3]}.`,
+        'Times count only calls an officer reached; a call cancelled or closed by phone has no on-scene time.',
       ],
     };
   },
