@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { db } from '../lib/db.js';
-import { wrap, isoFields, toDateString, sqlToIso, dateParam } from '../lib/http.js';
+import { db, audit } from '../lib/db.js';
+import { HttpError, wrap, isoFields, toDateString, sqlToIso, dateParam, idParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
-import { splitOvertime, toHours } from '../shared.js';
+import { splitOvertime, toHours, CONFIRM_AHEAD_DAYS } from '../shared.js';
+import { confirmationOf, confirmShift, confirmable, withConfirmation } from '../services/confirmations.js';
 import { toSql } from '../services/compliance.js';
 import { loadPricedEntries, personPay } from '../services/payroll.js';
 import { dayString } from '../services/payPeriods.js';
@@ -32,11 +33,37 @@ scheduleRouter.get(
       .all(req.user.id, toSql(from), toSql(to)));
 
     res.json({
-      shifts: shifts.map((s) =>
-        isoFields(s, ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at'])
-      ),
+      shifts: shifts.map((s) => ({
+        ...isoFields(withConfirmation(s), ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
+        confirmable: confirmable(s),
+      })),
       range: { from: from.toISOString(), to: to.toISOString() },
+      confirmAheadDays: CONFIRM_AHEAD_DAYS,
     });
+  })
+);
+
+/** The officer confirms they will work one of their upcoming shifts. */
+scheduleRouter.post(
+  '/:id/confirm',
+  wrap(async (req, res) => {
+    const id = idParam(req.params.id, 'shift');
+    const shift = await db
+      .prepare(
+        `SELECT sh.*, te.clock_in_at FROM shifts sh LEFT JOIN time_entries te ON te.shift_id = sh.id
+         WHERE sh.id = ? AND sh.user_id = ?`
+      )
+      .get(id, req.user.id);
+    if (!shift) throw new HttpError(404, 'That shift is not on your schedule.');
+    if (!confirmable(shift)) {
+      const starts = new Date(sqlToIso(shift.starts_at)).getTime();
+      if (shift.status !== 'scheduled') throw new HttpError(409, 'That shift is no longer scheduled.');
+      if (shift.clock_in_at || starts <= Date.now()) throw new HttpError(409, 'That shift has already started.');
+      throw new HttpError(409, `Shifts can be confirmed up to ${CONFIRM_AHEAD_DAYS} days ahead.`);
+    }
+    const updated = await confirmShift(shift, { byUserId: req.user.id, method: 'app' });
+    await audit(req.user.id, 'shift.confirmed', 'shift', id, { method: 'app' }, req.ip);
+    res.json({ shift: { id, ...confirmationOf(updated) } });
   })
 );
 

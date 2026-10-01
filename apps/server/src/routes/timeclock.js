@@ -11,6 +11,7 @@ import {
   minutesBetween,
 } from '../shared.js';
 import { recordPing } from '../services/tracking.js';
+import { confirmable, withConfirmation } from '../services/confirmations.js';
 import { flagOutstanding, outstandingForShift } from '../services/equipment.js';
 import { releaseCallsOnClockOut, OPEN_SQL } from '../services/dispatch.js';
 import {
@@ -156,7 +157,12 @@ timeclockRouter.get(
           }
         : null,
       shift: shift ? isoFields(shift, ['starts_at', 'ends_at']) : null,
-      nextShift: nextShift ? isoFields(nextShift, ['starts_at', 'ends_at']) : null,
+      nextShift: nextShift
+        ? {
+            ...isoFields(withConfirmation(nextShift), ['starts_at', 'ends_at']),
+            confirmable: confirmable(nextShift) && openEntry?.shift_id !== nextShift.id,
+          }
+        : null,
       lastEntry: lastEntry ? isoFields(lastEntry, ENTRY_TIMES) : null,
       checkIn,
       weekMinutes: week.minutes,

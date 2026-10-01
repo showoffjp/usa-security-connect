@@ -1,37 +1,140 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtTime, fmtDay, fmtRelative, fmtRange } from '../../lib/format.js';
-import { LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Banner, useToast } from '../../components/ui.jsx';
+import { LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Banner, Modal, Field, useToast } from '../../components/ui.jsx';
 import { formatDuration } from '@shared/domain.js';
+
+/** Record that an officer confirmed some other way, usually when called after the reminder. */
+function PhoneConfirm({ shift, onClose, onDone }) {
+  const toast = useToast();
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/admin/shifts/${shift.id}/confirm`, { note: note.trim() || undefined });
+      toast.success(`${shift.officer} is confirmed.`);
+      onDone();
+    } catch (err) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Confirmed by phone"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>
+            {busy ? 'Saving...' : 'Mark confirmed'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="small muted">
+          {shift.officer}, {shift.post_name} at {shift.site_name}, {fmtDay(shift.starts_at)} {fmtRange(shift.starts_at, shift.ends_at)}.
+        </div>
+        <Field label="Note" hint="Optional. Kept with the shift, for supervisors only.">
+          <input className="input" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Spoke to them at 4pm, on the way" />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/** Officers due on post in the next 12 hours who have not said they will be there. */
+function UnconfirmedCard({ shifts, onChange }) {
+  const [phone, setPhone] = useState(null);
+  return (
+    <div className={`card${shifts.some((s) => s.urgent) ? ' attention' : ''}`} id="unconfirmed">
+      <div className="card-head">
+        <h3>Not confirmed yet</h3>
+        <span className="small muted">Starting in the next 12 hours</span>
+      </div>
+      <div className="list">
+        {shifts.map((s) => (
+          <div key={s.id} className="list-item" style={{ cursor: 'default' }}>
+            <div
+              className="lead-icon"
+              style={s.urgent ? { background: 'var(--danger-bg)', color: 'var(--danger)' } : { background: 'var(--warn-bg)', color: 'var(--warn)' }}
+            >
+              <Icon name="calendar" size={17} />
+            </div>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="strong small">
+                <Link to={`/admin/employees/${s.user_id}`}>{s.officer}</Link>
+              </div>
+              <div className="tiny muted">
+                {s.post_name} &middot; {s.site_name}
+              </div>
+              <div className="tiny muted">
+                {fmtTime(s.starts_at)} ({fmtRelative(s.starts_at)}){s.reminded ? ' · reminder sent' : ''}
+              </div>
+            </div>
+            <div className="row wrap" style={{ justifyContent: 'flex-end', minWidth: 0, flexShrink: 1 }}>
+              {s.urgent && <Chip kind="danger">Starts soon</Chip>}
+              {s.phone && (
+                <a className="btn btn-ghost btn-sm" href={`tel:${s.phone.replace(/[^\d+]/g, '')}`} aria-label={`Call ${s.officer}`}>
+                  <Icon name="phone" size={14} /> Call
+                </a>
+              )}
+              <button className="btn btn-navy btn-sm" onClick={() => setPhone(s)}>
+                <Icon name="check" size={14} /> Confirmed by phone
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {phone && (
+        <PhoneConfirm
+          shift={phone}
+          onClose={() => setPhone(null)}
+          onDone={() => {
+            setPhone(null);
+            onChange();
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const toast = useToast();
+  const location = useLocation();
   const [data, setData] = useState(null);
 
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get('/admin/dashboard'));
+    } catch (err) {
+      toast.error(err.message);
+      setData((d) => d || { counts: {}, onDuty: [], recentFlags: [], upcoming: [], unconfirmed: [] });
+    }
+  }, [toast]);
+
   useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const d = await api.get('/admin/dashboard');
-        if (alive) setData(d);
-      } catch (err) {
-        if (alive) {
-          toast.error(err.message);
-          setData({ counts: {}, onDuty: [], recentFlags: [], upcoming: [] });
-        }
-      }
-    };
     load();
     const t = setInterval(load, 45000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [toast]);
+    return () => clearInterval(t);
+  }, [load]);
+
+  // An alert links to a card on this page by its id.
+  const loaded = Boolean(data);
+  useEffect(() => {
+    if (!loaded || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
+  }, [loaded, location.hash]);
 
   if (!data) return <LoadingPage label="Loading operations" />;
   const { counts, onDuty, recentFlags, upcoming } = data;
+  const unconfirmed = data.unconfirmed || [];
 
   return (
     <div className="page stack">
@@ -197,6 +300,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {unconfirmed.length > 0 && <UnconfirmedCard shifts={unconfirmed} onChange={load} />}
+
       {/* ------------------------------------------------- next shifts -- */}
       <div className="card">
         <div className="card-head">
@@ -217,6 +322,7 @@ export default function DashboardPage() {
                   <th>Site</th>
                   <th>Starts</th>
                   <th>Window</th>
+                  <th>Confirmed</th>
                 </tr>
               </thead>
               <tbody>
@@ -230,6 +336,15 @@ export default function DashboardPage() {
                       <span className="muted small"> ({fmtRelative(s.starts_at)})</span>
                     </td>
                     <td className="nowrap muted">{fmtRange(s.starts_at, s.ends_at)}</td>
+                    <td className="nowrap">
+                      {!s.officer ? (
+                        <span className="muted">--</span>
+                      ) : s.confirmed ? (
+                        <Chip kind="ok">{s.confirm_method === 'phone' ? 'By phone' : 'Yes'}</Chip>
+                      ) : (
+                        <Chip kind="warn">Not yet</Chip>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

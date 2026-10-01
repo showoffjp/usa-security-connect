@@ -915,6 +915,15 @@ ALTER TABLE incidents ADD COLUMN IF NOT EXISTS client_notified_at timestamptz;
 -- What the client reads about a supervisor's visit. The visit's own notes are
 -- about the officer (coaching, a missing patch) and stay with us.
 ALTER TABLE supervisor_visits ADD COLUMN IF NOT EXISTS client_note text;
+-- Shift confirmations. A confirmation is for one officer, one post and one
+-- set of times: confirmed_key records which, so moving or reassigning the
+-- shift leaves it unconfirmed without every update path having to clear it.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS confirmed_at timestamptz;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS confirmed_by integer REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS confirm_method text;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS confirm_note text;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS confirmed_key text;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS reminded_key text;
 CREATE INDEX IF NOT EXISTS idx_supervisor_visits_site ON supervisor_visits(site_id, visited_at);
 
 -- What is being done about an incident: a corrective action with an owner

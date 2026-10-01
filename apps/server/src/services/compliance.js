@@ -323,6 +323,14 @@ export async function sweep(now = new Date()) {
     console.error('[usc] notification pass failed', err.message);
   }
 
+  // Imported lazily: confirmations.js imports this module for toSql.
+  try {
+    const { sendConfirmReminders } = await import('./confirmations.js');
+    result.confirmReminders = await sendConfirmReminders(now);
+  } catch (err) {
+    console.error('[usc] shift confirmation reminders failed', err.message);
+  }
+
   // Spent rate-limit counters. Housekeeping rather than compliance, but this
   // is the only thing that runs on a timer.
   try {

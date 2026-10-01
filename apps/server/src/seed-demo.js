@@ -25,6 +25,7 @@ import { seedPostLog } from './seed-postlog.js';
 import { seedDispatch } from './seed-dispatch.js';
 import { seedCorrections } from './seed-corrections.js';
 import { seedAgreements } from './seed-agreements.js';
+import { seedConfirmations } from './seed-confirmations.js';
 
 /**
  * Load the demo company. With `reset`, every table is emptied first.
@@ -1198,6 +1199,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const corrections = await seedCorrections({ db });
   // What each site pays for, against what it is rostered.
   const agreements = await seedAgreements({ db });
+  // Officers saying they will be there for the week ahead.
+  const confirmations = await seedConfirmations({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1212,7 +1215,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet)
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

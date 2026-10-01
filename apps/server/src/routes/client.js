@@ -36,6 +36,7 @@ import { toSql } from '../services/compliance.js';
 import { contactsFor, contactSchema } from './siteLog.js';
 import { currentOrders } from '../services/postOrders.js';
 import { siteMonth, monthKey } from '../services/siteMonth.js';
+import { isConfirmed } from '../services/confirmations.js';
 
 export const clientRouter = Router();
 
@@ -420,8 +421,8 @@ clientRouter.get(
     const until = new Date(from.getTime() + days * 86400000);
     const rows = await db
       .prepare(
-        `SELECT sh.id, sh.starts_at, sh.ends_at, sh.user_id, p.name AS post_name, p.armed, s.name AS site_name, s.id AS site_id,
-                u.first_name, u.last_name
+        `SELECT sh.id, sh.starts_at, sh.ends_at, sh.user_id, sh.post_id, sh.confirmed_key, p.name AS post_name, p.armed,
+                s.name AS site_name, s.id AS site_id, u.first_name, u.last_name
          FROM shifts sh
          JOIN posts p ON p.id = sh.post_id
          JOIN sites s ON s.id = p.site_id
@@ -442,9 +443,19 @@ clientRouter.get(
         ends_at: row.ends_at,
         officer_name: row.user_id && row.first_name ? `${row.first_name} ${row.last_name}` : null,
         assigned: Boolean(row.user_id),
+        // The officer has said they will be there; only the fact, not when or how.
+        confirmed: isConfirmed(r),
       };
     });
-    res.json({ days, shifts, summary: { total: shifts.length, assigned: shifts.filter((x) => x.assigned).length } });
+    res.json({
+      days,
+      shifts,
+      summary: {
+        total: shifts.length,
+        assigned: shifts.filter((x) => x.assigned).length,
+        confirmed: shifts.filter((x) => x.confirmed).length,
+      },
+    });
   })
 );
 
