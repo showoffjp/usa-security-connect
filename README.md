@@ -634,6 +634,23 @@ Sampled from usasecuritygroup.com:
 Defined once in `packages/shared/src/theme.js`, mirrored as CSS custom properties in
 `apps/web/src/styles/app.css` and as a JS object in `apps/mobile/src/theme.js`.
 
+**The mark** is "Chrome Guardian": a polished chrome shield with navy and red enamel
+fields and a raised silver pin. It is drawn once, in `apps/web/src/components/shieldMark.js`.
+The web app's `<Shield>` renders it everywhere: the header, the sign-in screens, the
+portal and the printed daily report. A bar of light crosses it on hover, and once as a
+sign-in screen opens; nothing moves for anyone who prefers reduced motion. Every other
+image of the mark is generated from that file:
+
+```bash
+USC_CHROMIUM_PATH=/path/to/chromium node apps/web/tools/make-icons.mjs
+```
+
+This writes the favicon (`public/shield.svg`), the installed-app icons (192, 512,
+maskable 512 and the iOS home-screen icon) and the mobile app's `assets/shield.png`,
+`icon.png` and `adaptive-icon.png`. To change the logo, edit `shieldMark.js`, run the
+script, and bump `CACHE` in `apps/web/public/sw.js` so installed copies fetch the new
+icons.
+
 ---
 
 ## Configuration

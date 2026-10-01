@@ -1,45 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, PanResponder, Pressable, Text, View, Modal as RNModal,
+  ActivityIndicator, Animated, Image, PanResponder, Pressable, Text, View, Modal as RNModal,
   ScrollView, TextInput,
 } from 'react-native';
 import { C, S, chipTone } from './theme.js';
 
 /* ------------------------------------------------------------------ mark -- */
 
-/** Original shield mark, drawn without an SVG dependency. */
+/**
+ * The Chrome Guardian mark, rendered from the same drawing as the web app's
+ * (web/tools/make-icons.mjs writes assets/shield.png). Sized by height.
+ */
+const SHIELD = require('../assets/shield.png');
 export function Shield({ size = 34 }) {
-  const w = size;
-  const h = size * 1.08;
-  return (
-    <View style={{ width: w, height: h, alignItems: 'center', justifyContent: 'center' }}>
-      <View
-        style={{
-          width: w, height: h, backgroundColor: C.navy800,
-          borderTopLeftRadius: w * 0.16, borderTopRightRadius: w * 0.16,
-          borderBottomLeftRadius: w * 0.5, borderBottomRightRadius: w * 0.5,
-          alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <View
-          style={{
-            width: w * 0.72, height: h * 0.74, backgroundColor: C.brand600,
-            borderTopLeftRadius: w * 0.11, borderTopRightRadius: w * 0.11,
-            borderBottomLeftRadius: w * 0.36, borderBottomRightRadius: w * 0.36,
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <View
-            style={{
-              width: w * 0.3, height: w * 0.3, borderRadius: w * 0.15,
-              borderWidth: Math.max(2, w * 0.07), borderColor: '#fff',
-              backgroundColor: 'transparent',
-            }}
-          />
-        </View>
-      </View>
-    </View>
-  );
+  const h = Math.round(size * 1.15);
+  return <Image source={SHIELD} style={{ width: Math.round((h * 420) / 480), height: h }} resizeMode="contain" accessibilityLabel="USA Security Connect" />;
 }
 
 /* ----------------------------------------------------------- primitives -- */

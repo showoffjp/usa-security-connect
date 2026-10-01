@@ -290,7 +290,7 @@ function PortalShell() {
       </a>
       <header className="topbar">
         <span className="brand">
-          <Shield size={30} />
+          <Shield size={34} />
           <span className="hide-mobile">
             <span className="name">Client Portal</span>
             <br />
