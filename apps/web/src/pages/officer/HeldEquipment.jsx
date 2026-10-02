@@ -207,7 +207,7 @@ export default function HeldEquipment() {
               <div className="lead-icon">
                 <Icon name={h.category === 'vehicle' ? 'car' : 'clipboard'} size={17} />
               </div>
-              <div className="grow" style={{ minWidth: 160 }}>
+              <div className="grow">
                 <div className="small strong">{h.label}</div>
                 <div className="tiny muted">
                   {EQUIPMENT_CATEGORY_LABEL[h.category] || h.category} &middot; since {fmtRelative(h.issued_at)}
@@ -215,7 +215,7 @@ export default function HeldEquipment() {
                 </div>
                 {v?.off_road && <div className="tiny" style={{ color: 'var(--danger)' }}>Off the road: do not drive it.</div>}
               </div>
-              <div className="row wrap" style={{ gap: 6, justifyContent: 'flex-end' }}>
+              <div className="row wrap list-trailing" style={{ gap: 6, justifyContent: 'flex-end' }}>
                 {v ? (
                   v.uninspected ? (
                     <>

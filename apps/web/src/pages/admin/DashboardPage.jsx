@@ -66,7 +66,7 @@ function UnconfirmedCard({ shifts, onChange }) {
             >
               <Icon name="calendar" size={17} />
             </div>
-            <div className="grow" style={{ minWidth: 0 }}>
+            <div className="grow">
               <div className="strong small">
                 <Link to={`/admin/employees/${s.user_id}`}>{s.officer}</Link>
               </div>
@@ -77,7 +77,7 @@ function UnconfirmedCard({ shifts, onChange }) {
                 {fmtTime(s.starts_at)} ({fmtRelative(s.starts_at)}){s.reminded ? ' · reminder sent' : ''}
               </div>
             </div>
-            <div className="row wrap" style={{ justifyContent: 'flex-end', minWidth: 0, flexShrink: 1 }}>
+            <div className="row wrap list-trailing" style={{ justifyContent: 'flex-end', minWidth: 0, flexShrink: 1 }}>
               {s.urgent && <Chip kind="danger">Starts soon</Chip>}
               {s.phone && (
                 <a className="btn btn-ghost btn-sm" href={`tel:${s.phone.replace(/[^\d+]/g, '')}`} aria-label={`Call ${s.officer}`}>
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                     >
                       <Icon name="shield" size={18} />
                     </div>
-                    <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="grow">
                       <div className="strong small">{o.officer}</div>
                       <div className="tiny muted">
                         {o.post_name} &middot; {o.site_name}

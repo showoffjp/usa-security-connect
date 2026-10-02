@@ -920,7 +920,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 113 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 117 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
@@ -928,6 +928,21 @@ the sign-in screen in place of the real ones. It also fails any screen showing a
 without one of our table classes, which renders with the browser's defaults; several
 screens shipped that way before the check existed. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
 expects it.
+
+The mobile layout audit (`npm run test:mobile --workspace @usc/web`) opens every screen
+as an administrator, an officer and a client, at 360 and 390 pixels wide, in light and
+night mode (273 screens). On each one it measures the layout for faults a phone shows
+and a desktop hides:
+- text squeezed to a few letters a line;
+- a word wider than its box;
+- anything past the screen edge outside a scroller;
+- controls drawn on top of each other;
+- a page wider than the screen.
+
+Set `USC_SHOT_DIR` to also save a full-page screenshot of every screen. Its first run
+found 271 faults, including dashboard rows read one letter per line. Others were site
+pickers and date rows pushing pages sideways, table columns squeezed to a word a line,
+and a client tab bar with every label cut off. All are fixed.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.

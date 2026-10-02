@@ -167,7 +167,7 @@ function VehicleDetail({ id, onClose, onChanged }) {
             <ul className="list">
               {open.map((d) => (
                 <li key={d.id} className="list-item" style={{ cursor: 'default', flexWrap: 'wrap' }}>
-                  <div className="grow" style={{ minWidth: 220 }}>
+                  <div className="grow">
                     <div className="small strong">
                       {d.label} {d.critical ? <Chip kind="danger">Off the road</Chip> : <Chip kind="warn">Minor</Chip>}
                     </div>

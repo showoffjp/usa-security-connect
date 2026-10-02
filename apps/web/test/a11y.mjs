@@ -344,7 +344,7 @@ await page.waitForSelector('#invoice-questions-title');
 await audit(page, 'Portal invoice, with questions', null);
 await page.keyboard.press('Escape');
 await page.goto(`${WEB}/portal/incidents`, { waitUntil: 'networkidle' });
-await page.locator('button:has-text("Read")').first().click();
+await page.locator('button:not(.notice-more):has-text("Read")').first().click();
 await page.waitForSelector('[role="dialog"] .incident-sheet', { state: 'attached' });
 await audit(page, 'Portal incident report, with print', null);
 await page.keyboard.press('Escape');

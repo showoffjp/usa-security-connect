@@ -133,7 +133,7 @@ export default function SchedulePage() {
                           </details>
                         )}
                       </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div className="list-trailing" style={{ textAlign: 'right' }}>
                         <div className="small strong nowrap">{fmtRange(s.starts_at, s.ends_at)}</div>
                         <div className="tiny muted">
                           {worked ? (

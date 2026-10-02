@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --port 5174",
     "test:a11y": "node test/a11y.mjs",
+    "test:mobile": "node test/mobile-layout.mjs",
     "capture:roles": "node tools/capture-roles.mjs",
     "test:roles": "node test/roles-e2e.mjs"
   },
