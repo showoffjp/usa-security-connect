@@ -88,6 +88,8 @@ const STAFF_PAGES = [
   ['Timesheets: corrections', '/admin/timesheets?view=corrections'],
   ['Service agreements', '/admin/agreements'],
   ['Report: hours against agreements', '/admin/reports?report=agreement-hours'],
+  ['Fleet', '/admin/fleet'],
+  ['Report: patrol vehicle mileage', '/admin/reports?report=vehicle-mileage'],
 ];
 
 const PORTAL_PAGES = [
@@ -257,6 +259,13 @@ await page.waitForSelector('[role="dialog"]');
 await audit(page, 'Service agreements: edit', null);
 await page.keyboard.press('Escape');
 
+// A patrol vehicle's record: defects, service form, checks and trips.
+await page.goto(`${WEB}/admin/fleet`, { waitUntil: 'networkidle' });
+await page.locator('table.data button[aria-label^="Open "]').first().click();
+await page.waitForSelector('[role="dialog"] #log-h');
+await audit(page, 'Fleet: a vehicle', null);
+await page.keyboard.press('Escape');
+
 // The alerts inbox is another dialog from the top bar.
 await page.click('.bell-btn');
 await page.waitForSelector('.alerts-list');
@@ -292,6 +301,14 @@ await audit(page, 'Post log: building issues', '/post-log?tab=issues');
 await page.click('button:has-text("Report issue")');
 await page.waitForSelector('[role="dialog"]');
 await audit(page, 'Post log: report an issue', null);
+await page.keyboard.press('Escape');
+
+// The patrol truck Marcus has signed out, and its check before driving.
+await page.goto(`${WEB}/`, { waitUntil: 'networkidle' });
+await page.click('button:has-text("Check before driving")');
+await page.waitForSelector('[role="dialog"] .check-row');
+await page.locator('[role="dialog"] .check-row:not(.plain)').nth(1).locator('label:has-text("Problem")').click();
+await audit(page, 'Officer: vehicle check', null);
 await page.keyboard.press('Escape');
 
 // The officer's own punches, and asking for one to be fixed.

@@ -298,6 +298,7 @@ export function AdminShell() {
         { to: '/admin/tours', icon: 'route', label: 'Tours' },
         { to: '/admin/visits', icon: 'pin', label: 'Field visits', count: counts.visitsDue },
         { to: '/admin/equipment', icon: 'clipboard', label: 'Keys & equipment', count: counts.equipmentOut },
+        { to: '/admin/fleet', icon: 'car', label: 'Fleet', count: counts.fleetAttention, urgent: counts.fleetAttention > 0 },
         { to: '/admin/post-logs', icon: 'users', label: 'Post logs', count: counts.visitorsOnSite },
       ],
     },

@@ -20,8 +20,16 @@
  */
 
 import { db } from '../lib/db.js';
-import { FLAG_TYPES, equipmentEligibility } from '../shared.js';
+import { FLAG_TYPES, VEHICLE_CHECK_LABEL, equipmentEligibility } from '../shared.js';
 import { toSql, raiseFlag } from './compliance.js';
+
+/** A vehicle's open critical defect: the reason it is off the road, if it is. */
+async function offRoadDefect(item) {
+  if (item.category !== 'vehicle') return null;
+  return db
+    .prepare(`SELECT item FROM vehicle_defects WHERE equipment_id = ? AND resolved_at IS NULL AND critical = true ORDER BY reported_at LIMIT 1`)
+    .get(item.id);
+}
 
 /** The open assignment for an item, if somebody currently holds it. */
 export async function currentHolder(equipmentId) {
@@ -78,6 +86,16 @@ export async function issue({ equipmentId, userId, issuedBy, condition = 'good',
   const officer = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
   if (!officer) return { ok: false, code: 'no_officer', reason: 'Employee not found.' };
 
+  // A failed brake check is not overridden by somebody needing a car tonight.
+  const defect = await offRoadDefect(item);
+  if (defect) {
+    return {
+      ok: false,
+      code: 'off_road',
+      reason: `That vehicle is off the road: ${VEHICLE_CHECK_LABEL[defect.item] || defect.item} failed inspection. Record the repair on the Fleet page first.`,
+    };
+  }
+
   const certifications = await db
     .prepare(`SELECT type, expires_on FROM certifications WHERE user_id = ?`)
     .all(userId);
@@ -121,7 +139,10 @@ export async function returnItem({ equipmentId, returnedTo, condition = 'good', 
     )
     .run(toSql(new Date()), returnedTo, condition, note, held.id);
 
-  const nextStatus = condition === 'good' ? 'available' : 'maintenance';
+  // A vehicle with an open critical defect goes to the workshop however it
+  // was described at the counter.
+  const item = await db.prepare(`SELECT * FROM equipment WHERE id = ?`).get(equipmentId);
+  const nextStatus = condition === 'good' && !(await offRoadDefect(item)) ? 'available' : 'maintenance';
   await db.prepare(`UPDATE equipment SET status = ? WHERE id = ?`).run(nextStatus, equipmentId);
 
   return {

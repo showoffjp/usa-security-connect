@@ -83,6 +83,7 @@ const iconPaths = {
   print: 'M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z',
   list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  car: 'M3 13l2.2-5.5A2 2 0 0 1 7 6h10a2 2 0 0 1 1.8 1.5L21 13v5H3zM3 13h18M7 16h1.5M15.5 16H17M6 18v2M18 18v2',
 };
 
 export function Icon({ name, size = 20, stroke = 1.8, filled = false, ...rest }) {

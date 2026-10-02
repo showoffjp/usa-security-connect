@@ -94,6 +94,7 @@ export function pathForNotification(data) {
   switch (data.type) {
     case 'check_in':
     case 'call':
+    case 'vehicle':
       // A call sent to the officer sits at the top of the home screen.
       return '/';
     case 'broadcast':
