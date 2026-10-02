@@ -245,7 +245,7 @@ export default function DashboardPage() {
                         In at {fmtTime(o.clock_in_at)} &middot; {formatDuration(o.minutes_on_post)} on post
                       </div>
                     </div>
-                    <div className="row wrap" style={{ justifyContent: 'flex-end', maxWidth: 190, minWidth: 0, flexShrink: 1 }}>
+                    <div className="row wrap list-trailing" style={{ justifyContent: 'flex-end', maxWidth: 190, minWidth: 0, flexShrink: 1 }}>
                       {o.late_minutes > 0 && <Chip kind="warn">{o.late_minutes}m late</Chip>}
                       {o.clock_in_geofence === 'outside' && <Chip kind="danger">Off site</Chip>}
                       {o.missed_checks > 0 && <Chip kind="danger">{o.missed_checks} missed</Chip>}

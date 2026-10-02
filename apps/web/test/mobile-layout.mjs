@@ -16,7 +16,9 @@
  *   USC_CHROMIUM_PATH=/opt/pw-browsers/chromium node test/mobile-layout.mjs
  *
  * Expects the API on :4000 and the web app on :5173. USC_SHOT_DIR saves a
- * full-page screenshot of every screen for a person to look over too.
+ * full-page screenshot of every screen for a person to look over too. To
+ * check a deployed site, set USC_WEB_URL and USC_API_URL and USC_READ_ONLY=1,
+ * which stops every request but signing in from writing anything.
  */
 
 import fs from 'node:fs';
@@ -249,7 +251,28 @@ async function audit(who, list, setup) {
     for (const scheme of ['light', 'dark']) {
       // Layout does not change with the theme, so the second width checks dark only.
       if (width !== WIDTHS[0] && scheme === 'light') continue;
-      const context = await browser.newContext({ viewport: { width, height: 800 }, colorScheme: scheme, isMobile: true, hasTouch: true });
+      const context = await browser.newContext({
+        viewport: { width, height: 800 }, colorScheme: scheme, isMobile: true, hasTouch: true, serviceWorkers: 'block',
+      });
+      // USC_READ_ONLY: for a live site, nothing but signing in may write.
+      // Requests go out through Node rather than the browser, which also gets
+      // through a TLS-inspecting proxy the browser itself does not trust.
+      if (process.env.USC_READ_ONLY) {
+        await context.route('**/*', async (route) => {
+          const req = route.request();
+          const login = /\/(auth|client)\/login$/.test(new URL(req.url()).pathname);
+          if (!['GET', 'HEAD'].includes(req.method()) && !login) return route.abort();
+          try {
+            const r = await fetch(req.url(), { method: req.method(), headers: req.headers(), body: login ? req.postData() : undefined });
+            const headers = Object.fromEntries(r.headers.entries());
+            delete headers['content-encoding'];
+            delete headers['content-length'];
+            return route.fulfill({ status: r.status, headers, body: Buffer.from(await r.arrayBuffer()) });
+          } catch {
+            return route.abort();
+          }
+        });
+      }
       const page = await context.newPage();
       await setup(page, context);
       for (const [label, route, act] of list) {

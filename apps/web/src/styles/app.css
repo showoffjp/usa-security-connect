@@ -1130,7 +1130,7 @@ select { min-width: 0; }
 /* What follows a row's text - times, chips, buttons. When a phone moves it
    under the text it lines up with the text, not off to the right. */
 @media (max-width: 620px) {
-  .list-item > .list-trailing { flex-basis: 100%; text-align: left !important; justify-content: flex-start !important; padding-left: 51px; }
+  .list-item > .list-trailing { flex-basis: 100%; max-width: none !important; text-align: left !important; justify-content: flex-start !important; padding-left: 51px; }
   .list-item > .list-trailing.row, .list-item > .list-trailing .row { justify-content: flex-start !important; }
 }
 /* Client notices: the whole text on a big screen, three lines and "Read more" on a phone. */
