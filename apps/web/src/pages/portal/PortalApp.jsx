@@ -6,7 +6,7 @@
  * which a contact's session can pick up staff state.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ClientAuthProvider, useClientAuth } from '../../lib/clientAuth.jsx';
 import { Banner, Empty, Icon, LoadingPage, Modal, Field, Shield, useToast } from '../../components/ui.jsx';
@@ -225,6 +225,22 @@ function AccountMenu({ onClose }) {
 const NOTICE_KIND = { urgent: 'danger', important: 'warn', info: 'info' };
 
 /** Notices from us the contact has not yet marked read, above every page. */
+/** A notice's text, cut to three lines on a phone with a way to read the rest. */
+function NoticeBody({ text }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 140;
+  return (
+    <>
+      <span className={`notice-text${long && !open ? ' clamped' : ''}`}>{text}</span>
+      {long && (
+        <button type="button" className="link-btn tiny notice-more" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </>
+  );
+}
+
 function NoticesBar() {
   const [notices, setNotices] = useState([]);
   useEffect(() => {
@@ -259,7 +275,7 @@ function NoticesBar() {
             </button>
           }
         >
-          <span style={{ whiteSpace: 'pre-wrap' }}>{n.body}</span>
+          <NoticeBody text={n.body} />
           {n.sites.length > 0 && <div className="tiny" style={{ marginTop: 4 }}>{n.sites.join(', ')}</div>}
         </Banner>
       ))}
@@ -270,6 +286,13 @@ function NoticesBar() {
 function PortalShell() {
   const { client, sites } = useClientAuth();
   const [menu, setMenu] = useState(false);
+  const tabbar = useRef(null);
+  const { pathname } = useLocation();
+  // On a phone the tab bar scrolls; keep the current tab in sight.
+  useEffect(() => {
+    const active = tabbar.current?.querySelector('a.active');
+    if (active?.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname]);
 
   const tabs = [
     { to: '/portal', icon: 'chart', label: 'Overview', end: true },
@@ -312,7 +335,7 @@ function PortalShell() {
         <Outlet />
       </main>
 
-      <nav className="tabbar tabbar-dense" aria-label="Main">
+      <nav className="tabbar tabbar-dense" aria-label="Main" ref={tabbar}>
         {tabs.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? 'active' : '')}>
             <Icon name={t.icon} size={21} />

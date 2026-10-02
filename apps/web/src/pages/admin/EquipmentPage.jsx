@@ -310,7 +310,7 @@ export default function EquipmentPage() {
           placeholder="Radio, key ring, site or officer"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ width: 'auto', minWidth: 240 }}
+          style={{ width: 'auto', minWidth: 'min(240px, 100%)' }}
         />
       </div>
 

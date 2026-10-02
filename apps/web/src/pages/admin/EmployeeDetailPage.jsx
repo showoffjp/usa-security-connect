@@ -174,7 +174,7 @@ export default function EmployeeDetailPage() {
         />
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)' }}>
+      <div className="grid side-split">
         <div className="card">
           <div className="card-head">
             <h3>Details</h3>

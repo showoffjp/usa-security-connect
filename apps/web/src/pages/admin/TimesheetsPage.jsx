@@ -122,7 +122,7 @@ export default function TimesheetsPage() {
             { value: 'month', label: 'Month' },
           ]}
         />
-        <div className="row">
+        <div className="row wrap">
           <input
             type="date"
             aria-label="From date"

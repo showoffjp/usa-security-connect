@@ -832,7 +832,7 @@ for (const u of STAFF) {
   await client.page.keyboard.press('Escape');
   await client.page.goto(WEB + '/portal/incidents');
   await settle(client.page);
-  await client.page.locator('button:has-text("Read")').first().click();
+  await client.page.locator('button:not(.notice-more):has-text("Read")').first().click();
   await client.page.waitForSelector('[role="dialog"] .incident-sheet', { state: 'attached', timeout: 10000 });
   log(await client.page.locator('[role="dialog"] button:has-text("Print / save PDF")').count() === 1
     && await client.page.locator('.incident-sheet').isHidden(), 'an incident report is ready to print, kept off the screen');
