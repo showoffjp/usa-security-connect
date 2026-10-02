@@ -19,6 +19,7 @@ import { HttpError, wrap, parse, isoFields, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, EQUIPMENT_CATEGORIES, EQUIPMENT_STATUS, EQUIPMENT_CONDITIONS } from '../shared.js';
 import { issue, returnItem, inventory, history, heldBy, currentHolder } from '../services/equipment.js';
+import { vehiclesHeldBy } from '../services/vehicles.js';
 
 export const equipmentRouter = Router();
 equipmentRouter.use(requireAuth);
@@ -41,6 +42,8 @@ equipmentRouter.get(
     res.json({
       held: held.map((h) => isoFields(h, ['issued_at'])),
       mustReturnBeforeClockOut: held.filter((h) => h.return_by_end_of_shift).length,
+      // A vehicle's checks and odometer, for the ones among them that are vehicles.
+      vehicles: held.some((h) => h.category === 'vehicle') ? await vehiclesHeldBy(req.user.id) : [],
     });
   })
 );
@@ -60,6 +63,12 @@ equipmentRouter.post(
     const holder = await currentHolder(Number(req.params.equipmentId));
     if (!holder || holder.user_id !== req.user.id) {
       throw new HttpError(404, 'You do not have that item signed out.');
+    }
+    // A vehicle comes back with its end check: the odometer reading is the
+    // only record of the miles.
+    const item = await db.prepare(`SELECT category FROM equipment WHERE id = ?`).get(holder.equipment_id);
+    if (item?.category === 'vehicle') {
+      throw new HttpError(409, 'Hand a vehicle back with its end check, so the miles are recorded.', { code: 'end_check' });
     }
 
     const result = await returnItem({
@@ -150,7 +159,7 @@ equipmentRouter.post(
 
     if (!result.ok) {
       const status = result.code === 'not_found' || result.code === 'no_officer' ? 404
-        : result.code === 'already_out' ? 409
+        : result.code === 'already_out' || result.code === 'off_road' ? 409
         : 422;
       throw new HttpError(status, result.reason, { code: result.code });
     }

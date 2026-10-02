@@ -8,6 +8,7 @@
 import { db } from '../lib/db.js';
 import { HttpError, isoFields } from '../lib/http.js';
 import { toSql } from './compliance.js';
+import { milesBetween, trips } from './vehicles.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const monthKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
@@ -84,6 +85,18 @@ export async function siteMonth(siteId, month = monthKey()) {
     .prepare(`SELECT ROUND(AVG(rating)::numeric, 1) AS average, COUNT(*) AS n FROM client_feedback WHERE site_id = ? AND period = ?`)
     .get(siteId, month);
 
+  // Miles the site's own patrol vehicles covered, from the odometer readings.
+  const fleet = await db.prepare(`SELECT id FROM equipment WHERE site_id = ? AND category = 'vehicle'`).all(siteId);
+  let vehicles = null;
+  if (fleet.length) {
+    const [y, m] = month.split('-').map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(Math.min(new Date(y, m, 1).getTime(), Date.now()));
+    let miles = 0;
+    for (const v of fleet) miles += await milesBetween(v.id, start, end);
+    vehicles = { count: fleet.length, miles, trips: (await trips({ from: start, to: end, siteId })).length };
+  }
+
   const bySeverity = {};
   for (const i of incidents) bySeverity[i.severity] = (bySeverity[i.severity] || 0) + 1;
 
@@ -107,6 +120,7 @@ export async function siteMonth(siteId, month = monthKey()) {
     visitors, violations, activity, supervisorVisits: visits,
     issues: { reported: issuesReported, fixed: issuesFixed, open: issuesOpen },
     found,
+    vehicles,
     rating: rating?.n ? { average: Number(rating.average), count: n(rating.n) } : null,
   };
 }

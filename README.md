@@ -195,6 +195,15 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   choice is kept per device and applied before the first paint, so there is no
   white flash. Street maps are dimmed to match. Printing is always on white.
 - **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
+- **Signed out to you** — the home screen (web and mobile) lists the keys, radios,
+  firearm or patrol vehicle the officer holds, with **Hand back** for the small items.
+- **Patrol vehicle checks** — before driving a signed-out vehicle the officer does a
+  walk-round check: odometer, fuel, and OK or Problem for each of nine items (lights,
+  brakes, tyres, dash warnings, glass, light bar, safety kit, body, interior). Every item
+  must be answered and a problem needs a note. A failed safety item says "Do not drive"
+  and tells the supervisors. The vehicle goes back with an end check, which records the
+  miles of the stretch. The odometer can never go backwards, and a jump of more than
+  800 miles is refused as a typo.
 - **Confirm a shift** — each upcoming shift in the next 7 days has **Confirm I'll be
   there** (web and mobile, on the schedule and the home screen's next-shift card). A
   day ahead, an officer who has not confirmed gets one push reminder that opens the
@@ -445,6 +454,15 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   sidebar. The **hours against agreements** report spreads the weekly figure over any
   date range and sets the hours worked against it. Administrators edit; supervisors
   read.
+- **Fleet** (Operations → Fleet) — every patrol vehicle: who has it and whether they
+  checked it, the last check, the odometer, miles over the last 7 and 30 days, and the
+  next service against the odometer. A vehicle with a failed safety check is **off the
+  road**: it can't be signed out, and it goes into maintenance when it comes back,
+  until a supervisor signs the repair off. Each vehicle's record has its open defects,
+  a **Record a service** form (the next one defaults to 5,000 miles on), every check
+  and service, and its trips. The alerts inbox raises vehicles off the road (critical),
+  vehicles signed out for 30 minutes without a start check, and services due or
+  overdue. The **patrol vehicle mileage** report covers any date range.
 - **Shift confirmations** — the dashboard's **Not confirmed yet** card lists every
   officer due on post in the next 12 hours who has not confirmed, critical inside 2
   hours, with whether the reminder went out, a tap-to-call number and **Confirmed by
@@ -549,7 +567,7 @@ a PIN — and sees, for their own properties only:
   shifts covered and hours on site, per post; patrols and the share of checkpoints
   scanned; every incident by severity; visitors, parking violations, activity entries,
   supervisor visits and lost property; building issues reported, fixed and still open;
-  and their own rating. The current month runs to today. Laid out to print or save as a
+  the miles the property's own patrol vehicles covered; and their own rating. The current month runs to today. Laid out to print or save as a
   PDF.
 - **Email me** (account menu) — each contact chooses their emails. **Serious incident
   alerts** (on by default): a high or critical incident at their property is emailed
@@ -737,7 +755,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 28 steps and stops it:
+One command reseeds the database, starts the API, runs all 29 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -791,7 +809,9 @@ the server is running corrupts the data directory.
   with the response time. Then an officer asks for a clock-out to be fixed and an
   administrator approves it, an administrator sets a service agreement for a
   month-to-month site, and an officer confirms their next shift, a supervisor records
-  another confirmed by phone and the client sees which shifts are confirmed.
+  another confirmed by phone and the client sees which shifts are confirmed. Last, the
+  officer checks the patrol truck before driving and hands it back with the end check,
+  and a supervisor signs a brake repair off on the Fleet page.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -879,6 +899,14 @@ the server is running corrupts the data directory.
   reminds once a day ahead. A supervisor records a phone confirmation; the client sees
   which shifts are confirmed but not how. Moving a shift, or handing it away and back,
   drops the confirmation.
+- **`test/vehicles.mjs`** — only the officer holding a vehicle checks it, and must
+  answer every item, with a note for a problem. The odometer can't go backwards or
+  jump wildly. A vehicle is handed back with its end check, which gives the miles. A
+  minor fault stays on the road. A failed brake check takes the vehicle off the road:
+  the same fault isn't logged twice, the vehicle goes into maintenance, it can't be
+  signed out again, and it's back once a supervisor signs the repair off. Services
+  reset the due mileage. Alerts, the mileage report and CSV, the client's monthly
+  miles (without the drivers' names) and the audit trail are checked.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every

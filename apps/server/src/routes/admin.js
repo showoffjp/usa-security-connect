@@ -39,6 +39,7 @@ import { pushAsync } from '../services/push.js';
 import { OPEN_SQL } from '../services/dispatch.js';
 import { agreementBoard } from '../services/agreements.js';
 import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confirmations.js';
+import { fleet } from '../services/vehicles.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -243,6 +244,9 @@ adminRouter.get(
     const agreementSummary = (await agreementBoard()).summary;
     // Officers due on post soon who have not said they will be there.
     const unconfirmed = await unconfirmedSoon();
+    // Patrol vehicles off the road, overdue a service, or driven without a check.
+    const vehicles = await fleet();
+    const fleetAttention = vehicles.filter((v) => v.off_road || v.uninspected_overdue || v.service.state === 'overdue').length;
 
     const payrollDue = Number((await db
       .prepare(`SELECT COUNT(*) AS n FROM pay_periods WHERE status = 'open' AND period_end < ?`)
@@ -287,6 +291,7 @@ adminRouter.get(
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
         unconfirmedShifts: unconfirmed.length,
+        fleetAttention,
       },
       unconfirmed,
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
@@ -2347,6 +2352,28 @@ async function buildAlerts(userId) {
     push({ key: `confirm:${c.id}:${c.starts_at}:${c.urgent ? 'urgent' : 'soon'}`, kind: 'confirm', severity: c.urgent ? 'critical' : 'warning',
       at: c.starts_at, link: '/admin#unconfirmed', title: `${c.officer} has not confirmed their shift`,
       detail: `${c.post_name} · ${c.site_name}` });
+  }
+
+  // Patrol vehicles: off the road, signed out and not checked, or due a service.
+  for (const v of await fleet()) {
+    const link = `/admin/fleet?vehicle=${v.id}`;
+    for (const d of v.defects.filter((x) => x.critical)) {
+      push({ key: `vehicle-defect:${d.id}`, kind: 'vehicle', severity: 'critical', at: d.reported_at, link,
+        title: `${v.label} is off the road`, detail: `${d.label} failed inspection${d.reported_by ? ` · ${d.reported_by}` : ''}` });
+    }
+    if (v.uninspected_overdue) {
+      push({ key: `vehicle-uninspected:${v.holder.assignment_id}`, kind: 'vehicle', severity: 'warning', at: v.holder.issued_at, link,
+        title: `${v.holder.name} has not checked ${v.label}`, detail: 'Signed out with no start inspection' });
+    }
+    if (v.service.state === 'overdue' || v.service.state === 'due') {
+      const overdue = v.service.state === 'overdue';
+      push({ key: `vehicle-service:${v.id}:${v.service_due_miles}:${v.service.state}`, kind: 'vehicle', severity: overdue ? 'warning' : 'info',
+        at: v.last_inspection?.created_at || new Date().toISOString(), link,
+        title: overdue ? `${v.label} is overdue a service` : `${v.label} is due a service`,
+        detail: overdue
+          ? `${Math.abs(v.service.milesLeft).toLocaleString('en-US')} miles past the ${v.service_due_miles.toLocaleString('en-US')}-mile service`
+          : `${v.service.milesLeft.toLocaleString('en-US')} miles to go` });
+    }
   }
 
   // An officer asking for one of their punches to be fixed.

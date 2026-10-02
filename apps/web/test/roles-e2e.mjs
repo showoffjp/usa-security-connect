@@ -1126,6 +1126,64 @@ for (const u of STAFF) {
   await officer.context.close();
 }
 
+/* ---------------------------------------- round 19: patrol vehicles --- */
+{
+  console.log('\n--- Patrol vehicles: an officer checks the truck, a supervisor signs a repair off ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await settle(officer.page);
+  const card = officer.page.locator('#held-equipment');
+  log(await card.locator('text=Garage patrol truck').count() === 1, 'the officer home shows the patrol truck signed out to them');
+  async function fillCheck(extra) {
+    const dlg = officer.page.locator('[role="dialog"]');
+    const last = Number(((await dlg.locator('text=/Last reading/').innerText()).match(/([\d,]+) mi/) || [])[1]?.replace(/,/g, ''));
+    await officer.page.getByLabel('Odometer (miles)').fill(String(last + extra));
+    await dlg.locator('label.chip-toggle', { hasText: '3/4' }).click();
+    const rows = dlg.locator('.check-row:not(.plain)');
+    for (let i = 0; i < await rows.count(); i++) await rows.nth(i).locator('label', { hasText: 'OK' }).click();
+    return last;
+  }
+  if (await card.locator('button:has-text("Check before driving")').count()) {
+    await card.locator('button:has-text("Check before driving")').click();
+    await fillCheck(3);
+    await checkScreen('officer: vehicle check', officer.page, officer.problems);
+    await officer.page.click('[role="dialog"] button:has-text("Save the check")');
+    await card.locator('text=/Checked/').waitFor({ timeout: 10000 });
+    log(true, 'the officer checks the truck before driving');
+    await card.locator('button:has-text("End check and hand back")').click();
+    await fillCheck(27);
+    await officer.page.click('[role="dialog"] button:has-text("Save and hand back")');
+    await officer.page.waitForTimeout(1500);
+    log(await officer.page.locator('#held-equipment').count() === 0, 'and hands it back with the end check');
+  } else {
+    log(true, 'the truck was already checked (rerun)');
+  }
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/fleet');
+  await settle(sup.page);
+  await checkScreen('supervisor: fleet', sup.page, sup.problems);
+  const truckRow = sup.page.locator('tr', { hasText: 'Garage patrol truck' });
+  log(await truckRow.locator('text=In the yard').count() === 1, 'the fleet shows the truck back in the yard');
+  const offRoad = sup.page.locator('tr', { has: sup.page.locator('text=Off the road') }).first();
+  if (await offRoad.count()) {
+    await offRoad.locator('button:has-text("Open")').click();
+    await sup.page.waitForSelector('[role="dialog"] #log-h');
+    await checkScreen('supervisor: a vehicle', sup.page, sup.problems);
+    await sup.page.locator('[role="dialog"] button:has-text("Sign off the repair")').first().click();
+    await sup.page.getByLabel('What was repaired').fill('E2E: brake fluid leak repaired, road-tested.');
+    await sup.page.click('[role="dialog"] button:text-is("Sign off")');
+    await sup.page.waitForTimeout(1500);
+    log(await sup.page.locator('[role="dialog"]').getByText('Nothing outstanding.').count() === 1, 'a supervisor signs the brake repair off and the vehicle is back on the road');
+    await sup.page.keyboard.press('Escape');
+  } else {
+    log(true, 'no vehicle off the road (rerun)');
+  }
+  await officer.context.close();
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

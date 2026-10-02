@@ -772,6 +772,47 @@ export const EQUIPMENT_STATUS_LABEL = {
 /** The condition noted when an item changes hands, both ways. */
 export const EQUIPMENT_CONDITIONS = ['good', 'worn', 'damaged'];
 
+/* --------------------------------------------------- patrol vehicles -- */
+
+/**
+ * The walk-round check before and after a stretch with a patrol vehicle. A
+ * critical item failing takes the vehicle off the road until it is fixed; the
+ * rest are noted for the next service.
+ */
+export const VEHICLE_CHECKS = [
+  { key: 'lights', label: 'Headlights, brake lights and indicators', critical: true },
+  { key: 'brakes', label: 'Brakes and parking brake', critical: true },
+  { key: 'tyres', label: 'Tyres: tread, pressure, no damage', critical: true },
+  { key: 'dash', label: 'No warning lights on the dash, no leaks', critical: true },
+  { key: 'glass', label: 'Windscreen, wipers and mirrors', critical: true },
+  { key: 'lightbar', label: 'Light bar, spotlight and PA', critical: false },
+  { key: 'kit', label: 'First aid kit, fire extinguisher, flares', critical: false },
+  { key: 'body', label: 'No new body damage', critical: false },
+  { key: 'interior', label: 'Interior clean, nothing left behind', critical: false },
+];
+
+export const VEHICLE_CHECK_LABEL = Object.fromEntries(VEHICLE_CHECKS.map((c) => [c.key, c.label]));
+
+/** Fuel in quarters of a tank, the way people read a gauge. */
+export const FUEL_LEVELS = ['Empty', '1/4', '1/2', '3/4', 'Full'];
+
+/** Miles between routine services, and how close counts as "due soon". */
+export const VEHICLE_SERVICE_MILES = 5000;
+export const VEHICLE_SERVICE_WARN_MILES = 300;
+/** A reading this far past the last one is almost certainly a typo. */
+export const VEHICLE_MAX_TRIP_MILES = 800;
+/** How long a vehicle can be signed out before its start inspection is missing. */
+export const VEHICLE_INSPECT_GRACE_MINUTES = 30;
+
+/** Where a vehicle stands against its next service, from the odometer. */
+export function serviceState(odometer, dueMiles) {
+  if (odometer == null || dueMiles == null) return { state: 'unknown', milesLeft: null };
+  const left = dueMiles - odometer;
+  if (left <= 0) return { state: 'overdue', milesLeft: left };
+  if (left <= VEHICLE_SERVICE_WARN_MILES) return { state: 'due', milesLeft: left };
+  return { state: 'ok', milesLeft: left };
+}
+
 /**
  * Whether this officer may sign this item out.
  *

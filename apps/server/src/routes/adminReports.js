@@ -18,6 +18,7 @@ import { ROLES, EMPLOYMENT_TYPES, toHours, RULES, VISIT_CHECKS, VISIT_DUE_DAYS, 
 import { visitBoard } from './visits.js';
 import { callSelect, presentCall } from '../services/dispatch.js';
 import { toSql } from '../services/compliance.js';
+import { milesBetween, trips as vehicleTrips } from '../services/vehicles.js';
 import { scope, loadPricedEntries as loadEntries, personPay, groupBy } from '../services/payroll.js';
 
 export const adminReportsRouter = Router();
@@ -106,6 +107,12 @@ export const REPORTS = [
     id: 'calls-by-site',
     title: 'Call response times by site',
     description: 'Calls for service at each site, how fast an officer was on scene, and how many were inside the target for their priority.',
+    group: 'Dispatch',
+  },
+  {
+    id: 'vehicle-mileage',
+    title: 'Patrol vehicle mileage',
+    description: 'Miles each patrol vehicle covered over the range, from the odometer readings at each check, with trips, checks and defects raised.',
     group: 'Dispatch',
   },
 ];
@@ -955,6 +962,81 @@ Object.assign(builders, {
       notes: [
         `Targets from the call to an officer on scene: emergency ${CALL_TARGET_MINUTES[1]} minutes, urgent ${CALL_TARGET_MINUTES[2]}, routine ${CALL_TARGET_MINUTES[3]}.`,
         'Times count only calls an officer reached; a call cancelled or closed by phone has no on-scene time.',
+      ],
+    };
+  },
+
+  async 'vehicle-mileage'(f) {
+    const vehicles = await db
+      .prepare(
+        `SELECT e.id, e.label, e.identifier, e.odometer, s.name AS site FROM equipment e LEFT JOIN sites s ON s.id = e.site_id
+         WHERE e.category = 'vehicle' ${f.siteId ? 'AND e.site_id = ?' : ''} ORDER BY s.name NULLS FIRST, e.label`
+      )
+      .all(...(f.siteId ? [f.siteId] : []));
+    const trips = await vehicleTrips({ from: f.from, to: f.to, siteId: f.siteId, userId: f.userId });
+    const rows = [];
+    for (const v of vehicles) {
+      const counts = await db
+        .prepare(
+          `SELECT COUNT(*) FILTER (WHERE kind <> 'service') AS checks,
+                  COUNT(*) FILTER (WHERE kind = 'service') AS services
+           FROM vehicle_inspections WHERE equipment_id = ? AND created_at >= ? AND created_at < ?`
+        )
+        .get(v.id, toSql(f.from), toSql(f.to));
+      const defects = await db
+        .prepare(`SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE critical) AS critical FROM vehicle_defects WHERE equipment_id = ? AND reported_at >= ? AND reported_at < ?`)
+        .get(v.id, toSql(f.from), toSql(f.to));
+      const mine = trips.filter((t) => t.equipment_id === v.id);
+      rows.push({
+        vehicle: v.label,
+        identifier: v.identifier,
+        site: v.site || 'Company pool',
+        miles: f.userId ? mine.reduce((n, t) => n + t.miles, 0) : await milesBetween(v.id, f.from, f.to),
+        trips: mine.length,
+        avg_trip: mine.length ? Math.round(mine.reduce((n, t) => n + t.miles, 0) / mine.length) : null,
+        checks: Number(counts.checks) || 0,
+        services: Number(counts.services) || 0,
+        defects: Number(defects.n) || 0,
+        critical: Number(defects.critical) || 0,
+        odometer: v.odometer,
+      });
+    }
+    const columns = [
+      C('vehicle', 'Vehicle'),
+      C('identifier', 'Fleet number'),
+      C('site', 'Site'),
+      C('miles', 'Miles', 'int', { sum: true, bar: true }),
+      C('trips', 'Trips', 'int', { sum: true }),
+      C('avg_trip', 'Miles a trip', 'int'),
+      C('checks', 'Checks', 'int', { sum: true }),
+      C('defects', 'Defects raised', 'int', { sum: true }),
+      C('critical', 'Off the road', 'int', { sum: true }),
+      C('services', 'Services', 'int', { sum: true }),
+      C('odometer', 'Odometer now', 'int'),
+    ];
+    const byOfficer = new Map();
+    for (const t of trips) {
+      const o = byOfficer.get(t.officer) || { miles: 0, trips: 0 };
+      o.miles += t.miles;
+      o.trips += 1;
+      byOfficer.set(t.officer, o);
+    }
+    const top = [...byOfficer.entries()].sort((a, b) => b[1].miles - a[1].miles)[0];
+    const totals = sumColumns(rows, columns);
+    return {
+      columns,
+      rows,
+      totals,
+      summary: [
+        { label: 'Vehicles', value: rows.length, type: 'int' },
+        { label: 'Miles', value: totals.miles || 0, type: 'int' },
+        { label: 'Trips', value: totals.trips || 0, type: 'int' },
+        { label: 'Most miles', value: top ? `${top[0]} (${top[1].miles.toLocaleString('en-US')})` : '--' },
+      ],
+      chart: { label: 'vehicle', value: 'miles', type: 'int' },
+      notes: [
+        'Miles come from the odometer readings officers enter at the start and end checks, and at services: nobody types a mileage.',
+        f.userId ? 'Filtered to one officer: miles are the trips they drove.' : 'A trip is one sign-out, from its start check to its end check.',
       ],
     };
   },

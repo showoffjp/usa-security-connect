@@ -135,6 +135,14 @@ export function MonthlyReportView({ data }) {
           <dd>{data.patrols.skipped}</dd>
           <dt>Supervisor visits</dt>
           <dd>{data.supervisorVisits}</dd>
+          {data.vehicles && (
+            <>
+              <dt>Patrol vehicle miles</dt>
+              <dd>
+                {data.vehicles.miles.toLocaleString()} miles over {data.vehicles.trips} patrol{data.vehicles.trips === 1 ? '' : 's'}
+              </dd>
+            </>
+          )}
           <dt>Lost property logged</dt>
           <dd>{data.found}</dd>
           <dt>Building issues</dt>

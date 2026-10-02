@@ -11,6 +11,7 @@ import {
 import { formatDuration, toHours, expiryState, VISIT_CHECKS, CALL_DISPOSITIONS, CALL_DISPOSITION_LABEL } from '@shared/domain.js';
 import GpsPanel from '../../components/GpsPanel.jsx';
 import ConfirmShift from './ConfirmShift.jsx';
+import HeldEquipment from './HeldEquipment.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
 
@@ -745,6 +746,7 @@ export default function HomePage() {
       {/* Changed orders come before anything else on post. */}
       <PostOrdersCard onDuty={onDuty} />
       <ExpiryReminder user={user} />
+      <HeldEquipment />
 
       {/* -------------------------------------------------- post card -- */}
       <div className="card">
