@@ -18,6 +18,7 @@ import { LastVisitCard } from '../../src/LastVisitCard.jsx';
 import { CallsCard } from '../../src/CallsCard.jsx';
 import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { HeldEquipment } from '../../src/HeldEquipment.jsx';
+import { NewCommendations } from '../../src/Commendations.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -189,6 +190,7 @@ export default function HomeScreen() {
         {/* Changed orders and unread pass-down come before anything else on post. */}
         <PostLogCards postLog={postLog} notify={notify} />
         <ExpiryReminder user={user} />
+        <NewCommendations notify={notify} refreshKey={pulls} />
         <HeldEquipment notify={notify} refreshKey={pulls} />
 
         {/* Breaks only make sense while the clock is running. */}

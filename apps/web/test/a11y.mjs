@@ -267,6 +267,15 @@ await page.waitForSelector('[role="dialog"] #log-h');
 await audit(page, 'Fleet: a vehicle', null);
 await page.keyboard.press('Escape');
 
+// Commending an officer from their record.
+await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
+await page.goto(WEB + (await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('a[href^="/admin/employees/"]').getAttribute('href')), { waitUntil: 'networkidle' });
+await page.waitForSelector('#commendations');
+await page.click('#commendations button:has-text("Commend")');
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Employee: commend an officer', null);
+await page.keyboard.press('Escape');
+
 // Adjusting someone's paid time off.
 await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
 await page.goto(WEB + (await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('a[href^="/admin/employees/"]').getAttribute('href')), { waitUntil: 'networkidle' });
@@ -337,6 +346,11 @@ await page.waitForSelector('[role="dialog"] .check-row');
 await page.locator('[role="dialog"] .check-row:not(.plain)').nth(1).locator('label:has-text("Problem")').click();
 await audit(page, 'Officer: vehicle check', null);
 await page.keyboard.press('Escape');
+
+// Marcus has an unread commendation from a client on his home screen.
+await page.goto(`${WEB}/`, { waitUntil: 'networkidle' });
+await page.waitForSelector('#commended');
+await audit(page, 'Officer: commended', null);
 
 // Asking for time off, paid from the balance.
 await page.goto(`${WEB}/profile`, { waitUntil: 'networkidle' });

@@ -8,6 +8,7 @@ import {
 } from '../../components/ui.jsx';
 import { CredentialsDialog } from './EmployeesPage.jsx';
 import PtoCard from './PtoCard.jsx';
+import CommendationsCard from './CommendationsCard.jsx';
 import { ROLE_LABEL, toHours } from '@shared/domain.js';
 
 /** Correcting a punch always records who changed it and why. */
@@ -85,7 +86,7 @@ function AdjustDialog({ entry, onClose, onSaved }) {
 export default function EmployeeDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const toast = useToast();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('time');
@@ -176,6 +177,8 @@ export default function EmployeeDetailPage() {
       </div>
 
       <PtoCard userId={e.id} name={e.full_name} isAdmin={isAdmin} />
+
+      {e.role !== 'admin' && <CommendationsCard userId={e.id} name={e.full_name} isAdmin={isAdmin} isSelf={user?.id === e.id} />}
 
       <div className="grid side-split">
         <div className="card">

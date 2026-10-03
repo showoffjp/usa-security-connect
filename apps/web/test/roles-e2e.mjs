@@ -1290,6 +1290,63 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* ------------------------------------------- round 22: commendations --- */
+{
+  console.log('\n--- Commendations: a client thanks an officer, the officer reads it, a supervisor adds one ---');
+  const client = await watchedPage({ width: 390, height: 844 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  const card = client.page.locator('#commend');
+  await card.waitFor({ timeout: 10000 });
+  const option = await card.locator('select').first().locator('option', { hasText: 'Marcus Bell' }).first().getAttribute('value');
+  await card.locator('select').first().selectOption(option);
+  await card.getByLabel('For').selectOption('customer_service');
+  await card.getByLabel('What they did').fill('E2E: walked a lost delivery driver round to the right dock in the rain.');
+  await checkScreen('client: commend an officer', client.page, client.problems);
+  await card.locator('button:has-text("Send the commendation")').click();
+  await card.locator('text=/will see it/').waitFor({ timeout: 10000 });
+  log(true, 'a client commends Marcus from the portal');
+
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await settle(officer.page);
+  const home = officer.page.locator('#commended');
+  log(await home.locator('text=E2E: walked a lost delivery driver').count() === 1, 'the officer sees it on their home screen');
+  await checkScreen('officer: commended', officer.page, officer.problems);
+  await home.locator('button:has-text("Thanks, got it")').click();
+  await officer.page.waitForTimeout(1200);
+  log(await officer.page.locator('#commended').count() === 0, 'read, it leaves the home screen');
+  await officer.page.goto(WEB + '/profile');
+  await settle(officer.page);
+  log(await officer.page.locator('#commendations', { hasText: 'E2E: walked a lost delivery driver' }).count() === 1, 'and stays on their profile');
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/scorecards');
+  await settle(sup.page);
+  log(await sup.page.locator('th', { hasText: 'Commended' }).count() === 1, 'the scorecards count commendations');
+  await sup.page.goto(WEB + '/admin/employees');
+  await settle(sup.page);
+  await sup.page.locator('a[href^="/admin/employees/"]', { hasText: 'Marcus Bell' }).first().click();
+  await sup.page.waitForSelector('#commendations');
+  const rec = sup.page.locator('#commendations');
+  log(await rec.locator('text=E2E: walked a lost delivery driver').count() === 1, 'the supervisor sees it on the officer\'s record');
+  await rec.locator('button:has-text("Commend")').click();
+  await sup.page.getByLabel('What they did').fill('E2E: perfect handover to nights, log complete and post orders read.');
+  await checkScreen('supervisor: commend an officer', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button:text-is("Commend")');
+  await rec.locator('text=E2E: perfect handover to nights').waitFor({ timeout: 10000 });
+  log(true, 'a supervisor commends the officer too');
+  await checkScreen('supervisor: officer commendations', sup.page, sup.problems);
+  await client.context.close();
+  await officer.context.close();
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);
