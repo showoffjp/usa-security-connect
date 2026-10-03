@@ -348,6 +348,7 @@ export function totalsOf(lines) {
     overtime_minutes: sum(lines, 'overtime_minutes'),
     gross_cents: sum(lines, 'gross_cents'),
     gross_pay: dollars(sum(lines, 'gross_cents')),
+    reimbursements: dollars(sum(lines, 'reimbursement_cents')),
     overtime_pay: dollars(sum(lines, 'overtime_pay_cents')),
     w2: { people: w2.length, hours: toHours(sum(w2, 'minutes')), pay: dollars(sum(w2, 'gross_cents')), cents: sum(w2, 'gross_cents') },
     contractor: {
@@ -364,7 +365,7 @@ export function totalsOf(lines) {
 }
 
 /** What stands between an open period and closing it. Empty means it can close. */
-export function closeBlockers(period, lines) {
+export function closeBlockers(period, lines, { pendingExpenses = 0 } = {}) {
   const blockers = [];
   if (period.status !== PERIOD_STATUS.OPEN) return [{ code: 'closed', message: 'This period is already closed.' }];
   const { end } = bounds(period);
@@ -385,6 +386,14 @@ export function closeBlockers(period, lines) {
     blockers.push({
       code: 'corrections',
       message: `${corrections} time correction${corrections === 1 ? ' is' : 's are'} waiting for a decision.`,
+    });
+  }
+  // A claim for money spent in the period is paid by this close or waits for
+  // the next one; it should not be skipped by accident.
+  if (pendingExpenses) {
+    blockers.push({
+      code: 'expenses',
+      message: `${pendingExpenses} expense claim${pendingExpenses === 1 ? ' is' : 's are'} waiting for a decision.`,
     });
   }
   const unapproved = lines.filter((l) => l.approval.state !== 'approved');

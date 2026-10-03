@@ -1184,6 +1184,60 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* ------------------------------------------ round 20: expense claims --- */
+{
+  console.log('\n--- Expenses: an officer claims, an administrator decides, payroll pays ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1042', '8598');
+  await officer.page.goto(WEB + '/profile');
+  await settle(officer.page);
+  const mine = officer.page.locator('#expenses');
+  log(await mine.locator('text=Toll road to the Pensacola site').count() === 1, 'the officer sees their approved toll claim on their profile');
+  await mine.locator('button:has-text("Claim an expense")').click();
+  const dlg = officer.page.locator('[role="dialog"]');
+  await officer.page.getByLabel('Amount ($)').fill('40');
+  log(await dlg.locator('text=/needs a photo of the receipt/').count() === 1, 'a claim over $25 asks for the receipt');
+  await officer.page.getByLabel('What for').selectOption('mileage');
+  await officer.page.getByLabel('Miles driven').fill('12');
+  log(await dlg.locator('text=/\\$8\\.40/').count() >= 1, 'mileage is priced as it is typed: 12 miles is $8.40');
+  await officer.page.getByLabel('What it was for').fill('E2E: Riverfront to the Harborview relief and back.');
+  await checkScreen('officer: claim an expense', officer.page, officer.problems);
+  await dlg.locator('button:has-text("Claim $8.40")').click();
+  await mine.locator('text=E2E: Riverfront to the Harborview relief').first().waitFor({ timeout: 10000 });
+  log(true, 'the officer claims 12 miles from their phone');
+  await checkScreen('officer: my expenses', officer.page, officer.problems);
+
+  const admin = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(admin.page, '1001', '2468');
+  await admin.page.goto(WEB + '/admin/expenses');
+  await settle(admin.page);
+  await checkScreen('admin: expenses', admin.page, admin.problems);
+  const row = admin.page.locator('li.expense-row', { hasText: 'E2E: Riverfront to the Harborview relief' }).first();
+  log(await row.count() === 1, 'the claim is waiting in the administrator\'s queue');
+  const dwayne = admin.page.locator('li.expense-row', { hasText: 'Dwayne Foster' }).first();
+  await dwayne.locator('button:has-text("View receipt")').click();
+  await admin.page.waitForSelector('[role="dialog"] img', { timeout: 10000 });
+  log(true, 'the administrator opens the receipt photo');
+  await checkScreen('admin: a receipt', admin.page, admin.problems);
+  await admin.page.click('[role="dialog"] button:has-text("Done")');
+  await row.locator('button:has-text("Approve")').click();
+  await admin.page.click('[role="dialog"] button:has-text("Approve $8.40")');
+  await admin.page.waitForTimeout(1500);
+  log(await admin.page.locator('li.expense-row', { hasText: 'E2E: Riverfront to the Harborview relief' }).count() === 0, 'approved, it leaves the waiting list');
+  await admin.page.goto(WEB + '/admin/payroll');
+  await settle(admin.page);
+  const period = await firstLink(admin.page, '^/admin/payroll/\\d+$');
+  await admin.page.goto(WEB + period);
+  await settle(admin.page);
+  log(await admin.page.locator('#reimbursements', { hasText: 'Marcus Bell' }).count() === 1, 'the pay period lists the expenses it pays, apart from gross pay');
+  await checkScreen('admin: pay period with expenses', admin.page, admin.problems);
+  await officer.page.reload();
+  await settle(officer.page);
+  log(await officer.page.locator('#expenses .chip', { hasText: 'Approved' }).count() >= 2, 'and the officer sees it approved');
+  await officer.context.close();
+  await admin.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

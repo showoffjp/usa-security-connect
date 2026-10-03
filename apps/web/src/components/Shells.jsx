@@ -313,6 +313,7 @@ export function AdminShell() {
         { to: '/admin/punches', icon: 'list', label: 'Punch log' },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay', count: counts.pendingCorrections },
         { to: '/admin/payroll', icon: 'dollar', label: 'Payroll', count: counts.payrollDue, urgent: true },
+        { to: '/admin/expenses', icon: 'dollar', label: 'Expenses', count: counts.pendingExpenses },
         { to: '/admin/pay-rates', icon: 'dollar', label: 'Pay rates' },
         { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
         { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },

@@ -7,6 +7,7 @@ import {
   Card, Chip, StatusChip, Empty, Loading, Segmented, Toast, useToastState,
 } from '../../src/ui.jsx';
 import { OpenShifts, MyShiftRequests, ShiftActionSheet } from '../../src/ShiftActions.jsx';
+import { MyExpenses } from '../../src/MyExpenses.jsx';
 import { RecentPunches } from '../../src/RecentPunches.jsx';
 import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { C, S } from '../../src/theme.js';
@@ -105,6 +106,7 @@ export default function ScheduleScreen() {
         />
 
         {view === 'past' && <RecentPunches notify={(message, tone) => setToast({ message, tone })} />}
+        {view === 'past' && <MyExpenses notify={(message, tone) => setToast({ message, tone })} />}
 
         {view === 'open' ? (
           <>

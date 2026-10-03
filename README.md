@@ -218,8 +218,15 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   hours in a closed pay period have been paid, so those go to the office instead.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
-  where they worked, exactly as payroll approved it. A 1099 contractor sees *My
+  where they worked, exactly as payroll approved it, with any expenses paid back alongside. A 1099 contractor sees *My
   payments*, with no overtime.
+- **My expenses** (profile on the web, the **Worked** tab on the phone) — claim back
+  parking, tolls, supplies, meals or miles driven in your own car on the job. Mileage
+  is priced at the IRS rate (70¢ a mile) as it is typed; anything else over $25 needs
+  a photo of the receipt, taken with the phone camera. Claims go back 60 days and up
+  to $1,000 each. The list shows what is waiting, approved (paid with the next payroll),
+  paid and in which pay period, or declined and why; a claim still waiting can be
+  withdrawn.
 - **Broadcasts and training** — priority notices with read/acknowledge receipts, and
   required videos that cannot be marked complete until they have actually been watched.
 - **Post log** — the post's own two logs, opened from the home screen:
@@ -396,7 +403,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   hours and rates, so a later correction shows as **changed since approval**. Closing
   freezes the figures and locks the period against punch corrections and back-dated
   rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
-  1099 separately.
+  1099 separately. Approved expense claims are paid with the close, listed under
+  **Expenses this close pays** and as a Reimbursements column in the register, kept
+  apart from gross pay; a claim waiting for a decision stops the period it falls in
+  closing, and reopening a period hands its claims back.
 - **Reports** — fourteen reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
   hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
@@ -463,6 +473,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   and service, and its trips. The alerts inbox raises vehicles off the road (critical),
   vehicles signed out for 30 minutes without a start check, and services due or
   overdue. The **patrol vehicle mileage** report covers any date range.
+- **Expenses** (Workforce → Expenses) — officers' expense claims: waiting, approved,
+  paid and declined, with totals, the receipt photo, and **Approve** or **Decline**
+  (with a reason the officer reads). Only an administrator decides, and never their
+  own claim; supervisors see the queue. New claims go to the alerts inbox.
 - **Shift confirmations** — the dashboard's **Not confirmed yet** card lists every
   officer due on post in the next 12 hours who has not confirmed, critical inside 2
   hours, with whether the reminder went out, a tap-to-call number and **Confirmed by
@@ -755,7 +769,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 29 steps and stops it:
+One command reseeds the database, starts the API, runs all 30 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -811,7 +825,9 @@ the server is running corrupts the data directory.
   month-to-month site, and an officer confirms their next shift, a supervisor records
   another confirmed by phone and the client sees which shifts are confirmed. Last, the
   officer checks the patrol truck before driving and hands it back with the end check,
-  and a supervisor signs a brake repair off on the Fleet page.
+  and a supervisor signs a brake repair off on the Fleet page. Last, an officer claims
+  miles from their phone, an administrator opens a receipt and approves the claim, and
+  the pay period lists the expenses it pays.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -907,6 +923,13 @@ the server is running corrupts the data directory.
   signed out again, and it's back once a supervisor signs the repair off. Services
   reset the due mileage. Alerts, the mileage report and CSV, the client's monthly
   miles (without the drivers' names) and the audit trail are checked.
+- **`test/expenses.mjs`** — claims: no future dates, nothing older than 60 days or
+  over $1,000, a receipt over $25 (a photo or a PDF, nothing else), mileage priced from
+  the miles. Only the claimant and staff open a receipt, and it is served so nothing in
+  it can run. Supervisors see the queue but only an administrator decides, never their
+  own claim, and a decline needs a reason. In payroll, a claim waiting for a decision
+  holds up the close; approved, it is paid by it, carried in the register, and handed
+  back by a reopen. The alerts, the dashboard count and the audit trail are checked.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -920,7 +943,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 117 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 121 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
@@ -931,11 +954,12 @@ expects it.
 
 The mobile layout audit (`npm run test:mobile --workspace @usc/web`) opens every screen
 as an administrator, an officer and a client, at 360 and 390 pixels wide, in light and
-night mode (273 screens). On each one it measures the layout for faults a phone shows
+night mode (282 screens). On each one it measures the layout for faults a phone shows
 and a desktop hides:
 - text squeezed to a few letters a line;
 - a word wider than its box;
 - anything past the screen edge outside a scroller;
+- text spilling over the side of its card, though still on the screen;
 - controls drawn on top of each other;
 - a page wider than the screen.
 

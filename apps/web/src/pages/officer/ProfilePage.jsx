@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtDateShort, fmtDateTime, fmtTime, fmtMoney } from '../../lib/format.js';
 import { LoadingPage, Icon, Chip, StatusChip, Empty, useToast, Banner } from '../../components/ui.jsx';
 import { ROLE_LABEL, FLAG_LABEL, toHours } from '@shared/domain.js';
+import MyExpenses from './MyExpenses.jsx';
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
@@ -182,6 +183,8 @@ export default function ProfilePage() {
 
       {pay && <MyPay pay={pay} />}
 
+      <MyExpenses />
+
       <div className="card">
         <div className="card-head">
           <h3>Recent clock history</h3>
@@ -299,6 +302,7 @@ function MyPay({ pay }) {
                 <th className="num">Regular</th>
                 <th className="num">Overtime</th>
                 <th className="num">Gross</th>
+                <th className="num">Expenses</th>
                 <th>Where</th>
               </tr>
             </thead>
@@ -322,6 +326,7 @@ function MyPay({ pay }) {
                     )}
                   </td>
                   <td className="num strong">{money(s.gross_pay)}</td>
+                  <td className="num small">{s.reimbursements ? money(s.reimbursements) : '--'}</td>
                   <td className="small">
                     {s.sites.map((x) => (
                       <div key={x.site}>

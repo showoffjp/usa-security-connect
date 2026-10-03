@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, downloadFile } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { fmtDateTime } from '../../lib/format.js';
+import { fmtDate, fmtDateTime } from '../../lib/format.js';
 import { LoadingPage, Empty, Icon, Chip, Stat, Modal, Field, Banner, Segmented, useToast } from '../../components/ui.jsx';
 import { PAY_TYPE_LABEL } from '@shared/domain.js';
 import { money, periodRange, periodState } from './PayrollPage.jsx';
@@ -235,7 +235,7 @@ export default function PayrollPeriodPage() {
       <div className="grid grid-4">
         <Stat label="Officers" value={totals.people} foot={`${totals.approved} approved${totals.changed ? ` · ${totals.changed} changed` : ''}${totals.blocked ? ` · ${totals.blocked} blocked` : ''}`} alert={totals.changed > 0 || totals.blocked > 0} />
         <Stat label="Hours" value={`${totals.hours}h`} foot={totals.overtime_hours ? `${totals.overtime_hours}h overtime` : 'No overtime'} />
-        <Stat label="Gross pay" value={money(totals.gross_pay)} foot={totals.overtime_pay ? `incl. ${money(totals.overtime_pay)} overtime` : ''} />
+        <Stat label="Gross pay" value={money(totals.gross_pay)} foot={[totals.overtime_pay ? `incl. ${money(totals.overtime_pay)} overtime` : '', totals.reimbursements ? `+ ${money(totals.reimbursements)} expenses` : ''].filter(Boolean).join(' · ')} />
         <Stat label="W-2 · 1099" value={money(totals.w2.pay)} foot={`W-2 ${totals.w2.people} · 1099 ${money(totals.contractor.pay)} across ${totals.contractor.people}`} />
       </div>
 
@@ -412,6 +412,51 @@ export default function PayrollPeriodPage() {
           </div>
         )}
       </div>
+
+      {data.expenses && (data.expenses.claims.length > 0 || open) && (
+        <div className="card" id="reimbursements">
+          <div className="card-head wrap">
+            <h3>{open ? 'Expenses this close pays' : 'Expenses paid with this period'}</h3>
+            <span className="small muted">
+              {money(data.expenses.total)} reimbursed, apart from gross pay ·{' '}
+              <Link to="/admin/expenses">All claims</Link>
+            </span>
+          </div>
+          {data.expenses.claims.length === 0 ? (
+            <Empty icon="dollar" title="No approved claims to pay">
+              {data.expenses.pending ? `${data.expenses.pending} claim${data.expenses.pending === 1 ? ' is' : 's are'} waiting for a decision.` : 'Approved expense claims are paid here.'}
+            </Empty>
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <caption className="sr-only">Expense claims reimbursed with this period</caption>
+                <thead>
+                  <tr>
+                    <th>Officer</th>
+                    <th>Date</th>
+                    <th>What for</th>
+                    <th className="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.expenses.claims.map((c) => (
+                    <tr key={c.id}>
+                      <td className="small strong nowrap">{c.officer}</td>
+                      <td className="small nowrap">{fmtDate(c.incurred_on)}</td>
+                      <td className="small">
+                        {c.category_label}
+                        {c.miles != null ? ` · ${c.miles} mi` : ''}
+                        <div className="tiny muted">{c.description}</div>
+                      </td>
+                      <td className="num strong nowrap">{money(c.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {reopening && (
         <ReopenDialog

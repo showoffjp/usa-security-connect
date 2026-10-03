@@ -25,6 +25,7 @@ import {
   CALL_TYPE_LABEL,
   CONFIRM_ALERT_HOURS,
   CONFIRM_AHEAD_DAYS,
+  EXPENSE_CATEGORY_LABEL,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -240,6 +241,8 @@ adminRouter.get(
     const waitingCalls = Number(callRows.find((r) => r.status === 'open')?.n || 0);
     // Officers' requests to fix a punch, waiting on an administrator.
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
+    // Expense claims waiting for an administrator.
+    const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
     // Sites rostered short of their agreement, or with one about to run out.
     const agreementSummary = (await agreementBoard()).summary;
     // Officers due on post soon who have not said they will be there.
@@ -292,6 +295,7 @@ adminRouter.get(
         agreementRenewals: agreementSummary.renewals,
         unconfirmedShifts: unconfirmed.length,
         fleetAttention,
+        pendingExpenses,
       },
       unconfirmed,
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
@@ -2374,6 +2378,18 @@ async function buildAlerts(userId) {
           ? `${Math.abs(v.service.milesLeft).toLocaleString('en-US')} miles past the ${v.service_due_miles.toLocaleString('en-US')}-mile service`
           : `${v.service.milesLeft.toLocaleString('en-US')} miles to go` });
     }
+  }
+
+  // Money an officer spent and has claimed back.
+  for (const c of await db
+    .prepare(
+      `SELECT c.id, c.created_at, c.amount_cents, c.category, u.first_name || ' ' || u.last_name AS officer
+       FROM expense_claims c JOIN users u ON u.id = c.user_id
+       WHERE c.status = 'pending' ORDER BY c.created_at LIMIT 25`
+    )
+    .all()) {
+    push({ key: `expense:${c.id}`, kind: 'expense', severity: 'info', at: c.created_at, link: '/admin/expenses',
+      title: `${c.officer} claimed $${(c.amount_cents / 100).toFixed(2)}`, detail: EXPENSE_CATEGORY_LABEL[c.category] || c.category });
   }
 
   // An officer asking for one of their punches to be fixed.

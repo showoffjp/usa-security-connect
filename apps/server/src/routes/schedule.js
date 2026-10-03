@@ -145,7 +145,9 @@ scheduleRouter.get(
       .prepare(
         `SELECT l.minutes, l.regular_minutes, l.overtime_minutes, l.regular_pay_cents, l.overtime_pay_cents,
                 l.gross_cents, l.entries, l.sites, l.employment_type, l.pay_type,
-                p.id AS period_id, p.period_start, p.period_end, p.closed_at
+                p.id AS period_id, p.period_start, p.period_end, p.closed_at,
+                (SELECT COALESCE(SUM(e.amount_cents), 0) FROM expense_claims e
+                 WHERE e.pay_period_id = p.id AND e.user_id = l.user_id) AS reimbursement_cents
          FROM pay_period_lines l JOIN pay_periods p ON p.id = l.pay_period_id
          WHERE l.user_id = ? AND p.status = 'closed'
          ORDER BY p.period_start DESC LIMIT 26`
@@ -188,6 +190,7 @@ scheduleRouter.get(
         regular_pay: dollars(s.regular_pay_cents),
         overtime_pay: dollars(s.overtime_pay_cents),
         gross_pay: dollars(s.gross_cents),
+        reimbursements: dollars(Number(s.reimbursement_cents) || 0),
         sites: s.sites ? JSON.parse(s.sites) : [],
         employment_type: s.employment_type,
       })),

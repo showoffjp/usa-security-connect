@@ -48,6 +48,7 @@ const OFFICER = [
   ['Post log: lost and found', '/post-log?tab=found'],
   ['Post log: building issues', '/post-log?tab=issues'],
   ['Officer: vehicle check', '/', async (p) => p.click('button:has-text("Check before driving")')],
+  ['Officer: claim an expense', '/profile', async (p) => p.click('#expenses button:has-text("Claim an expense")')],
 ];
 
 const ADMIN = [
@@ -64,6 +65,8 @@ const ADMIN = [
   ['Field visits', '/admin/visits'],
   ['Keys & equipment', '/admin/equipment'],
   ['Fleet', '/admin/fleet'],
+  ['Expenses', '/admin/expenses'],
+  ['Expenses: decline', '/admin/expenses', async (p) => p.locator('li.expense-row button:has-text("Decline")').first().click()],
   ['Fleet: a vehicle', '/admin/fleet', async (p) => p.locator('table.data button[aria-label^="Open "]').first().click()],
   ['Post logs: visitors', '/admin/post-logs'],
   ['Post logs: pass-down', '/admin/post-logs?tab=passdown'],
@@ -208,6 +211,24 @@ function measure() {
         const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
         if (longest.length >= 4 && inner > 0 && w > inner + 2 && !/^https?:|@/.test(longest)) {
           found.push(['word-break', `"${longest}" needs ${Math.round(w)}px in ${name(el)} (${Math.round(inner)}px)`]);
+        }
+      }
+    }
+    // Text spilling out of the side of its card: still on the screen, so the
+    // check below cannot see it, but over the card's edge (or cut off by it).
+    if (own.length >= 3) {
+      const card = el.closest('.card, .stat, .modal, [role="dialog"]');
+      if (card && card !== el) {
+        let scrolls = false;
+        // A card that is itself the scroller (".card.table-wrap") counts too.
+        for (let a = el.parentElement; a; a = a.parentElement) {
+          const ox = getComputedStyle(a).overflowX;
+          if (ox === 'auto' || ox === 'scroll') scrolls = true;
+          if (a === card) break;
+        }
+        const c = card.getBoundingClientRect();
+        if (!scrolls && (r.right > c.right + 1 || r.left < c.left - 1)) {
+          found.push(['spills', `${name(el)} spans ${Math.round(r.left)}..${Math.round(r.right)} past its card (${Math.round(c.left)}..${Math.round(c.right)})`]);
         }
       }
     }

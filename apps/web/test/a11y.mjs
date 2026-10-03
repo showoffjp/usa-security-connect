@@ -89,6 +89,7 @@ const STAFF_PAGES = [
   ['Service agreements', '/admin/agreements'],
   ['Report: hours against agreements', '/admin/reports?report=agreement-hours'],
   ['Fleet', '/admin/fleet'],
+  ['Expenses', '/admin/expenses'],
   ['Report: patrol vehicle mileage', '/admin/reports?report=vehicle-mileage'],
 ];
 
@@ -266,6 +267,17 @@ await page.waitForSelector('[role="dialog"] #log-h');
 await audit(page, 'Fleet: a vehicle', null);
 await page.keyboard.press('Escape');
 
+// An expense claim: its receipt, and declining it with a reason.
+await page.goto(`${WEB}/admin/expenses`, { waitUntil: 'networkidle' });
+await page.locator('li.expense-row', { hasText: 'Dwayne Foster' }).first().locator('button:has-text("View receipt")').click();
+await page.waitForSelector('[role="dialog"] img');
+await audit(page, 'Expenses: a receipt', null);
+await page.keyboard.press('Escape');
+await page.locator('li.expense-row button:has-text("Decline")').first().click();
+await page.waitForSelector('[role="dialog"] textarea');
+await audit(page, 'Expenses: decline', null);
+await page.keyboard.press('Escape');
+
 // The alerts inbox is another dialog from the top bar.
 await page.click('.bell-btn');
 await page.waitForSelector('.alerts-list');
@@ -309,6 +321,13 @@ await page.click('button:has-text("Check before driving")');
 await page.waitForSelector('[role="dialog"] .check-row');
 await page.locator('[role="dialog"] .check-row:not(.plain)').nth(1).locator('label:has-text("Problem")').click();
 await audit(page, 'Officer: vehicle check', null);
+await page.keyboard.press('Escape');
+
+// Claiming an expense from the profile.
+await page.goto(`${WEB}/profile`, { waitUntil: 'networkidle' });
+await page.click('#expenses button:has-text("Claim an expense")');
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Officer: claim an expense', null);
 await page.keyboard.press('Escape');
 
 // The officer's own punches, and asking for one to be fixed.
