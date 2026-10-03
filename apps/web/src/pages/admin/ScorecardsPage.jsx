@@ -123,6 +123,7 @@ export default function ScorecardsPage() {
                       <th>Tours</th>
                       <th>Incidents</th>
                       <th>Flags</th>
+                      <th>Commended</th>
                       <th>Hours</th>
                     </tr>
                   </thead>
@@ -162,6 +163,16 @@ export default function ScorecardsPage() {
                         <td>
                           {c.flags.total ? (
                             <Chip kind={c.flags.critical ? 'danger' : 'warn'}>{c.flags.total}</Chip>
+                          ) : (
+                            <span className="small muted">--</span>
+                          )}
+                        </td>
+                        <td>
+                          {c.commendations?.total ? (
+                            <Chip kind="ok">
+                              {c.commendations.total}
+                              {c.commendations.fromClients ? ` · ${c.commendations.fromClients} by clients` : ''}
+                            </Chip>
                           ) : (
                             <span className="small muted">--</span>
                           )}

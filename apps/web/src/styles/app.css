@@ -1138,6 +1138,8 @@ select { min-width: 0; }
 }
 /* Client notices: the whole text on a big screen, three lines and "Read more" on a phone. */
 .notice-text { white-space: pre-wrap; display: block; }
+/* A commendation: the words, set off by a rule in the colour of good news. */
+.commendation { border-left: 3px solid var(--ok); padding: 2px 0 2px 12px; overflow-wrap: anywhere; }
 .notice-more { display: none; }
 @media (max-width: 620px) {
   .notice-text.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

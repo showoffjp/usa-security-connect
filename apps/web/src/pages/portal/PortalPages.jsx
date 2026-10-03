@@ -341,6 +341,89 @@ function RateUs({ sites }) {
   );
 }
 
+/* -------------------------------------------------- commendations -- */
+
+/** Thank an officer for something they did at the property. */
+function CommendOfficer() {
+  const { data, reload } = usePortal('/client/commendations', []);
+  const [choice, setChoice] = useState('');
+  const [category, setCategory] = useState('customer_service');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  if (!data || data.officers.length === 0) return null;
+  const [officerId, siteId] = choice ? choice.split(':').map(Number) : [null, null];
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const res = await clientApi.post('/client/commendations', { officerId, siteId, category, message: text.trim() });
+      setMessage(`Thank you - ${res.commendation.officer.split(' ')[0]} will see it, and so will their supervisor.`);
+      setText('');
+      setChoice('');
+      reload();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const multiSite = new Set(data.officers.map((o) => o.site_id)).size > 1;
+
+  return (
+    <section className="card" id="commend">
+      <div className="card-head">
+        <h2>Commend an officer</h2>
+        {data.commendations.length > 0 && <Chip kind="ok">{data.commendations.length} sent</Chip>}
+      </div>
+      <form className="card-pad stack-sm" onSubmit={send}>
+        <p className="small muted" style={{ margin: 0 }}>
+          Someone did something worth a thank-you? The officer reads it, and it goes on their record.
+        </p>
+        <div className="grid grid-2">
+          <Field label="Officer">
+            <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+              <option value="">Choose an officer</option>
+              {data.officers.map((o) => (
+                <option key={`${o.id}:${o.site_id}`} value={`${o.id}:${o.site_id}`}>
+                  {o.name}
+                  {multiSite ? ` - ${o.site_name}` : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="For">
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              {data.categories.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="What they did">
+          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={1000} />
+        </Field>
+        <div className="row-between wrap">
+          <span className="small muted" aria-live="polite">{message}</span>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={busy || !choice || text.trim().length < 10}>
+            {busy ? 'Sending...' : 'Send the commendation'}
+          </button>
+        </div>
+        {data.commendations.slice(0, 2).map((c) => (
+          <div key={c.id} className="small" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+            <strong>{c.officer}</strong> · {c.category_label} · {fmtDate(c.created_at)}
+            <div className="muted">{c.message}</div>
+          </div>
+        ))}
+      </form>
+    </section>
+  );
+}
+
 /* ---------------------------------------------------- site contacts -- */
 
 const BLANK_CONTACT = { name: '', role: '', phone: '', email: '', notes: '', afterHours: false };
@@ -617,6 +700,7 @@ export function PortalOverview({ sites }) {
 
             <AgreementHours />
             <RateUs sites={sites} />
+            <CommendOfficer />
             <OfficerContacts />
 
             <section className="card">

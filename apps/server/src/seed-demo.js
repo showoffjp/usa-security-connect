@@ -29,6 +29,7 @@ import { seedConfirmations } from './seed-confirmations.js';
 import { seedVehicles } from './seed-vehicles.js';
 import { seedExpenses } from './seed-expenses.js';
 import { seedPto } from './seed-pto.js';
+import { seedCommendations } from './seed-commendations.js';
 
 /**
  * Load the demo company. With `reset`, every table is emptied first.
@@ -62,7 +63,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'time_off_requests', 'availability', 'certifications', 'device_tokens',
       'shift_requests', 'invoice_queries', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
-      'post_pay_rates', 'pto_ledger', 'expense_claims', 'vehicle_defects', 'vehicle_inspections', 'equipment_assignments', 'equipment', 'coverage_requests',
+      'post_pay_rates', 'commendations', 'pto_ledger', 'expense_claims', 'vehicle_defects', 'vehicle_inspections', 'equipment_assignments', 'equipment', 'coverage_requests',
       'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'applicant_notes', 'applicant_checks', 'applicants', 'service_call_events', 'service_calls', 'time_corrections', 'site_agreements', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
       'users', 'posts', 'sites',
       // The limiter counts live in the database on purpose, so they are shared
@@ -1210,6 +1211,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const expenseSeed = await seedExpenses({ db });
   // Paid time off: balances, what the closed week earned, and leave paid from it.
   const ptoSeed = await seedPto({ db });
+  // Thanks from clients and supervisors.
+  const commendationSeed = await seedCommendations({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1224,7 +1227,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it)
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

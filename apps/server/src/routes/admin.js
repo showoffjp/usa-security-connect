@@ -26,6 +26,7 @@ import {
   CONFIRM_ALERT_HOURS,
   CONFIRM_AHEAD_DAYS,
   EXPENSE_CATEGORY_LABEL,
+  COMMENDATION_LABEL,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -2038,6 +2039,15 @@ adminRouter.get(
     const incidents = byUser(
       await db.prepare(`SELECT user_id, COUNT(*) AS n FROM incidents WHERE occurred_at >= ? AND occurred_at < ? GROUP BY user_id`).all(f, t)
     );
+    // Thanks from clients and supervisors: shown beside the score, never part of it.
+    const commendations = byUser(
+      await db
+        .prepare(
+          `SELECT user_id, COUNT(*) AS n, SUM(CASE WHEN client_user_id IS NOT NULL THEN 1 ELSE 0 END) AS from_clients
+           FROM commendations WHERE created_at >= ? AND created_at < ? GROUP BY user_id`
+        )
+        .all(f, t)
+    );
     const flags = byUser(
       await db
         .prepare(
@@ -2080,6 +2090,7 @@ adminRouter.get(
           tours: { runs: n(tr.runs), completed: n(tr.completed) },
           incidents: n(incidents.get(p.id)?.n),
           flags: { total: n(fl.n), critical: n(fl.critical) },
+          commendations: { total: n(commendations.get(p.id)?.n), fromClients: n(commendations.get(p.id)?.from_clients) },
         };
       })
       .filter((c) => c.shifts.due > 0 || c.hours > 0);
@@ -2092,6 +2103,7 @@ adminRouter.get(
         ['On time %', (c) => c.shifts.onTimePct], ['Avg minutes late', (c) => c.shifts.avgLateMin], ['Hours', 'hours'],
         ['Check-ins answered %', (c) => c.checkIns.answeredPct], ['Check-ins missed', (c) => c.checkIns.missed],
         ['Tours completed', (c) => c.tours.completed], ['Incidents', 'incidents'], ['Flags', (c) => c.flags.total],
+        ['Commendations', (c) => c.commendations.total],
       ], cards);
     }
     const scored = cards.filter((c) => c.score !== null);
@@ -2390,6 +2402,19 @@ async function buildAlerts(userId) {
     .all()) {
     push({ key: `expense:${c.id}`, kind: 'expense', severity: 'info', at: c.created_at, link: '/admin/expenses',
       title: `${c.officer} claimed $${(c.amount_cents / 100).toFixed(2)}`, detail: EXPENSE_CATEGORY_LABEL[c.category] || c.category });
+  }
+
+  // A client contact thanking an officer: worth passing on, so it is in the inbox for a week.
+  for (const c of await db
+    .prepare(
+      `SELECT c.id, c.user_id, c.created_at, c.category, u.first_name || ' ' || u.last_name AS officer, cu.name AS client_name, s.name AS site_name
+       FROM commendations c JOIN users u ON u.id = c.user_id JOIN client_users cu ON cu.id = c.client_user_id
+       LEFT JOIN sites s ON s.id = c.site_id
+       WHERE c.created_at > now() - interval '7 days'`
+    )
+    .all()) {
+    push({ key: `commendation:${c.id}`, kind: 'commendation', severity: 'info', at: c.created_at, link: `/admin/employees/${c.user_id}#commendations`,
+      title: `${c.client_name} commended ${c.officer}`, detail: `${COMMENDATION_LABEL[c.category] || c.category}${c.site_name ? ` · ${c.site_name}` : ''}` });
   }
 
   // An officer asking for one of their punches to be fixed.

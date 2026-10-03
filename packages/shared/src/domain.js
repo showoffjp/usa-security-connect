@@ -805,6 +805,21 @@ export function expenseAmountCents({ category, miles, amountCents }) {
   return Math.round(Number(amountCents) || 0);
 }
 
+/* ----------------------------------------------------- commendations -- */
+
+/** What an officer can be commended for, by a client or a supervisor. */
+export const COMMENDATION_CATEGORIES = ['customer_service', 'vigilance', 'emergency', 'professionalism', 'teamwork', 'above_and_beyond'];
+export const COMMENDATION_LABEL = {
+  customer_service: 'Customer service',
+  vigilance: 'Vigilance',
+  emergency: 'Handled an emergency',
+  professionalism: 'Professionalism',
+  teamwork: 'Teamwork',
+  above_and_beyond: 'Above and beyond',
+};
+/** A client can commend officers who worked their property in this many days. */
+export const COMMEND_WINDOW_DAYS = 60;
+
 /* ---------------------------------------------------- paid time off -- */
 
 /**

@@ -284,6 +284,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   breaks stay paid.
 - **Time-off requests** — pick dates and a reason; overlapping requests are refused,
   and the decision comes back as a notification. On the web too, on the profile page.
+- **Commendations** — thanks from a client or a supervisor: on the home screen (web
+  and phone) until read, with who it is from, the property and what it was for, and
+  every one on the profile.
 - **Paid time off** — W-2 employees paid by the hour earn an hour for every 30 worked,
   credited when the week's payroll closes, up to 80 hours. The balance, what is already
   asked for and what is free to use are on the profile (web) and the Updates tab (phone),
@@ -375,7 +378,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
   25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
   half), clean record 15 (compliance flags per shift). A part with nothing to judge
-  is left out rather than scored as zero. Filter to those under 75.
+  is left out rather than scored as zero. Filter to those under 75. Commendations are
+  counted beside the score (and how many came from clients), never part of it.
+- **Commendations** — on each officer's record: every commendation from a client or
+  a supervisor, with **Commend** to add one (a supervisor never commends themselves).
+  A client's thanks goes to the alerts inbox for a week; an administrator can remove
+  one that should not have been sent, on the audit log.
 - **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
   officers outside their geofence, unfilled shifts, and a strip counting who is off
   post or has not clocked in for a shift that has started.
@@ -583,6 +591,10 @@ a PIN — and sees, for their own properties only:
   with a note for the officer on post. The officer who reported it stays internal.
 - **How are we doing?** — a one-to-five rating for the month per property, changeable
   within the month; a low one needs a reason. Our reply appears underneath.
+- **Commend an officer** — thank an officer who worked the property in the last 60
+  days, for customer service, vigilance, an emergency, professionalism, teamwork or
+  going above and beyond. The officer reads it word for word and it goes on their
+  record; the client sees what they have sent, and nothing else about the officer.
 - **Who our officers call** — the client keeps their property's contacts current,
   and officers on post see the changes at once.
 - **Post orders** — what the officers are instructed to do at each of their posts, the
@@ -782,7 +794,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 31 steps and stops it:
+One command reseeds the database, starts the API, runs all 32 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -843,6 +855,8 @@ the server is running corrupts the data directory.
   the pay period lists the expenses it pays. Then an officer asks for four hours of
   paid time off from their phone, a supervisor sees the balance and approves it, the
   officer's statement shows it spent, and the pay period lists the time off it pays.
+  Last, a client commends an officer from the portal, the officer reads it on their
+  home screen, and a supervisor adds one from the officer's record.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -952,6 +966,12 @@ the server is running corrupts the data directory.
   administrator, with a reason, within the cap. In payroll, a waiting request holds up
   the close; approved, the close pays it at the officer's rate, the register carries it
   (for someone with no hours that week too), and a reopen hands it back.
+- **`test/commendations.mjs`** — a client commends only officers who worked their
+  property lately, at that property, and learns nothing about them but the name; it
+  sets up its own portal contacts so it does not spend the demo logins' sign-in
+  allowance. The officer reads it and marks it seen; officers cannot commend; a
+  supervisor commends anyone but themselves; client thanks reach the alerts inbox and
+  the scorecards count them; only an administrator removes one, on the audit log.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every

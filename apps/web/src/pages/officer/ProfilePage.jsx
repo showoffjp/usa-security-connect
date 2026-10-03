@@ -7,6 +7,7 @@ import { LoadingPage, Icon, Chip, StatusChip, Empty, useToast, Banner } from '..
 import { ROLE_LABEL, FLAG_LABEL, toHours } from '@shared/domain.js';
 import MyExpenses from './MyExpenses.jsx';
 import MyTimeOff from './MyTimeOff.jsx';
+import { MyCommendations } from './Commendations.jsx';
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
@@ -183,6 +184,8 @@ export default function ProfilePage() {
       </div>
 
       {pay && <MyPay pay={pay} />}
+
+      <MyCommendations />
 
       <MyTimeOff />
 

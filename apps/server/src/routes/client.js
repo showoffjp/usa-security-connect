@@ -37,6 +37,8 @@ import { contactsFor, contactSchema } from './siteLog.js';
 import { currentOrders } from '../services/postOrders.js';
 import { siteMonth, monthKey } from '../services/siteMonth.js';
 import { isConfirmed } from '../services/confirmations.js';
+import { COMMENDATION_SELECT, presentCommendation, commendableOfficers } from '../services/commendations.js';
+import { COMMENDATION_CATEGORIES, COMMENDATION_LABEL, COMMEND_WINDOW_DAYS } from '../shared.js';
 
 export const clientRouter = Router();
 
@@ -1171,6 +1173,66 @@ clientRouter.post(
       )
       .get(req.client.id, body.siteId, period);
     res.status(201).json({ feedback: isoFields(row, ['responded_at', 'updated_at']) });
+  })
+);
+
+/* -------------------------------------------------- commendations ---- */
+
+/** The officers this contact can commend, and what they have said before. */
+clientRouter.get(
+  '/commendations',
+  requireClient,
+  wrap(async (req, res) => {
+    const rows = await db
+      .prepare(`${COMMENDATION_SELECT} WHERE c.client_user_id = ? ORDER BY c.created_at DESC LIMIT 30`)
+      .all(req.client.id);
+    res.json({
+      officers: await commendableOfficers(req.clientSiteIds),
+      commendations: rows.map((r) => {
+        const c = presentCommendation(r);
+        // Theirs to read back; nothing else about the officer travels with it.
+        return { id: c.id, officer: c.officer, site_name: c.site_name, category: c.category, category_label: c.category_label, message: c.message, created_at: c.created_at };
+      }),
+      categories: COMMENDATION_CATEGORIES.map((value) => ({ value, label: COMMENDATION_LABEL[value] })),
+      windowDays: COMMEND_WINDOW_DAYS,
+    });
+  })
+);
+
+clientRouter.post(
+  '/commendations',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(
+      z.object({
+        officerId: z.coerce.number().int().positive(),
+        siteId: z.coerce.number().int().positive(),
+        category: z.enum(COMMENDATION_CATEGORIES, { errorMap: () => ({ message: 'Pick what it was for.' }) }),
+        message: z.string().trim().min(10, 'Tell them what they did, in a sentence or two.').max(1000),
+      }),
+      req.body
+    );
+    assertSite(req, body.siteId);
+    // Only someone who has actually worked this property lately.
+    const known = (await commendableOfficers([body.siteId])).some((o) => o.id === body.officerId);
+    if (!known) throw new HttpError(404, 'That officer has not worked this property lately.');
+    // A generous limit, so a slip of the button cannot fill an officer's record.
+    const recent = await db
+      .prepare(`SELECT COUNT(*) AS n FROM commendations WHERE client_user_id = ? AND created_at > now() - interval '1 day'`)
+      .get(req.client.id);
+    if (Number(recent.n) >= 10) throw new HttpError(429, 'That is a lot of thanks for one day. Try again tomorrow.');
+    const info = await db
+      .prepare(`INSERT INTO commendations (user_id, site_id, category, message, client_user_id) VALUES (?,?,?,?,?)`)
+      .run(body.officerId, body.siteId, body.category, body.message, req.client.id);
+    const id = Number(info.lastInsertRowid);
+    await audit(null, 'client.commendation', 'commendation', id, { clientUserId: req.client.id, officerId: body.officerId }, req.ip);
+    pushAsync([body.officerId], {
+      title: 'A client commended you',
+      body: body.message.slice(0, 140),
+      data: { type: 'commendation', id },
+    });
+    const c = presentCommendation(await db.prepare(`${COMMENDATION_SELECT} WHERE c.id = ?`).get(id));
+    res.status(201).json({ commendation: { id: c.id, officer: c.officer, site_name: c.site_name, category: c.category, category_label: c.category_label, message: c.message, created_at: c.created_at } });
   })
 );
 
