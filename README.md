@@ -976,7 +976,7 @@ expects it.
 
 The mobile layout audit (`npm run test:mobile --workspace @usc/web`) opens every screen
 as an administrator, an officer and a client, at 360 and 390 pixels wide, in light and
-night mode (282 screens). On each one it measures the layout for faults a phone shows
+night mode (291 screens). On each one it measures the layout for faults a phone shows
 and a desktop hides:
 - text squeezed to a few letters a line;
 - a word wider than its box;
