@@ -1964,7 +1964,12 @@ adminRouter.get(
 adminRouter.get(
   '/overtime',
   wrap(async (req, res) => {
-    res.json(await overtimeWatch(dateParam(req.query.week, new Date())));
+    // A bare YYYY-MM-DD is a calendar day here, not midnight UTC: read as
+    // UTC, Monday is still Sunday evening anywhere west of Greenwich and the
+    // board would show the week before the one asked for.
+    const day = req.query.week ? parseDay(String(req.query.week)) : new Date();
+    if (!day) throw new HttpError(422, 'That date is not valid.');
+    res.json(await overtimeWatch(day));
   })
 );
 

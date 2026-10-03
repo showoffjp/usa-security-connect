@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, tokenStore } from '../../lib/api.js';
-import { fmtDate, fmtTime, toDateInput, fmtMoney } from '../../lib/format.js';
+import { fmtDate, fmtTime, toDateInput, fmtMoney, toDate } from '../../lib/format.js';
 import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Segmented, useToast,
 } from '../../components/ui.jsx';
@@ -129,7 +129,7 @@ export default function TimesheetsPage() {
             value={toDateInput(range.from)}
             onChange={(e) => {
               setPreset('custom');
-              setRange((r) => ({ ...r, from: new Date(e.target.value) }));
+              setRange((r) => ({ ...r, from: toDate(e.target.value) }));
             }}
             style={{ width: 'auto' }}
           />
@@ -140,7 +140,13 @@ export default function TimesheetsPage() {
             value={toDateInput(range.to)}
             onChange={(e) => {
               setPreset('custom');
-              setRange((r) => ({ ...r, to: new Date(e.target.value) }));
+              // The whole of the last day: a picked date is a local calendar day,
+              // not midnight UTC, which would drop it (and shift it a day west of Greenwich).
+              setRange((r) => {
+                const to = toDate(e.target.value);
+                to.setHours(23, 59, 59, 999);
+                return { ...r, to };
+              });
             }}
             style={{ width: 'auto' }}
           />

@@ -1369,6 +1369,36 @@ for (const u of STAFF) {
     'the schedule opens that shift, warns it is overtime, and suggests officers who could take it');
   await checkScreen('supervisor: shift from the overtime watch', sup.page, sup.problems);
   await sup.context.close();
+
+  // West of Greenwich a picked date must stay the date picked, and the last
+  // day of a range must count. Both slipped a day when read as midnight UTC.
+  const ny = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'America/New_York' });
+  const nyPage = await ny.newPage();
+  await staffSignIn(nyPage, '1002', '3571');
+  await nyPage.goto(WEB + '/admin/timesheets');
+  await settle(nyPage);
+  const today = await nyPage.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await nyPage.getByLabel('From date').fill(today);
+  await nyPage.getByLabel('To date').fill(today);
+  await nyPage.waitForTimeout(1200);
+  log(await nyPage.getByLabel('From date').inputValue() === today && await nyPage.getByLabel('To date').inputValue() === today,
+    'in New York, a date picked on Timesheets stays the date picked', today);
+  const shown = await nyPage.locator('table.data tbody tr').count();
+  log(shown > 0, 'and a range of just today still includes today', `${shown} rows`);
+  const nyWeek = await nyPage.evaluate(async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7);
+    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return next;
+  });
+  await nyPage.goto(WEB + '/admin/overtime');
+  await settle(nyPage);
+  await nyPage.click('button[role="radio"]:has-text("Next week")');
+  await nyPage.waitForTimeout(1500);
+  const [y, m, d] = nyWeek.split('-').map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  log(await nyPage.locator('.stat', { hasText: label }).count() === 1, 'and the overtime watch\'s next week starts on next Monday there too', label);
+  await ny.close();
 }
 
 await browser.close();
