@@ -41,6 +41,7 @@ import { pushAsync } from '../services/push.js';
 import { OPEN_SQL } from '../services/dispatch.js';
 import { agreementBoard } from '../services/agreements.js';
 import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confirmations.js';
+import { overtimeWatch } from '../services/overtime.js';
 import { fleet } from '../services/vehicles.js';
 
 export const adminRouter = Router();
@@ -244,6 +245,7 @@ adminRouter.get(
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
     // Expense claims waiting for an administrator.
     const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
+    const overtimeRisk = (await overtimeWatch()).totals.avoidable;
     // Sites rostered short of their agreement, or with one about to run out.
     const agreementSummary = (await agreementBoard()).summary;
     // Officers due on post soon who have not said they will be there.
@@ -297,6 +299,7 @@ adminRouter.get(
         unconfirmedShifts: unconfirmed.length,
         fleetAttention,
         pendingExpenses,
+        overtimeRisk,
       },
       unconfirmed,
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
@@ -1955,6 +1958,16 @@ adminRouter.get(
   })
 );
 
+/* ------------------------------------------------------ overtime watch --- */
+
+/** Who is heading past 40 hours this payroll week (or the week of ?week=). */
+adminRouter.get(
+  '/overtime',
+  wrap(async (req, res) => {
+    res.json(await overtimeWatch(dateParam(req.query.week, new Date())));
+  })
+);
+
 /* -------------------------------------------------------- scorecards --- */
 
 /**
@@ -2402,6 +2415,14 @@ async function buildAlerts(userId) {
     .all()) {
     push({ key: `expense:${c.id}`, kind: 'expense', severity: 'info', at: c.created_at, link: '/admin/expenses',
       title: `${c.officer} claimed $${(c.amount_cents / 100).toFixed(2)}`, detail: EXPENSE_CATEGORY_LABEL[c.category] || c.category });
+  }
+
+  // Overtime that reassigning a shift still to come could prevent.
+  for (const o of (await overtimeWatch()).officers) {
+    const t = o.tipping_shift;
+    if (o.status !== 'over' || !t || t.already_over || new Date(t.starts_at) <= new Date()) continue;
+    push({ key: `overtime:${o.user_id}:${t.shift_id}`, kind: 'overtime', severity: 'warning', at: new Date().toISOString(), link: '/admin/overtime',
+      title: `${o.name} is heading into overtime`, detail: `${o.projected_hours}h this week · ${o.overtime_hours}h over from ${t.post_name}` });
   }
 
   // A client contact thanking an officer: worth passing on, so it is in the inbox for a week.

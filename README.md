@@ -380,6 +380,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   half), clean record 15 (compliance flags per shift). A part with nothing to judge
   is left out rather than scored as zero. Filter to those under 75. Commendations are
   counted beside the score (and how many came from clients), never part of it.
+- **Overtime watch** (Workforce → Overtime watch) — W-2 officers paid by the hour
+  heading past 40 hours this payroll week or next: hours worked, hours still on the
+  roster, the projection, the overtime hours and the premium they cost, and the shift
+  that first carries each one over the line. **Find cover** opens that shift on the
+  schedule, where the suggested officers put those with hours to spare first.
+  Overtime that a shift not yet started would cause is counted on the sidebar and
+  raised in the alerts inbox. Contractors and salaried staff, who do not earn
+  overtime, are left out.
 - **Commendations** — on each officer's record: every commendation from a client or
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
@@ -794,7 +802,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 32 steps and stops it:
+One command reseeds the database, starts the API, runs all 33 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -856,7 +864,9 @@ the server is running corrupts the data directory.
   paid time off from their phone, a supervisor sees the balance and approves it, the
   officer's statement shows it spent, and the pay period lists the time off it pays.
   Last, a client commends an officer from the portal, the officer reads it on their
-  home screen, and a supervisor adds one from the officer's record.
+  home screen, and a supervisor adds one from the officer's record. Then a supervisor
+  opens the overtime watch for next week and follows **Find cover** to the shift that
+  tips an officer over, which opens with the overtime warning and the suggestions.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -972,6 +982,12 @@ the server is running corrupts the data directory.
   allowance. The officer reads it and marks it seen; officers cannot commend; a
   supervisor commends anyone but themselves; client thanks reach the alerts inbox and
   the scorecards count them; only an administrator removes one, on the audit log.
+- **`test/overtime.mjs`** — builds its own week: a new W-2 officer and a new 1099
+  contractor, each rostered nine hours a day Monday to Friday next week. The officer
+  is projected at 45 hours, 5 over, $50 of premium at time and a half, tipped over by
+  Friday's shift; the contractor is not on the board. A Saturday on top adds to the
+  overtime but Friday is still the shift that tips it. This week's avoidable overtime
+  matches the sidebar count and the alerts inbox; officers cannot read the board.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every

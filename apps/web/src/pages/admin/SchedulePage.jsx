@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtDay, fmtTime, fmtRange, toDateInput, toLocalInput, fmtDate } from '../../lib/format.js';
 import {
@@ -610,7 +611,19 @@ export default function AdminSchedulePage() {
   const [employees, setEmployees] = useState([]);
   const [dialog, setDialog] = useState(null);
   const [bulk, setBulk] = useState(false);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [params] = useSearchParams();
+  // A link can open a week (?week=YYYY-MM-DD) and a shift in it (?shift=id),
+  // which is how the overtime watch hands a scheduler the shift to re-cover.
+  const [weekOffset, setWeekOffset] = useState(() => {
+    const week = params.get('week');
+    if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return 0;
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const target = new Date(`${week}T12:00:00`);
+    return Math.round((target - monday) / (7 * 86400000) - ((target.getDay() + 6) % 7) / 7);
+  });
+  const openedFromLink = useRef(false);
   const [siteFilter, setSiteFilter] = useState('');
   const [view, setView] = useState('officer');
   const [showAll, setShowAll] = useState(false);
@@ -634,6 +647,12 @@ export default function AdminSchedulePage() {
       setShifts(s.shifts);
       setPosts(ref.posts);
       setEmployees(emp.employees);
+      const linked = params.get('shift');
+      if (linked && !openedFromLink.current) {
+        openedFromLink.current = true;
+        const found = s.shifts.find((x) => String(x.id) === linked);
+        if (found) setDialog({ shift: found });
+      }
     } catch (err) {
       toast.error(err.message);
       setShifts([]);

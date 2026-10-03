@@ -1347,6 +1347,30 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* ------------------------------------------- round 23: overtime watch --- */
+{
+  console.log('\n--- Overtime watch: who is heading past 40 hours, and the shift that tips them over ---');
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/overtime');
+  await settle(sup.page);
+  await checkScreen('supervisor: overtime watch', sup.page, sup.problems);
+  await sup.page.click('button[role="radio"]:has-text("Next week")');
+  await sup.page.waitForSelector('table.data tbody tr', { timeout: 10000 });
+  const rows = sup.page.locator('table.data tbody tr');
+  log(await rows.count() >= 1, 'next week lists officers heading into overtime', `${await rows.count()}`);
+  await checkScreen('supervisor: overtime next week', sup.page, sup.problems);
+  const cover = sup.page.locator('a:has-text("Find cover")').first();
+  log(await cover.count() === 1, 'with the shift that tips them over, and a way to cover it');
+  await cover.click();
+  await sup.page.waitForSelector('[role="dialog"]', { timeout: 10000 });
+  await sup.page.locator('[role="dialog"] >> text=Suggested officers').waitFor({ timeout: 15000 });
+  log(await sup.page.locator('[role="dialog"]', { hasText: 'This puts them into overtime' }).count() === 1,
+    'the schedule opens that shift, warns it is overtime, and suggests officers who could take it');
+  await checkScreen('supervisor: shift from the overtime watch', sup.page, sup.problems);
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

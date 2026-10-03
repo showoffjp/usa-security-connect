@@ -90,6 +90,7 @@ const STAFF_PAGES = [
   ['Report: hours against agreements', '/admin/reports?report=agreement-hours'],
   ['Fleet', '/admin/fleet'],
   ['Expenses', '/admin/expenses'],
+  ['Overtime watch', '/admin/overtime'],
   ['Report: patrol vehicle mileage', '/admin/reports?report=vehicle-mileage'],
 ];
 
