@@ -9,7 +9,7 @@ import { C, S } from './theme.js';
 const mi = (n) => (n == null ? '--' : `${Number(n).toLocaleString()} mi`);
 
 /** A row of pill buttons, one of which can be picked. */
-function Pick({ options, value, onChange, label, bad }) {
+export function Pick({ options, value, onChange, label, bad }) {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel={label}>
       {options.map((o) => {

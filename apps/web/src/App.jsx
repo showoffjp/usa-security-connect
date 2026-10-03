@@ -31,6 +31,7 @@ import VisitsPage from './pages/admin/VisitsPage.jsx';
 import DispatchPage from './pages/admin/DispatchPage.jsx';
 import AgreementsPage from './pages/admin/AgreementsPage.jsx';
 import FleetPage from './pages/admin/FleetPage.jsx';
+import ExpensesPage from './pages/admin/ExpensesPage.jsx';
 import HiringPage from './pages/admin/HiringPage.jsx';
 import BroadcastsPage from './pages/admin/BroadcastsPage.jsx';
 import AdminTrainingPage from './pages/admin/TrainingPage.jsx';
@@ -133,6 +134,7 @@ export default function App() {
         <Route path="dispatch" element={<DispatchPage />} />
         <Route path="agreements" element={<AgreementsPage />} />
         <Route path="fleet" element={<FleetPage />} />
+        <Route path="expenses" element={<ExpensesPage />} />
         <Route path="hiring" element={<HiringPage />} />
         <Route path="site-health/:id" element={<SiteMonthPage />} />
         <Route path="broadcasts" element={<BroadcastsPage />} />

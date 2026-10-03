@@ -772,6 +772,39 @@ export const EQUIPMENT_STATUS_LABEL = {
 /** The condition noted when an item changes hands, both ways. */
 export const EQUIPMENT_CONDITIONS = ['good', 'worn', 'damaged'];
 
+/* ---------------------------------------------------- expense claims -- */
+
+/** What an officer can claim back. Mileage is in their own vehicle, priced per mile. */
+export const EXPENSE_CATEGORIES = ['mileage', 'parking', 'tolls', 'supplies', 'meals', 'other'];
+export const EXPENSE_CATEGORY_LABEL = {
+  mileage: 'Mileage (own vehicle)',
+  parking: 'Parking',
+  tolls: 'Tolls',
+  supplies: 'Supplies',
+  meals: 'Meals on a long shift',
+  other: 'Other',
+};
+export const EXPENSE_STATUS_LABEL = {
+  pending: 'Waiting',
+  approved: 'Approved',
+  declined: 'Declined',
+  withdrawn: 'Withdrawn',
+  paid: 'Paid',
+};
+/** The IRS standard mileage rate, in cents a mile. */
+export const MILEAGE_RATE_CENTS = 70;
+/** A receipt is needed above this, for anything but mileage. */
+export const RECEIPT_REQUIRED_CENTS = 2500;
+/** How far back a claim can go, and the most one claim can be for. */
+export const EXPENSE_WINDOW_DAYS = 60;
+export const EXPENSE_MAX_CENTS = 100000;
+
+/** What a claim comes to: mileage is priced from the miles, everything else is what was spent. */
+export function expenseAmountCents({ category, miles, amountCents }) {
+  if (category === 'mileage') return Math.round((Number(miles) || 0) * MILEAGE_RATE_CENTS);
+  return Math.round(Number(amountCents) || 0);
+}
+
 /* --------------------------------------------------- patrol vehicles -- */
 
 /**
