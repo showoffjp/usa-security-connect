@@ -5,7 +5,7 @@ import { Banner, Chip, Empty, Field, Icon, Modal, Stat, useToast } from '../../c
 import { ReceiptView } from '../../components/ReceiptView.jsx';
 import { expenseAmountCents } from '@shared/domain.js';
 
-export const EXPENSE_CHIP = { pending: 'warn', approved: 'brand', paid: 'ok', declined: 'danger', withdrawn: '' };
+export const EXPENSE_CHIP = { pending: 'warn', approved: 'info', paid: 'ok', declined: 'danger', withdrawn: '' };
 const cents = (dollars) => fmtMoney(Math.round((dollars || 0) * 100));
 /** "2026-09-14 to 2026-09-20" as "Sep 14 to Sep 20". */
 export const fmtPaidIn = (s) => (s ? s.split(' to ').map(fmtDateShort).join(' to ') : '');

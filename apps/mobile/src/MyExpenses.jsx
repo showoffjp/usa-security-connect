@@ -8,7 +8,7 @@ import { Banner, Button, Card, Chip, Empty, Field, Input, Sheet } from './ui.jsx
 import { Pick } from './HeldEquipment.jsx';
 import { C, S } from './theme.js';
 
-const TONE = { pending: 'warn', approved: 'brand', paid: 'ok', declined: 'danger', withdrawn: 'plain' };
+const TONE = { pending: 'warn', approved: 'info', paid: 'ok', declined: 'danger', withdrawn: 'plain' };
 const cents = (dollars) => fmtMoney(Math.round((dollars || 0) * 100));
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
