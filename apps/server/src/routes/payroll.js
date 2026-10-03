@@ -25,6 +25,7 @@ import {
   periodLabel,
 } from '../services/payPeriods.js';
 import { periodExpenses, payClaims, unpayClaims } from '../services/expenses.js';
+import { periodPto, periodAccruals, closePto, reopenPto } from '../services/pto.js';
 
 export const payrollRouter = Router();
 payrollRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -52,15 +53,45 @@ async function loadPeriod(id) {
 const linesFor = (period) => (period.status === PERIOD_STATUS.CLOSED ? closedLines(period) : reviewPeriod(period));
 
 /**
- * Expense claims the period pays, set beside each officer's line. They are
- * reimbursements, kept apart from the hours and the gross pay.
+ * What rides beside each officer's pay for hours worked: the expense claims
+ * the period reimburses, the paid time off it pays, and the time off their
+ * hours earn. None of it is part of the hours or the gross pay.
  */
-function withReimbursements(lines, expenses) {
+function withExtras(lines, expenses, pto, accruals) {
   return lines.map((l) => {
     const cents = expenses.byUser.get(l.user_id) || 0;
-    return { ...l, reimbursement_cents: cents, reimbursement: cents / 100 };
+    const ptoCents = pto.byUser.get(l.user_id) || 0;
+    return {
+      ...l,
+      reimbursement_cents: cents,
+      reimbursement: cents / 100,
+      pto_hours: pto.hoursByUser.get(l.user_id) || 0,
+      pto_pay_cents: ptoCents,
+      pto_pay: ptoCents / 100,
+      pto_accrues: accruals.get(l.user_id) || 0,
+    };
   });
 }
+
+/** Everything the review, the close check and the register read. */
+async function periodView(period) {
+  const expenses = await periodExpenses(period);
+  const pto = await periodPto(period);
+  const base = await linesFor(period);
+  const accruals = await periodAccruals(period, base);
+  const lines = withExtras(base, expenses, pto, accruals);
+  const accrued = Math.round([...accruals.values()].reduce((n, h) => n + h, 0) * 100) / 100;
+  return { expenses, pto, lines, accrued };
+}
+
+const presentPto = (pto, accrued) => ({
+  items: pto.items,
+  hours: pto.hours,
+  total: pto.total,
+  pending: pto.pending,
+  unpriced: pto.unpriced,
+  accrued,
+});
 
 /* ------------------------------------------------------------------ list --- */
 
@@ -161,14 +192,17 @@ payrollRouter.get(
   '/periods/:id',
   wrap(async (req, res) => {
     const period = await loadPeriod(req.params.id);
-    const expenses = await periodExpenses(period);
-    const lines = withReimbursements(await linesFor(period), expenses);
+    const { expenses, pto, lines, accrued } = await periodView(period);
     res.json({
       period: present(period),
       lines,
-      totals: { ...totalsOf(lines), reimbursements: expenses.total },
+      totals: { ...totalsOf(lines), reimbursements: expenses.total, pto_pay: pto.total, pto_hours: pto.hours, pto_accrued: accrued },
       expenses: { claims: expenses.claims, total: expenses.total, pending: expenses.pending },
-      blockers: period.status === PERIOD_STATUS.OPEN ? closeBlockers(period, lines, { pendingExpenses: expenses.pending }) : [],
+      pto: presentPto(pto, accrued),
+      blockers:
+        period.status === PERIOD_STATUS.OPEN
+          ? closeBlockers(period, lines, { pendingExpenses: expenses.pending, pendingPto: pto.pending, unpricedPto: pto.unpriced })
+          : [],
     });
   })
 );
@@ -270,12 +304,14 @@ payrollRouter.post(
     // corrected since the page loaded changes a fingerprint and blocks this.
     const lines = await reviewPeriod(period);
     const expenses = await periodExpenses(period);
-    const blockers = closeBlockers(period, lines, { pendingExpenses: expenses.pending });
+    const pto = await periodPto(period);
+    const blockers = closeBlockers(period, lines, { pendingExpenses: expenses.pending, pendingPto: pto.pending, unpricedPto: pto.unpriced });
     if (blockers.length) {
       throw new HttpError(409, blockers.map((b) => b.message).join(' '), { code: 'cannot_close', blockers });
     }
 
     const t = totalsOf(lines);
+    let ptoResult = { paid: 0, credited: 0 };
     await db.transaction(async () => {
       // Approvals left over for people with no hours now have nothing to pay.
       const keep = lines.map((l) => l.user_id);
@@ -301,6 +337,8 @@ payrollRouter.post(
         .run(req.user.id, t.people, t.minutes, t.overtime_minutes, t.gross_cents, t.w2.cents, t.contractor.cents, period.id);
       // Approved expense claims up to the last day are paid with it.
       await payClaims(period);
+      // So is approved paid time off, and the hours worked earn more of it.
+      ptoResult = await closePto(period, lines, pto.items, req.user.id);
     })();
 
     await audit(
@@ -308,7 +346,7 @@ payrollRouter.post(
       'pay_period.closed',
       'pay_period',
       period.id,
-      { period: periodLabel(period), people: t.people, gross_cents: t.gross_cents },
+      { period: periodLabel(period), people: t.people, gross_cents: t.gross_cents, pto_paid: ptoResult.paid, pto_credited: ptoResult.credited },
       req.ip
     );
     const closed = await loadPeriod(period.id);
@@ -332,6 +370,8 @@ payrollRouter.post(
       .run(body.reason, period.id);
     // What it reimbursed waits for the next close again.
     await unpayClaims(period);
+    // Its paid time off waits for the next close, and what it credited is taken back.
+    await reopenPto(period);
     await audit(req.user.id, 'pay_period.reopened', 'pay_period', period.id, { reason: body.reason }, req.ip);
     res.json({ period: present(await loadPeriod(period.id)) });
   })
@@ -356,8 +396,7 @@ payrollRouter.get(
   onlyAdmin,
   wrap(async (req, res) => {
     const period = await loadPeriod(req.params.id);
-    const expenses = await periodExpenses(period);
-    const lines = withReimbursements(await linesFor(period), expenses);
+    const { expenses, pto, lines } = await periodView(period);
     const header = [
       'Classification',
       'Employee code',
@@ -371,6 +410,8 @@ payrollRouter.get(
       'Regular pay',
       'Overtime pay',
       'Gross pay',
+      'PTO hours',
+      'PTO pay',
       'Reimbursements',
       'Sites',
       'Status',
@@ -392,6 +433,8 @@ payrollRouter.get(
             l.regular_pay,
             l.overtime_pay,
             l.gross_pay,
+            l.pto_hours || '',
+            l.pto_pay || '',
             l.reimbursement || '',
             l.sites.map((s) => `${s.site} ${s.hours}h`).join('; '),
             l.approval.state,
@@ -407,7 +450,9 @@ payrollRouter.get(
     rows.push(['Total 1099', '', '', '', '', '', '', '', t.contractor.hours, '', '', t.contractor.pay].map(csvCell).join(','));
     rows.push(['Total', '', '', '', '', '', '', t.overtime_hours, t.hours, '', t.overtime_pay, t.gross_pay].map(csvCell).join(','));
     // Reimbursements are paid with the wages but are not wages: their own total.
-    if (expenses.total) rows.push(['Total reimbursements', '', '', '', '', '', '', '', '', '', '', '', expenses.total].map(csvCell).join(','));
+    // Paid time off is wages for hours not worked: its own total, beside the gross.
+    if (pto.total) rows.push(['Total paid time off', '', '', '', '', '', '', '', '', '', '', '', pto.hours, pto.total].map(csvCell).join(','));
+    if (expenses.total) rows.push(['Total reimbursements', '', '', '', '', '', '', '', '', '', '', '', '', '', expenses.total].map(csvCell).join(','));
     // Claims for officers with no hours in the period are paid all the same.
     const lineUsers = new Set(lines.map((l) => l.user_id));
     const orphans = expenses.claims.filter((c) => !lineUsers.has(c.user_id));
@@ -415,7 +460,16 @@ payrollRouter.get(
       rows.push('');
       rows.push(['Reimbursements to officers with no hours in the period'].map(csvCell).join(','));
       for (const c of orphans) {
-        rows.push(['', c.employee_code, c.officer, '', '', '', '', '', '', '', '', '', c.amount, c.category_label].map(csvCell).join(','));
+        rows.push(['', c.employee_code, c.officer, '', '', '', '', '', '', '', '', '', '', '', c.amount, c.category_label].map(csvCell).join(','));
+      }
+    }
+    // Someone away the whole period has no hours, but their time off is paid.
+    const away = pto.items.filter((i) => !lineUsers.has(i.user_id));
+    if (away.length) {
+      rows.push('');
+      rows.push(['Paid time off to officers with no hours in the period'].map(csvCell).join(','));
+      for (const i of away) {
+        rows.push(['W-2', i.employee_code, i.officer, '', 'hourly', '', '', '', '', '', '', '', i.hours, i.pay, '', `${i.starts_on} to ${i.ends_on}`].map(csvCell).join(','));
       }
     }
 

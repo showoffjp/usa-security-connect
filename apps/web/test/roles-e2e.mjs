@@ -1238,6 +1238,58 @@ for (const u of STAFF) {
   await admin.context.close();
 }
 
+/* ------------------------------------------- round 21: paid time off --- */
+{
+  console.log('\n--- Paid time off: an officer asks for hours from their balance, a supervisor approves ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await officer.page.goto(WEB + '/profile');
+  await settle(officer.page);
+  const card = officer.page.locator('#time-off');
+  log(await card.locator('text=Paid time off').count() >= 1 && await card.locator('text=Free to use').count() === 1, 'the officer sees their paid time off balance');
+  await card.locator('button:has-text("See the statement")').click();
+  log(await card.locator('td', { hasText: 'Earned' }).count() >= 1, 'and the statement of what they earned and used');
+  await card.locator('button:has-text("Request time off")').click();
+  const dlg = officer.page.locator('[role="dialog"]');
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const day = ymd(new Date(Date.now() + 45 * 86400000));
+  await officer.page.getByLabel('First day off').fill(day);
+  await officer.page.getByLabel('Last day off').fill(day);
+  log(await dlg.locator('input[type="checkbox"]').isChecked(), 'paying it from the balance is the default when there is some');
+  await officer.page.getByLabel('Hours from my balance').fill('4');
+  await officer.page.getByLabel('Reason').fill('E2E: dentist in the morning.');
+  await checkScreen('officer: request time off', officer.page, officer.problems);
+  await dlg.locator('button:has-text("Send request")').click();
+  await card.locator('text=4 h from your balance').first().waitFor({ timeout: 10000 });
+  log(true, 'the officer asks for four hours of paid time off');
+  await checkScreen('officer: time off', officer.page, officer.problems);
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/time-off');
+  await settle(sup.page);
+  const row = sup.page.locator('.list-item', { hasText: 'E2E: dentist in the morning.' }).first();
+  log(await row.locator('.chip', { hasText: '4 h paid' }).count() === 1, 'the supervisor sees the hours asked for, with the balance');
+  const marcusHref = await row.locator('a[href^="/admin/employees/"]').getAttribute('href');
+  await row.locator('button:has-text("Approve")').click();
+  log(await sup.page.locator('[role="dialog"]', { hasText: 'from a balance of' }).count() === 1, 'the decision shows the balance it comes from');
+  await checkScreen('supervisor: approve paid time off', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button:text-is("Approve")');
+  await sup.page.waitForTimeout(1500);
+  await sup.page.goto(WEB + marcusHref);
+  await settle(sup.page);
+  log(await sup.page.locator('#pto td', { hasText: 'Used' }).count() >= 1, 'approved, it is spent on the officer\'s statement');
+  await checkScreen('supervisor: employee paid time off', sup.page, sup.problems);
+  await sup.page.goto(WEB + '/admin/payroll');
+  await settle(sup.page);
+  await sup.page.goto(WEB + (await firstLink(sup.page, '^/admin/payroll/\\d+$')));
+  await settle(sup.page);
+  log(await sup.page.locator('#paid-time-off', { hasText: 'Tanisha Greene' }).count() === 1, 'the pay period lists the paid time off its close pays');
+  await checkScreen('supervisor: pay period with paid time off', sup.page, sup.problems);
+  await officer.context.close();
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -805,6 +805,33 @@ export function expenseAmountCents({ category, miles, amountCents }) {
   return Math.round(Number(amountCents) || 0);
 }
 
+/* ---------------------------------------------------- paid time off -- */
+
+/**
+ * Paid time off (PTO). W-2 employees paid by the hour earn it as they work:
+ * an hour for every 30 worked, credited when the week's payroll closes, up to
+ * a balance of 80 hours. They spend it on time-off requests; an approved
+ * request takes the hours off the balance, and the next payroll close pays
+ * them at the officer's rate on the day. Salaried staff and 1099 contractors
+ * do not accrue it.
+ */
+export const PTO_ACCRUAL_WORKED_HOURS = 30;
+export const PTO_CAP_HOURS = 80;
+/** The most hours one day off can use. */
+export const PTO_DAY_MAX_HOURS = 12;
+export const PTO_KIND_LABEL = {
+  accrual: 'Earned',
+  used: 'Used',
+  adjustment: 'Adjusted by the office',
+};
+
+/** Whether someone earns paid time off. */
+export const ptoEligible = (u) => Boolean(u) && (u.employment_type || 'w2') === 'w2' && (u.pay_type || 'hourly') === 'hourly';
+
+/** Hours earned for minutes worked, to the hundredth. */
+export const ptoAccrued = (minutesWorked) =>
+  Math.round(((Number(minutesWorked) || 0) / 60 / PTO_ACCRUAL_WORKED_HOURS) * 100) / 100;
+
 /* --------------------------------------------------- patrol vehicles -- */
 
 /**

@@ -69,7 +69,23 @@ function DecisionDialog({ request, decision, onClose, onSaved }) {
               <dd>{request.reason}</dd>
             </>
           )}
+          <dt>Paid time off</dt>
+          <dd>
+            {request.pto_hours ? (
+              <>
+                {request.pto_hours} h from a balance of {request.pto_balance} h
+              </>
+            ) : (
+              <span className="muted">None: unpaid</span>
+            )}
+          </dd>
         </dl>
+
+        {approving && request.pto_hours > request.pto_balance && (
+          <Banner kind="danger" title="Not enough paid time off">
+            Only {request.pto_balance} hours are left. Deny it, or ask the officer to send it again as unpaid or for fewer hours.
+          </Banner>
+        )}
 
         {approving && (
           <Banner kind="warn">
@@ -161,6 +177,7 @@ export default function TimeOffPage() {
                       </Link>
                       <Chip kind="navy">{TIME_OFF_LABEL[r.type] || r.type}</Chip>
                       <StatusChip value={r.status} />
+                      {r.pto_hours ? <Chip kind="ok">{r.pto_hours} h paid</Chip> : null}
                     </div>
                     <div className="small">
                       {fmtDate(r.starts_on)} - {fmtDate(r.ends_on)}{' '}
@@ -169,6 +186,15 @@ export default function TimeOffPage() {
                       </span>
                     </div>
                     {r.reason && <div className="tiny muted">{r.reason}</div>}
+                    {r.pto_hours ? (
+                      <div className="tiny muted">
+                        {r.pto_paid_in
+                          ? `Paid with the payroll for ${r.pto_paid_in}: $${(r.pto_pay ?? 0).toFixed(2)}`
+                          : r.status === 'approved'
+                            ? 'Paid with the next payroll close'
+                            : `Paid time off balance: ${r.pto_balance} h`}
+                      </div>
+                    ) : null}
                     <div className="tiny muted">Requested {fmtRelative(r.created_at)}</div>
                     {r.decision_note && (
                       <div className="tiny" style={{ color: 'var(--ink-3)' }}>

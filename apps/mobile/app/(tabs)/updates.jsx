@@ -127,6 +127,7 @@ export default function UpdatesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [timeOff, setTimeOff] = useState(false);
   const [myTimeOff, setMyTimeOff] = useState([]);
+  const [pto, setPto] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -140,6 +141,7 @@ export default function UpdatesScreen() {
       setTrainings(t.trainings);
       setThreads(m.threads);
       setMyTimeOff(o.requests);
+      api.get('/time-off/pto').then(setPto, () => setPto(null));
     } catch (err) {
       notify(err.message, 'err');
       setBroadcasts([]);
@@ -304,6 +306,14 @@ export default function UpdatesScreen() {
             </Pressable>
           }
         >
+          {pto?.eligible && (
+            <View style={[S.cardPad, { paddingBottom: 4 }]}>
+              <Text style={[S.small, S.strong]}>{`Paid time off: ${pto.balance} h`}</Text>
+              <Text style={S.tiny}>
+                {`${pto.available} h free to use${pto.pending ? `, ${pto.pending} h asked for` : ''}. An hour for every ${pto.rules.accrualWorkedHours} worked.`}
+              </Text>
+            </View>
+          )}
           {myTimeOff.length === 0 ? (
             <Empty title="No requests">Ask for leave and your supervisor decides in the app.</Empty>
           ) : (
@@ -316,7 +326,7 @@ export default function UpdatesScreen() {
                   <Text style={[S.small, S.strong]}>
                     {fmtDate(r.starts_on)} - {fmtDate(r.ends_on)}
                   </Text>
-                  <Text style={S.tiny}>{r.type}</Text>
+                  <Text style={S.tiny}>{`${r.type}${r.pto_hours ? ` · ${r.pto_hours} h paid` : ''}${r.pto_paid_in ? ` · paid ${r.pto_paid_in}` : ''}`}</Text>
                   {!!r.decision_note && <Text style={S.tiny}>{r.decision_note}</Text>}
                 </View>
                 <StatusChip value={r.status} />

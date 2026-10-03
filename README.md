@@ -283,7 +283,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Meal and rest breaks** — meal time is unpaid and deducted from the shift; rest
   breaks stay paid.
 - **Time-off requests** — pick dates and a reason; overlapping requests are refused,
-  and the decision comes back as a notification.
+  and the decision comes back as a notification. On the web too, on the profile page.
+- **Paid time off** — W-2 employees paid by the hour earn an hour for every 30 worked,
+  credited when the week's payroll closes, up to 80 hours. The balance, what is already
+  asked for and what is free to use are on the profile (web) and the Updates tab (phone),
+  with a statement of every hour earned, used or adjusted. A time-off request can be paid
+  from it: eight hours a day is suggested, at most 12, never more than is free, and never
+  for unpaid leave. The pay stubs show the time off paid and the hours earned.
 - **Push notifications** for urgent broadcasts, check-ins that fall due, and messages.
 
 ### Admin console (web)
@@ -499,7 +505,14 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   reason the officer reads; supervisors see the queue. Waiting requests are in the
   alerts inbox and counted on the sidebar.
 - **Time off** — approve or deny with a note; approving reports how many rostered
-  shifts still need re-covering.
+  shifts still need re-covering. A request paid from a balance shows the hours and the
+  balance they come from; approving spends them, and is refused if they are no longer
+  there. The next payroll close pays it at the officer's rate on the day, listed under
+  **Paid time off this close pays** and in the register's PTO columns, beside (not inside)
+  the pay for hours worked; a paid request waiting for a decision holds the close up,
+  and a reopen hands it back and takes back the hours the close credited. Each
+  employee's record has their balance and statement, and an administrator can
+  **Adjust** it with a reason (a carry-over, a payout, a mistake), within 0 to 80 hours.
 - **Licensing &amp; certifications** — one board for state licences, certifications and
   contractor insurance, showing what has expired and what lapses in the next 30/60/90
   days.
@@ -769,7 +782,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 30 steps and stops it:
+One command reseeds the database, starts the API, runs all 31 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -827,7 +840,9 @@ the server is running corrupts the data directory.
   officer checks the patrol truck before driving and hands it back with the end check,
   and a supervisor signs a brake repair off on the Fleet page. Last, an officer claims
   miles from their phone, an administrator opens a receipt and approves the claim, and
-  the pay period lists the expenses it pays.
+  the pay period lists the expenses it pays. Then an officer asks for four hours of
+  paid time off from their phone, a supervisor sees the balance and approves it, the
+  officer's statement shows it spent, and the pay period lists the time off it pays.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -930,6 +945,13 @@ the server is running corrupts the data directory.
   own claim, and a decline needs a reason. In payroll, a claim waiting for a decision
   holds up the close; approved, it is paid by it, carried in the register, and handed
   back by a reopen. The alerts, the dashboard count and the audit trail are checked.
+- **`test/pto.mjs`** — paid time off: what the closed week credited, to hourly W-2
+  staff and no contractor; requests refused for more than is free, for unpaid leave or
+  for more than 12 hours a day; approving spends the hours and is refused once they
+  are gone; deleting gives them back unless they were paid; adjustments only by an
+  administrator, with a reason, within the cap. In payroll, a waiting request holds up
+  the close; approved, the close pays it at the officer's rate, the register carries it
+  (for someone with no hours that week too), and a reopen hands it back.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -943,7 +965,7 @@ the server is running corrupts the data directory.
   after a corrected punch, pay agreeing with the reports to the cent, closing, and every
   way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 121 screens
+The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 126 screens
 and dialogs through axe-core, signed in as an administrator, an officer on post and a
 client, then audits eleven screens again in night mode with colour contrast enforced
 (the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
@@ -960,13 +982,17 @@ and a desktop hides:
 - a word wider than its box;
 - anything past the screen edge outside a scroller;
 - text spilling over the side of its card, though still on the screen;
+- a control with something else lying over its middle, so a tap lands on the other thing;
 - controls drawn on top of each other;
 - a page wider than the screen.
 
 Set `USC_SHOT_DIR` to also save a full-page screenshot of every screen. Its first run
 found 271 faults, including dashboard rows read one letter per line. Others were site
 pickers and date rows pushing pages sideways, table columns squeezed to a word a line,
-and a client tab bar with every label cut off. All are fixed.
+and a client tab bar with every label cut off. All are fixed. The check for something lying over a
+control found the toast area: even with no message showing it left an invisible strip
+across the middle of dialog buttons on a phone, so a tap there did nothing. It now lets
+taps through.
 
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.

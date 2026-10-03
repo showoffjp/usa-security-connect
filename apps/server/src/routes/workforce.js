@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import {
   ROLES,
@@ -9,9 +9,14 @@ import {
   CERTIFICATION_TYPES,
   TIME_OFF_TYPES,
   expiryState,
+  PTO_CAP_HOURS,
+  PTO_DAY_MAX_HOURS,
+  ptoEligible,
 } from '../shared.js';
 import { toSql } from '../services/compliance.js';
 import { pushAsync, supervisorIds } from '../services/push.js';
+import { ptoBalance, ptoHistory, daysIn, PTO_RULES } from '../services/pto.js';
+import { dayString } from '../services/payPeriods.js';
 
 /* ========================================================= certifications === */
 
@@ -236,17 +241,91 @@ timeOffRouter.get(
     const rows = (await db
       .prepare(
         `SELECT t.*, u.employee_code, u.first_name || ' ' || u.last_name AS officer,
-                d.first_name || ' ' || d.last_name AS decided_by_name
+                d.first_name || ' ' || d.last_name AS decided_by_name,
+                (SELECT COALESCE(SUM(l.hours), 0) FROM pto_ledger l WHERE l.user_id = t.user_id) AS pto_balance,
+                pp.period_start AS pto_period_start, pp.period_end AS pto_period_end
          FROM time_off_requests t
          JOIN users u ON u.id = t.user_id
          LEFT JOIN users d ON d.id = t.decided_by
+         LEFT JOIN pay_periods pp ON pp.id = t.pto_paid_period_id
          ${all ? '' : 'WHERE t.user_id = ?'}
          ${req.query.status ? (all ? 'WHERE' : 'AND') + ' t.status = ?' : ''}
          ORDER BY t.starts_on DESC LIMIT 200`
       )
       .all(...(all ? [] : [req.user.id]), ...(req.query.status ? [req.query.status] : [])));
 
-    res.json({ requests: rows.map((r) => isoFields(r, ['created_at', 'decided_at'])) });
+    res.json({ requests: rows.map(presentTimeOff) });
+  })
+);
+
+/** A request as the screens read it: dates as days, paid time off as numbers. */
+function presentTimeOff(r) {
+  const out = isoFields(r, ['created_at', 'decided_at']);
+  out.starts_on = dayString(r.starts_on);
+  out.ends_on = dayString(r.ends_on);
+  out.pto_hours = r.pto_hours == null ? null : Number(r.pto_hours);
+  out.pto_pay = r.pto_pay_cents == null ? null : r.pto_pay_cents / 100;
+  if ('pto_balance' in r) out.pto_balance = Math.round(Number(r.pto_balance) * 100) / 100;
+  out.pto_paid_in = r.pto_period_start ? `${dayString(r.pto_period_start)} to ${dayString(r.pto_period_end)}` : null;
+  delete out.pto_period_start;
+  delete out.pto_period_end;
+  return out;
+}
+
+async function ptoPerson(userId) {
+  const u = await db.prepare(`SELECT id, employment_type, pay_type FROM users WHERE id = ?`).get(userId);
+  if (!u) throw new HttpError(404, 'Employee not found.');
+  return u;
+}
+
+/** My paid time off: the balance, the rules and the statement. */
+timeOffRouter.get(
+  '/pto',
+  wrap(async (req, res) => {
+    const u = await ptoPerson(req.user.id);
+    res.json({ eligible: ptoEligible(u), ...(await ptoBalance(u.id)), rules: PTO_RULES, history: await ptoHistory(u.id) });
+  })
+);
+
+/** Someone's paid time off, for the people who approve it. */
+timeOffRouter.get(
+  '/pto/:userId',
+  requireRole(ROLES.SUPERVISOR),
+  wrap(async (req, res) => {
+    const u = await ptoPerson(idParam(req.params.userId, 'employee'));
+    res.json({ eligible: ptoEligible(u), ...(await ptoBalance(u.id)), rules: PTO_RULES, history: await ptoHistory(u.id) });
+  })
+);
+
+const adjustSchema = z.object({
+  hours: z.coerce
+    .number({ invalid_type_error: 'How many hours?' })
+    .refine((h) => h !== 0, 'How many hours?')
+    .refine((h) => Math.abs(h) <= 200, 'An adjustment is at most 200 hours.'),
+  note: z.string().trim().min(5, 'Say why, for the record.').max(300),
+});
+
+/** The office corrects a balance: a carry-over, a payout on leaving, a mistake. */
+timeOffRouter.post(
+  '/pto/:userId/adjust',
+  requireRole(ROLES.ADMIN),
+  wrap(async (req, res) => {
+    const body = parse(adjustSchema, req.body);
+    const u = await ptoPerson(idParam(req.params.userId, 'employee'));
+    if (!ptoEligible(u)) throw new HttpError(409, 'Only W-2 employees paid by the hour have paid time off.');
+    const hours = Math.round(body.hours * 100) / 100;
+    const { balance } = await ptoBalance(u.id);
+    if (balance + hours < 0) {
+      throw new HttpError(422, `That would take the balance below nothing: it is ${balance} h.`, [{ field: 'hours', message: `At most -${balance}.` }]);
+    }
+    if (balance + hours > PTO_CAP_HOURS) {
+      throw new HttpError(422, `The balance is capped at ${PTO_CAP_HOURS} h.`, [{ field: 'hours', message: `At most ${Math.round((PTO_CAP_HOURS - balance) * 100) / 100}.` }]);
+    }
+    await db
+      .prepare(`INSERT INTO pto_ledger (user_id, kind, hours, note, created_by) VALUES (?, 'adjustment', ?, ?, ?)`)
+      .run(u.id, hours, body.note, req.user.id);
+    await audit(req.user.id, 'pto.adjusted', 'user', u.id, { hours, note: body.note }, req.ip);
+    res.status(201).json({ ...(await ptoBalance(u.id)), history: await ptoHistory(u.id) });
   })
 );
 
@@ -256,6 +335,7 @@ const timeOffSchema = z
     startsOn: z.string().min(1),
     endsOn: z.string().min(1),
     reason: z.string().trim().max(1000).optional(),
+    ptoHours: z.coerce.number().positive('How many hours?').max(1000).optional(),
   })
   .refine((d) => new Date(d.endsOn) >= new Date(d.startsOn), {
     message: 'The end date cannot be before the start date.',
@@ -277,12 +357,29 @@ timeOffRouter.post(
       .get(req.user.id, body.endsOn, body.startsOn));
     if (clash) throw new HttpError(409, 'You already have a request covering those dates.');
 
+    // Paid from the balance: only for those who earn it, never for unpaid
+    // leave, no more than a long day each day, and no more than is left.
+    const ptoHours = body.ptoHours ? Math.round(body.ptoHours * 100) / 100 : null;
+    if (ptoHours) {
+      const u = await ptoPerson(req.user.id);
+      if (!ptoEligible(u)) throw new HttpError(422, 'Paid time off is for W-2 employees paid by the hour.', [{ field: 'ptoHours', message: 'Not for your pay type.' }]);
+      if (body.type === 'unpaid') throw new HttpError(422, 'Unpaid leave is not paid from your balance.', [{ field: 'ptoHours', message: 'Pick another type, or leave this empty.' }]);
+      const days = daysIn(body.startsOn, body.endsOn);
+      if (ptoHours > days * PTO_DAY_MAX_HOURS) {
+        throw new HttpError(422, `That is more than ${PTO_DAY_MAX_HOURS} hours a day.`, [{ field: 'ptoHours', message: `At most ${days * PTO_DAY_MAX_HOURS} for ${days} day${days === 1 ? '' : 's'}.` }]);
+      }
+      const { available } = await ptoBalance(u.id);
+      if (ptoHours > available) {
+        throw new HttpError(422, `You have ${available} hours of paid time off to use.`, [{ field: 'ptoHours', message: `At most ${available}.` }]);
+      }
+    }
+
     const info = (await db
       .prepare(
-        `INSERT INTO time_off_requests (user_id, type, starts_on, ends_on, reason)
-         VALUES (?,?,?,?,?)`
+        `INSERT INTO time_off_requests (user_id, type, starts_on, ends_on, reason, pto_hours)
+         VALUES (?,?,?,?,?,?)`
       )
-      .run(req.user.id, body.type, body.startsOn, body.endsOn, body.reason ?? null));
+      .run(req.user.id, body.type, body.startsOn, body.endsOn, body.reason ?? null, ptoHours));
 
     await audit(req.user.id, 'timeoff.requested', 'time_off_request', Number(info.lastInsertRowid), body, req.ip);
 
@@ -293,7 +390,7 @@ timeOffRouter.post(
     });
 
     res.status(201).json({
-      request: (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(info.lastInsertRowid)),
+      request: presentTimeOff(await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(info.lastInsertRowid)),
     });
   })
 );
@@ -312,11 +409,27 @@ timeOffRouter.patch(
     if (!request) throw new HttpError(404, 'Request not found.');
     if (request.status !== 'pending') throw new HttpError(409, 'That request has already been decided.');
 
-    (await db.prepare(
-      `UPDATE time_off_requests
-       SET status = ?, decided_by = ?, decided_at = datetime('now'), decision_note = ?
-       WHERE id = ?`
-    ).run(body.status, req.user.id, body.note ?? null, request.id));
+    // Approving paid time off spends it, so there has to be enough to spend.
+    const ptoHours = request.pto_hours == null ? 0 : Number(request.pto_hours);
+    if (body.status === 'approved' && ptoHours > 0) {
+      const { balance } = await ptoBalance(request.user_id);
+      if (ptoHours > balance) {
+        throw new HttpError(409, `Only ${balance} hours of paid time off are left for this; ${ptoHours} were asked for.`);
+      }
+    }
+
+    await db.transaction(async () => {
+      await db.prepare(
+        `UPDATE time_off_requests
+         SET status = ?, decided_by = ?, decided_at = datetime('now'), decision_note = ?
+         WHERE id = ?`
+      ).run(body.status, req.user.id, body.note ?? null, request.id);
+      if (body.status === 'approved' && ptoHours > 0) {
+        await db
+          .prepare(`INSERT INTO pto_ledger (user_id, kind, hours, time_off_request_id, created_by) VALUES (?, 'used', ?, ?, ?)`)
+          .run(request.user_id, -ptoHours, request.id, req.user.id);
+      }
+    })();
 
     // An approved request with shifts already on the roster needs a human to
     // re-cover them, so say so plainly rather than silently unassigning.
@@ -337,7 +450,7 @@ timeOffRouter.patch(
     });
 
     res.json({
-      request: (await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(request.id)),
+      request: presentTimeOff(await db.prepare(`SELECT * FROM time_off_requests WHERE id = ?`).get(request.id)),
       shiftsToRecover: body.status === 'approved' ? affected : 0,
     });
   })
@@ -354,6 +467,11 @@ timeOffRouter.delete(
     if (request.status !== 'pending' && !atLeast(req.user.role, ROLES.ADMIN)) {
       throw new HttpError(409, 'That request has already been decided.');
     }
+    // Paid out already: taking it away now would leave the payroll wrong.
+    if (request.pto_paid_period_id) {
+      throw new HttpError(409, 'This paid time off has been paid with a closed payroll. Reopen that pay period first.');
+    }
+    // Deleting it hands its hours back: the ledger line goes with it.
     (await db.prepare(`DELETE FROM time_off_requests WHERE id = ?`).run(request.id));
     res.json({ ok: true });
   })

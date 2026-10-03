@@ -6,6 +6,7 @@ import { fmtDate, fmtDateShort, fmtDateTime, fmtTime, fmtMoney } from '../../lib
 import { LoadingPage, Icon, Chip, StatusChip, Empty, useToast, Banner } from '../../components/ui.jsx';
 import { ROLE_LABEL, FLAG_LABEL, toHours } from '@shared/domain.js';
 import MyExpenses from './MyExpenses.jsx';
+import MyTimeOff from './MyTimeOff.jsx';
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
@@ -183,6 +184,8 @@ export default function ProfilePage() {
 
       {pay && <MyPay pay={pay} />}
 
+      <MyTimeOff />
+
       <MyExpenses />
 
       <div className="card">
@@ -302,6 +305,7 @@ function MyPay({ pay }) {
                 <th className="num">Regular</th>
                 <th className="num">Overtime</th>
                 <th className="num">Gross</th>
+                <th className="num">Time off</th>
                 <th className="num">Expenses</th>
                 <th>Where</th>
               </tr>
@@ -326,7 +330,12 @@ function MyPay({ pay }) {
                     )}
                   </td>
                   <td className="num strong">{money(s.gross_pay)}</td>
-                  <td className="num small">{s.reimbursements ? money(s.reimbursements) : '--'}</td>
+                  <td className="num small">
+                {s.pto_pay ? money(s.pto_pay) : '--'}
+                {s.pto_hours ? <div className="tiny muted">{s.pto_hours} h paid</div> : null}
+                {s.pto_earned ? <div className="tiny muted">+{s.pto_earned} h earned</div> : null}
+              </td>
+              <td className="num small">{s.reimbursements ? money(s.reimbursements) : '--'}</td>
                   <td className="small">
                     {s.sites.map((x) => (
                       <div key={x.site}>
