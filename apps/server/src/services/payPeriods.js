@@ -365,7 +365,7 @@ export function totalsOf(lines) {
 }
 
 /** What stands between an open period and closing it. Empty means it can close. */
-export function closeBlockers(period, lines, { pendingExpenses = 0 } = {}) {
+export function closeBlockers(period, lines, { pendingExpenses = 0, pendingPto = 0, unpricedPto = 0 } = {}) {
   const blockers = [];
   if (period.status !== PERIOD_STATUS.OPEN) return [{ code: 'closed', message: 'This period is already closed.' }];
   const { end } = bounds(period);
@@ -394,6 +394,20 @@ export function closeBlockers(period, lines, { pendingExpenses = 0 } = {}) {
     blockers.push({
       code: 'expenses',
       message: `${pendingExpenses} expense claim${pendingExpenses === 1 ? ' is' : 's are'} waiting for a decision.`,
+    });
+  }
+  // Time off asked to be paid from the balance, starting in the period, and
+  // not yet decided: approved, this close pays it.
+  if (pendingPto) {
+    blockers.push({
+      code: 'pto',
+      message: `${pendingPto} paid time-off request${pendingPto === 1 ? ' is' : 's are'} waiting for a decision.`,
+    });
+  }
+  if (unpricedPto) {
+    blockers.push({
+      code: 'pto_rate',
+      message: `${unpricedPto} paid time-off request${unpricedPto === 1 ? ' has' : 's have'} no hourly rate to pay it at.`,
     });
   }
   const unapproved = lines.filter((l) => l.approval.state !== 'approved');

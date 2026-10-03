@@ -7,6 +7,7 @@ import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Stat, Modal, Field, useToast, Segmented,
 } from '../../components/ui.jsx';
 import { CredentialsDialog } from './EmployeesPage.jsx';
+import PtoCard from './PtoCard.jsx';
 import { ROLE_LABEL, toHours } from '@shared/domain.js';
 
 /** Correcting a punch always records who changed it and why. */
@@ -173,6 +174,8 @@ export default function EmployeeDetailPage() {
           foot="Per hour"
         />
       </div>
+
+      <PtoCard userId={e.id} name={e.full_name} isAdmin={isAdmin} />
 
       <div className="grid side-split">
         <div className="card">

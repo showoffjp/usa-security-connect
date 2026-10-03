@@ -267,6 +267,21 @@ await page.waitForSelector('[role="dialog"] #log-h');
 await audit(page, 'Fleet: a vehicle', null);
 await page.keyboard.press('Escape');
 
+// Adjusting someone's paid time off.
+await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
+await page.goto(WEB + (await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('a[href^="/admin/employees/"]').getAttribute('href')), { waitUntil: 'networkidle' });
+await page.waitForSelector('#pto');
+await audit(page, 'Employee: paid time off', null);
+await page.click('#pto button:has-text("Adjust")');
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Employee: adjust paid time off', null);
+await page.keyboard.press('Escape');
+await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
+await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click();
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Time off: approve paid time off', null);
+await page.keyboard.press('Escape');
+
 // An expense claim: its receipt, and declining it with a reason.
 await page.goto(`${WEB}/admin/expenses`, { waitUntil: 'networkidle' });
 await page.locator('li.expense-row', { hasText: 'Dwayne Foster' }).first().locator('button:has-text("View receipt")').click();
@@ -321,6 +336,15 @@ await page.click('button:has-text("Check before driving")');
 await page.waitForSelector('[role="dialog"] .check-row');
 await page.locator('[role="dialog"] .check-row:not(.plain)').nth(1).locator('label:has-text("Problem")').click();
 await audit(page, 'Officer: vehicle check', null);
+await page.keyboard.press('Escape');
+
+// Asking for time off, paid from the balance.
+await page.goto(`${WEB}/profile`, { waitUntil: 'networkidle' });
+await page.click('#time-off button:has-text("See the statement")');
+await audit(page, 'Officer: time off and statement', null);
+await page.click('#time-off button:has-text("Request time off")');
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Officer: request time off', null);
 await page.keyboard.press('Escape');
 
 // Claiming an expense from the profile.

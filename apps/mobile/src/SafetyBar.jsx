@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, Text, View, Vibration } from 'react-native';
+import { Alert, Linking, Pressable, Switch, Text, View, Vibration } from 'react-native';
 import { api } from './api.js';
 import { getPosition, geoBody } from './geo.js';
 import { fmtTime } from './format.js';
@@ -229,8 +229,24 @@ export function BreakControl({ notify, onChanged }) {
 export function TimeOffSheet({ visible, onClose, notify }) {
   const [form, setForm] = useState({ type: 'vacation', startsOn: '', endsOn: '', reason: '' });
   const [busy, setBusy] = useState(false);
+  const [pto, setPto] = useState(null);
+  const [paid, setPaid] = useState(true);
+  const [hours, setHours] = useState('');
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // The paid time off there is to use, read each time the sheet opens.
+  useEffect(() => {
+    if (visible) api.get('/time-off/pto').then(setPto, () => setPto(null));
+  }, [visible]);
+
+  const valid = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const days = valid(form.startsOn) && valid(form.endsOn)
+    ? Math.max(0, Math.round((new Date(`${form.endsOn}T12:00:00`) - new Date(`${form.startsOn}T12:00:00`)) / 86400000) + 1)
+    : 0;
+  const canPay = Boolean(pto?.eligible) && form.type !== 'unpaid' && pto.available > 0;
+  const suggested = canPay ? Math.min(Math.max(days, 1) * 8, pto.available) : 0;
+  const ptoHours = canPay && paid ? (hours === '' ? suggested : Number(hours)) : 0;
 
   const submit = async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.startsOn) || !/^\d{4}-\d{2}-\d{2}$/.test(form.endsOn)) {
@@ -239,9 +255,10 @@ export function TimeOffSheet({ visible, onClose, notify }) {
     }
     setBusy(true);
     try {
-      await api.post('/time-off', form);
+      await api.post('/time-off', { ...form, ptoHours: ptoHours > 0 ? ptoHours : undefined });
       notify?.('Request sent to your supervisor.', 'ok');
       setForm({ type: 'vacation', startsOn: '', endsOn: '', reason: '' });
+      setHours('');
       onClose();
     } catch (err) {
       notify?.(err.message, 'err');
@@ -285,6 +302,22 @@ export function TimeOffSheet({ visible, onClose, notify }) {
       <Field label="Last day off" hint="YYYY-MM-DD" required>
         <Input value={form.endsOn} onChangeText={set('endsOn')} placeholder="2026-11-28" keyboardType="numbers-and-punctuation" />
       </Field>
+      {canPay ? (
+        <View style={{ gap: 8 }}>
+          <View style={[S.rowBetween, { gap: 10 }]}>
+            <Text style={[S.small, S.grow]}>{`Pay it from my paid time off (${pto.available} h free)`}</Text>
+            <Switch value={paid} onValueChange={setPaid} accessibilityLabel="Pay it from my paid time off" />
+          </View>
+          {paid && (
+            <Field label="Hours from my balance" hint={`Eight a day is suggested; at most ${pto.rules.dayMaxHours} a day.`}>
+              <Input value={hours} onChangeText={(t) => setHours(t.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" placeholder={String(suggested)} />
+            </Field>
+          )}
+        </View>
+      ) : pto?.eligible && form.type !== 'unpaid' ? (
+        <Text style={S.tiny}>No paid time off free to use, so this would be unpaid.</Text>
+      ) : null}
+
       <Field label="Reason" hint="Optional, but it helps the decision.">
         <Input
           value={form.reason}

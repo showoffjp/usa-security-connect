@@ -48,6 +48,8 @@ const OFFICER = [
   ['Post log: lost and found', '/post-log?tab=found'],
   ['Post log: building issues', '/post-log?tab=issues'],
   ['Officer: vehicle check', '/', async (p) => p.click('button:has-text("Check before driving")')],
+  ['Officer: request time off', '/profile', async (p) => p.click('#time-off button:has-text("Request time off")')],
+  ['Officer: time off statement', '/profile', async (p) => p.click('#time-off button:has-text("See the statement")')],
   ['Officer: claim an expense', '/profile', async (p) => p.click('#expenses button:has-text("Claim an expense")')],
 ];
 
@@ -89,6 +91,7 @@ const ADMIN = [
   ['Timesheets', '/admin/timesheets'],
   ['Timesheets: corrections', '/admin/timesheets?view=corrections'],
   ['Time off', '/admin/time-off'],
+  ['Time off: approve paid time off', '/admin/time-off', async (p) => p.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click()],
   ['Payroll', '/admin/payroll'],
   ['Pay period, closed', '/admin/payroll/1'],
   ['Pay period, to approve', '/admin/payroll/2'],
@@ -206,7 +209,8 @@ function measure() {
         found.push(['squeezed', `${name(el)} is ${Math.round(t.width)}px wide and ${Math.round(t.height)}px tall`]);
       } else if (cs.whiteSpace !== 'nowrap' && cs.textOverflow !== 'ellipsis') {
         canvas.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-        const longest = own.split(/\s+/).sort((a, b) => b.length - a.length)[0] || '';
+        // A line can break at a space or just after a hyphen.
+        const longest = own.split(/\s+|(?<=-)/).sort((a, b) => b.length - a.length)[0] || '';
         const w = canvas.measureText(longest).width + (parseFloat(cs.letterSpacing) || 0) * longest.length;
         const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
         if (longest.length >= 4 && inner > 0 && w > inner + 2 && !/^https?:|@/.test(longest)) {
@@ -255,6 +259,23 @@ function measure() {
         found.push(['overlap', `${name(a.el)} and ${name(b.el)}`]);
       }
     }
+  }
+
+  // A control with something else lying over its middle: a tap there lands on
+  // the other thing. Only what is on screen now can be tested this way.
+  const vh = document.documentElement.clientHeight;
+  for (const { el, r } of controls) {
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    if (cx < 0 || cy < 0 || cx > vw || cy > vh) continue;
+    const top = document.elementFromPoint(cx, cy);
+    if (!top || el.contains(top) || top.contains(el)) continue;
+    // A label in front of its own field is how custom checkboxes and pickers work.
+    if (top.closest('label') && top.closest('label').contains(el)) continue;
+    if (el.labels && [...el.labels].some((l) => l.contains(top))) continue;
+    // A fixed bar over content scrolled beneath it is expected.
+    if (top.closest('.topbar, .tabbar, .bottom-bar, header, nav') && !el.closest('.topbar, .tabbar, .bottom-bar, header, nav')) continue;
+    found.push(['covered', `${name(el)} has ${name(top)} over its middle`]);
   }
   return found;
 }

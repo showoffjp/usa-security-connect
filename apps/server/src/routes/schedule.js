@@ -147,7 +147,13 @@ scheduleRouter.get(
                 l.gross_cents, l.entries, l.sites, l.employment_type, l.pay_type,
                 p.id AS period_id, p.period_start, p.period_end, p.closed_at,
                 (SELECT COALESCE(SUM(e.amount_cents), 0) FROM expense_claims e
-                 WHERE e.pay_period_id = p.id AND e.user_id = l.user_id) AS reimbursement_cents
+                 WHERE e.pay_period_id = p.id AND e.user_id = l.user_id) AS reimbursement_cents,
+                (SELECT COALESCE(SUM(t.pto_pay_cents), 0) FROM time_off_requests t
+                 WHERE t.pto_paid_period_id = p.id AND t.user_id = l.user_id) AS pto_pay_cents,
+                (SELECT COALESCE(SUM(t.pto_hours), 0) FROM time_off_requests t
+                 WHERE t.pto_paid_period_id = p.id AND t.user_id = l.user_id) AS pto_hours,
+                (SELECT COALESCE(SUM(x.hours), 0) FROM pto_ledger x
+                 WHERE x.pay_period_id = p.id AND x.user_id = l.user_id AND x.kind = 'accrual') AS pto_earned
          FROM pay_period_lines l JOIN pay_periods p ON p.id = l.pay_period_id
          WHERE l.user_id = ? AND p.status = 'closed'
          ORDER BY p.period_start DESC LIMIT 26`
@@ -191,6 +197,9 @@ scheduleRouter.get(
         overtime_pay: dollars(s.overtime_pay_cents),
         gross_pay: dollars(s.gross_cents),
         reimbursements: dollars(Number(s.reimbursement_cents) || 0),
+        pto_pay: dollars(Number(s.pto_pay_cents) || 0),
+        pto_hours: Number(s.pto_hours) || 0,
+        pto_earned: Number(s.pto_earned) || 0,
         sites: s.sites ? JSON.parse(s.sites) : [],
         employment_type: s.employment_type,
       })),

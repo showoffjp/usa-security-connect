@@ -511,7 +511,10 @@ table.data tr.clickable { cursor: pointer; }
 .modal-body { padding: 20px; overflow-y: auto; }
 .modal-foot { padding: 14px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; }
 
-.toast-host { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 80; display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); }
+.toast-host { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 80; display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px));
+  /* Messages only, nothing to press: taps go through to whatever is under them,
+     such as a dialog's buttons on a phone. */
+  pointer-events: none; }
 .toast {
   padding: 12px 15px; border-radius: var(--r-md); color: #fff; font-size: 0.87rem; font-weight: 550;
   background: var(--toast-bg); box-shadow: var(--shadow-3);
