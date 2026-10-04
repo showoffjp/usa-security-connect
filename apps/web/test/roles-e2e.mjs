@@ -52,7 +52,12 @@ const browser = await launch();
 
 /** A page that records everything that goes wrong on it. */
 async function watchedPage(viewport) {
-  const context = await browser.newContext({ viewport, ignoreHTTPSErrors: Boolean(process.env.USC_BROWSER_PROXY) });
+  // USC_BROWSER_TZ runs every screen in another time zone (the live demo is in New York).
+  const context = await browser.newContext({
+    viewport,
+    ignoreHTTPSErrors: Boolean(process.env.USC_BROWSER_PROXY),
+    ...(process.env.USC_BROWSER_TZ ? { timezoneId: process.env.USC_BROWSER_TZ } : {}),
+  });
   const page = await context.newPage();
   // A flaky network (a proxy, a phone tether) drops the odd page load; retry
   // those rather than report the site broken. A real error still fails.

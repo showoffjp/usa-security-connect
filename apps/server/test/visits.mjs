@@ -10,7 +10,7 @@
  * until someone goes.
  */
 
-import { BASE, call, log, section, signIn, finish } from './harness.mjs';
+import { BASE, call, log, section, signIn, finish, localDay } from './harness.mjs';
 
 const supervisor = await signIn('1002', '3571');
 const admin = await signIn('1001', '2468');
@@ -118,8 +118,8 @@ log(!(await call('/admin/alerts', { token: supervisor })).data.alerts.some((a) =
 /* ============================================================= report === */
 section('visits report');
 
-const today = new Date().toISOString().slice(0, 10);
-const monthAgo = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+const today = localDay();
+const monthAgo = localDay(-29);
 const report = await call(`/admin/reports/visits-by-site?from=${monthAgo}&to=${today}`, { token: supervisor });
 log(report.status === 200 && report.data.rows.length === after.sites.length, 'the report has a row for every active site');
 const inRange = (await call('/visits?days=30&limit=200', { token: supervisor })).data.visits.length;

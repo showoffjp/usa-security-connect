@@ -45,6 +45,19 @@ export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 let driver = null;
 
+/**
+ * The database works in the same time zone as this process. The app reads a
+ * bare date as a local calendar day and groups by local days; left on UTC,
+ * Postgres would disagree from the evening on west of Greenwich - current_date
+ * a day ahead, a timestamp cast to the wrong date - so a follow-up due today
+ * reads as overdue at 8 p.m. in Florida.
+ */
+const SESSION_TZ = (() => {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return /^[A-Za-z0-9_+\-/]+$/.test(zone) ? zone : 'UTC';
+})();
+const SET_TZ = `SET TIME ZONE '${SESSION_TZ}'`;
+
 async function connect() {
   if (driver) return driver;
 
@@ -58,6 +71,10 @@ async function connect() {
     types.setTypeParser(DATE_OID, keepDateAsText);
 
     const pool = new Pool({ connectionString: DATABASE_URL });
+    // Every new connection in the pool gets the time zone before any query.
+    pool.on('connect', (client) => {
+      client.query(SET_TZ).catch(() => {});
+    });
     driver = {
       kind: 'neon',
       query: (text, params) => pool.query(text, params),
@@ -104,6 +121,7 @@ async function connect() {
     },
   });
   await pg.waitReady;
+  await pg.exec(SET_TZ);
   driver = {
     kind: 'pglite',
     query: (text, params) => pg.query(text, params),

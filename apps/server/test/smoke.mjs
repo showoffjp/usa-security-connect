@@ -1,3 +1,5 @@
+import { localDay } from './harness.mjs';
+
 const BASE = 'http://localhost:4000/api';
 let failures = 0;
 
@@ -214,8 +216,8 @@ const overlap = await call('/admin/shifts', {
 });
 log(overlap.status === 409, 'overlapping shift refused', overlap.data?.error);
 
-const bulkStart = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-const bulkEnd = new Date(Date.now() + 44 * 86400000).toISOString().slice(0, 10);
+const bulkStart = localDay(30);
+const bulkEnd = localDay(44);
 const bulk = await call('/admin/shifts/bulk', {
   token: aTok, method: 'POST',
   body: {
