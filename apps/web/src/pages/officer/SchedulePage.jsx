@@ -10,14 +10,16 @@ export default function SchedulePage() {
   const toast = useToast();
   const [shifts, setShifts] = useState(null);
   const [hours, setHours] = useState(null);
+  const [holidays, setHolidays] = useState(null);
   const [view, setView] = useState('upcoming');
 
   useEffect(() => {
     (async () => {
       try {
-        const [s, h] = await Promise.all([api.get('/schedule'), api.get('/schedule/hours')]);
+        const [s, h, hol] = await Promise.all([api.get('/schedule'), api.get('/schedule/hours'), api.get('/holidays/upcoming').catch(() => null)]);
         setShifts(s.shifts);
         setHours(h);
+        setHolidays(hol);
       } catch (err) {
         toast.error(err.message);
         setShifts([]);
@@ -87,6 +89,15 @@ export default function SchedulePage() {
 
       {view === 'past' && <RecentPunches />}
 
+      {view === 'upcoming' && holidays?.holidays?.[0] && (
+        <div className="small muted">
+          <Icon name="calendar" size={14} /> Next holiday: <strong>{holidays.holidays[0].name}</strong>, {fmtDay(holidays.holidays[0].day)}.{' '}
+          {holidays.earns_premium
+            ? `Hours on a shift that starts that day are paid at ${holidays.holidays[0].pay_multiplier}x.`
+            : 'Shifts that day are marked on your schedule.'}
+        </div>
+      )}
+
       {view === 'upcoming' && toConfirm > 0 && (
         <div className="small muted">
           <Icon name="check" size={14} /> {toConfirm} shift{toConfirm === 1 ? '' : 's'} this week to confirm. Confirming tells your
@@ -147,6 +158,7 @@ export default function SchedulePage() {
                           )}
                         </div>
                         <div style={{ marginTop: 4 }} className="row wrap" >
+                          {s.holiday && <Chip kind="info">{s.holiday.name}</Chip>}
                           {s.late_minutes > 0 && <Chip kind="warn">{s.late_minutes}m late</Chip>}
                           {worked ? (
                             <Chip kind="ok">{toHours(s.minutes_worked)}h</Chip>

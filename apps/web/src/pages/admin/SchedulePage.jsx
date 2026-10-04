@@ -501,7 +501,16 @@ function CopyWeekDialog({ weekStart, siteFilter, siteName, onClose, onSaved }) {
 }
 
 /** Rows of officers, columns of days: the view a scheduler actually balances hours in. */
-function RosterGrid({ shifts, employees, range, siteFilter, showAll, onOpen, onAdd }) {
+/** A day that pays and bills the holiday rate. */
+function HolidayMark({ holiday }) {
+  return (
+    <div className="tiny" style={{ color: 'var(--warn)', fontWeight: 650 }} title={`Pays ${holiday.pay_multiplier}x, bills ${holiday.bill_multiplier}x`}>
+      {holiday.name}
+    </div>
+  );
+}
+
+function RosterGrid({ shifts, employees, range, siteFilter, showAll, holidays, onOpen, onAdd }) {
   const days = [];
   for (let i = 0; i < 7; i++) days.push(new Date(range.start.getTime() + i * 86400000));
 
@@ -536,6 +545,7 @@ function RosterGrid({ shifts, employees, range, siteFilter, showAll, onOpen, onA
                 <th key={d.toISOString()} style={d.toDateString() === new Date().toDateString() ? { color: 'var(--brand-text)' } : undefined}>
                   {fmtDay(d)}
                   <div className="tiny muted">{d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
+                  {holidays.get(toDateInput(d)) && <HolidayMark holiday={holidays.get(toDateInput(d))} />}
                 </th>
               ))}
               <th className="num">Hours</th>
@@ -607,6 +617,7 @@ function RosterGrid({ shifts, employees, range, siteFilter, showAll, onOpen, onA
 export default function AdminSchedulePage() {
   const toast = useToast();
   const [shifts, setShifts] = useState(null);
+  const [holidays, setHolidays] = useState(() => new Map());
   const [posts, setPosts] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [dialog, setDialog] = useState(null);
@@ -645,6 +656,7 @@ export default function AdminSchedulePage() {
         api.get('/admin/employees'),
       ]);
       setShifts(s.shifts);
+      setHolidays(new Map((s.holidays || []).map((h) => [h.day, h])));
       setPosts(ref.posts);
       setEmployees(emp.employees);
       const linked = params.get('shift');
@@ -780,6 +792,7 @@ export default function AdminSchedulePage() {
           range={range}
           siteFilter={siteFilter}
           showAll={showAll}
+          holidays={holidays}
           onOpen={(s) => setDialog({ shift: s })}
           onAdd={(person, day) => {
             const start = new Date(day);
@@ -801,6 +814,7 @@ export default function AdminSchedulePage() {
                 <div>
                   <div className="strong small">{fmtDay(day)}</div>
                   <div className="tiny muted">{day.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
+                  {holidays.get(toDateInput(day)) && <HolidayMark holiday={holidays.get(toDateInput(day))} />}
                 </div>
                 {list.length > 0 && <Chip>{list.length}</Chip>}
               </div>

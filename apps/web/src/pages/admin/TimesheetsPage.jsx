@@ -211,6 +211,7 @@ export default function TimesheetsPage() {
                           {r.late_shifts > 0 && <Chip kind="warn">{r.late_shifts} late</Chip>}
                           {r.geofence_issues > 0 && <Chip kind="danger">{r.geofence_issues} off site</Chip>}
                           {r.auto_closed > 0 && <Chip kind="danger">{r.auto_closed} auto-closed</Chip>}
+                          {r.holiday_hours > 0 && <Chip kind="info">{r.holiday_hours}h holiday</Chip>}
                           {!r.late_shifts && !r.geofence_issues && !r.auto_closed && r.shifts > 0 && (
                             <Chip kind="ok">Clean</Chip>
                           )}

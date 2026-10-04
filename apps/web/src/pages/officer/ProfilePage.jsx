@@ -273,6 +273,7 @@ function MyPay({ pay }) {
             <div className="value">{money(thisWeek.estimated_pay)}</div>
             <div className="foot">
               {thisWeek.hours}h over {thisWeek.shifts} shift{thisWeek.shifts === 1 ? '' : 's'} · estimate
+              {thisWeek.holiday_hours > 0 && ` · ${thisWeek.holiday_hours}h on a holiday`}
             </div>
           </div>
           <div className="stat">
@@ -306,7 +307,7 @@ function MyPay({ pay }) {
                 <th>Pay period</th>
                 <th className="num">Hours</th>
                 <th className="num">Regular</th>
-                <th className="num">Overtime</th>
+                <th className="num">Overtime & holiday</th>
                 <th className="num">Gross</th>
                 <th className="num">Time off</th>
                 <th className="num">Expenses</th>
@@ -323,14 +324,19 @@ function MyPay({ pay }) {
                   <td className="num">{s.hours}h</td>
                   <td className="num small">{money(s.regular_pay)}</td>
                   <td className="num small">
-                    {s.overtime_hours > 0 ? (
+                    {s.overtime_hours > 0 && (
                       <>
                         {money(s.overtime_pay)}
-                        <div className="tiny muted">{s.overtime_hours}h</div>
+                        <div className="tiny muted">{s.overtime_hours}h overtime</div>
                       </>
-                    ) : (
-                      '--'
                     )}
+                    {s.holiday_hours > 0 && (
+                      <>
+                        {s.holiday_pay ? money(s.holiday_pay) : ''}
+                        <div className="tiny muted">{s.holiday_hours}h holiday</div>
+                      </>
+                    )}
+                    {!s.overtime_hours && !s.holiday_hours && '--'}
                   </td>
                   <td className="num strong">{money(s.gross_pay)}</td>
                   <td className="num small">

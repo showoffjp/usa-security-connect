@@ -235,7 +235,7 @@ export default function PayrollPeriodPage() {
       <div className="grid grid-4">
         <Stat label="Officers" value={totals.people} foot={`${totals.approved} approved${totals.changed ? ` · ${totals.changed} changed` : ''}${totals.blocked ? ` · ${totals.blocked} blocked` : ''}`} alert={totals.changed > 0 || totals.blocked > 0} />
         <Stat label="Hours" value={`${totals.hours}h`} foot={totals.overtime_hours ? `${totals.overtime_hours}h overtime` : 'No overtime'} />
-        <Stat label="Gross pay" value={money(totals.gross_pay)} foot={[totals.overtime_pay ? `incl. ${money(totals.overtime_pay)} overtime` : '', totals.pto_pay ? `+ ${money(totals.pto_pay)} paid time off` : '', totals.reimbursements ? `+ ${money(totals.reimbursements)} expenses` : ''].filter(Boolean).join(' · ')} />
+        <Stat label="Gross pay" value={money(totals.gross_pay)} foot={[totals.overtime_pay ? `incl. ${money(totals.overtime_pay)} overtime` : '', totals.holiday_pay ? `${money(totals.holiday_pay)} holiday premium` : '', totals.pto_pay ? `+ ${money(totals.pto_pay)} paid time off` : '', totals.reimbursements ? `+ ${money(totals.reimbursements)} expenses` : ''].filter(Boolean).join(' · ')} />
         <Stat label="W-2 · 1099" value={money(totals.w2.pay)} foot={`W-2 ${totals.w2.people} · 1099 ${money(totals.contractor.pay)} across ${totals.contractor.people}`} />
       </div>
 
@@ -294,6 +294,7 @@ export default function PayrollPeriodPage() {
                   <th className="num">Hours</th>
                   <th className="num">Regular</th>
                   <th className="num">Overtime</th>
+                  <th className="num">Holiday</th>
                   <th className="num">Gross</th>
                   <th>Where</th>
                   <th>Check</th>
@@ -340,6 +341,16 @@ export default function PayrollPeriodPage() {
                           <>
                             <span style={{ color: 'var(--warn)' }}>{money(l.overtime_pay)}</span>
                             <div className="tiny muted">{l.overtime_hours}h</div>
+                          </>
+                        ) : (
+                          <span className="muted">--</span>
+                        )}
+                      </td>
+                      <td className="num small nowrap">
+                        {l.holiday_minutes > 0 ? (
+                          <>
+                            <span>{l.holiday_pay ? money(l.holiday_pay) : 'In overtime'}</span>
+                            <div className="tiny muted">{l.holiday_hours}h</div>
                           </>
                         ) : (
                           <span className="muted">--</span>

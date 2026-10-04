@@ -1406,6 +1406,71 @@ for (const u of STAFF) {
   await ny.close();
 }
 
+/* --------------------------------------------- round 25: holiday pay --- */
+{
+  console.log('\n--- Holidays: the calendar that pays a premium and bills the holiday rate ---');
+  const adm = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(adm.page, '1001', '2468');
+  await adm.page.goto(WEB + '/admin/holidays');
+  await settle(adm.page);
+  log(await adm.page.locator('.list-item', { hasText: 'Thanksgiving Day' }).count() >= 1, 'the calendar has the usual holidays on it');
+  await checkScreen('admin: holidays', adm.page, adm.problems);
+
+  // A holiday eight days out (nine if that is one already), added through the dialog.
+  const target = await adm.page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 8);
+    const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const monday = new Date(d);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    return { day: ymd(d), monday: ymd(monday) };
+  });
+  await adm.page.click('button:has-text("Add a holiday")');
+  await adm.page.getByLabel('Date').fill(target.day);
+  await adm.page.getByLabel('Name').fill('E2E Holiday');
+  await adm.page.getByLabel('Bills').fill('2');
+  await checkScreen('admin: add a holiday', adm.page, adm.problems);
+  await adm.page.click('[role="dialog"] button:has-text("Add holiday")');
+  await adm.page.waitForTimeout(1500);
+  const added = adm.page.locator('.list-item', { hasText: 'E2E Holiday' });
+  log(await added.count() === 1 && await added.locator('text=Bills 2x').count() === 1, 'an administrator adds a holiday that bills double');
+
+  await adm.page.goto(WEB + `/admin/schedule?week=${target.monday}`);
+  await settle(adm.page);
+  log(await adm.page.locator('thead >> text=E2E Holiday').count() === 1, 'the schedule marks the day');
+  await checkScreen('admin: schedule with a holiday', adm.page, adm.problems);
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/holidays');
+  await settle(sup.page);
+  log(await sup.page.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 1 && await sup.page.locator('button:has-text("Add a holiday")').count() === 0,
+    'a supervisor reads the calendar but cannot change it');
+  await sup.context.close();
+
+  const client = await watchedPage({ width: 390, height: 844 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal/invoices', { waitUntil: 'networkidle' });
+  await settle(client.page);
+  const rates = client.page.locator('.card', { hasText: 'Holiday rates' });
+  log(await rates.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 1 && await rates.locator('text=2x').count() >= 1,
+    'the client sees the holiday and its rate before it is on an invoice');
+  await checkScreen('client: holiday rates', client.page, client.problems);
+  await client.context.close();
+
+  adm.page.on('dialog', (d) => d.accept());
+  await adm.page.goto(WEB + '/admin/holidays');
+  await settle(adm.page);
+  await adm.page.click('button[aria-label="Remove E2E Holiday"]');
+  await adm.page.waitForTimeout(1500);
+  log(await adm.page.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 0, 'and removes it again');
+  await adm.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -191,6 +191,7 @@ const builders = {
         hours: toHours(pay.minutes),
         regular_hours: toHours(pay.regularMinutes),
         overtime_hours: toHours(pay.overtimeMinutes),
+        holiday_hours: toHours(pay.holidayMinutes || 0),
         gross_pay: dollars(pay.payCents),
         billed: dollars(billed),
         margin: pay.payCents != null ? dollars(billed - pay.payCents) : null,
@@ -210,6 +211,7 @@ const builders = {
       C('hours', 'Hours', 'hours', { sum: true, bar: true }),
       C('regular_hours', 'Regular', 'hours', { sum: true }),
       C('overtime_hours', 'Overtime', 'hours', { sum: true, warnAbove: 0 }),
+      C('holiday_hours', 'Holiday', 'hours', { sum: true }),
       C('gross_pay', 'Gross pay', 'money', { sum: true }),
       C('billed', 'Billed', 'money', { sum: true }),
       C('margin', 'Margin', 'money', { sum: true }),
@@ -266,6 +268,8 @@ const builders = {
           pay.earnsOvertime && list[list.length - 1].pay_rate_cents != null
             ? dollars(list[list.length - 1].pay_rate_cents * (list[list.length - 1].overtime_multiplier || 1.5))
             : null,
+        holiday_hours: toHours(pay.holidayMinutes || 0),
+        holiday_pay: dollars(pay.holidayPayCents || 0),
         gross_pay: dollars(pay.payCents),
         payee: w2 ? null : first.business_name || first.officer,
         tax_id: w2 ? null : first.tax_id_last4 ? `***-**-${first.tax_id_last4}` : 'missing',
@@ -284,6 +288,8 @@ const builders = {
       C('overtime_hours', 'OT hrs', 'hours', { sum: true, warnAbove: 0 }),
       C('pay_rate', 'Rate', 'rate'),
       C('overtime_rate', 'OT rate', 'rate'),
+      C('holiday_hours', 'Holiday hrs', 'hours', { sum: true }),
+      C('holiday_pay', 'Holiday premium', 'money', { sum: true }),
       C('gross_pay', 'Gross', 'money', { sum: true }),
       C('payee', '1099 payee'),
       C('tax_id', 'TIN'),

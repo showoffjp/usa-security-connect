@@ -31,6 +31,7 @@ import {
 import { toSql } from '../services/compliance.js';
 import { notifyInvoiceIssued, notifyInvoiceQueryAnswered, emailKind } from '../services/email.js';
 import { loadRateBook, rateOn, dayOf } from '../services/payroll.js';
+import { holidaysForSpan } from '../services/holidays.js';
 
 export const invoicesRouter = Router();
 invoicesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -45,7 +46,9 @@ const TIMES = ['issued_at', 'paid_at', 'created_at'];
  *
  * Grouped by post and by rate: a post whose rate changed mid-period, or that
  * ran an overtime-rate weekend, produces one line per rate rather than an
- * averaged figure the client cannot check.
+ * averaged figure the client cannot check. Hours on a shift that started on a
+ * company holiday are their own line, named for the holiday, at the holiday
+ * rate - and the holiday premium those hours pay is part of their cost.
  */
 export async function buildLines({ siteId, start, end }) {
   const rows = await db
@@ -53,7 +56,8 @@ export async function buildLines({ siteId, start, end }) {
       `SELECT te.id, te.user_id, te.clock_in_at, te.minutes_worked, te.unpaid_break_minutes,
               p.id AS post_id, p.name AS post_name, p.bill_rate_cents AS post_rate,
               sh.bill_rate_cents AS shift_rate,
-              u.bill_rate_cents AS officer_rate, u.pay_rate_cents, u.pay_type, u.overtime_multiplier
+              u.bill_rate_cents AS officer_rate, u.pay_rate_cents, u.pay_type, u.overtime_multiplier,
+              u.employment_type, u.exempt
        FROM time_entries te
        JOIN posts p ON p.id = te.post_id
        JOIN users u ON u.id = te.user_id
@@ -67,6 +71,7 @@ export async function buildLines({ siteId, start, end }) {
 
   // Cost at the pay rate in effect on the day, as the reports price it.
   const book = await loadRateBook();
+  const holidays = await holidaysForSpan(start, new Date(new Date(end).getTime() - 1));
   const groups = new Map();
   const unpriced = [];
 
@@ -74,11 +79,14 @@ export async function buildLines({ siteId, start, end }) {
     const minutes = billableMinutes(r.minutes_worked, r.unpaid_break_minutes);
     if (minutes === 0) continue;
 
-    const rate = effectiveBillRate({
+    const baseRate = effectiveBillRate({
       shiftRateCents: r.shift_rate,
       postRateCents: r.post_rate,
       officerRateCents: r.officer_rate,
     });
+    const day = dayOf(r.clock_in_at);
+    const holiday = holidays.get(day) || null;
+    const rate = holiday && baseRate != null ? Math.round(baseRate * holiday.bill_multiplier) : baseRate;
 
     // Hours with no rate anywhere are reported rather than billed at zero -
     // silently giving work away is worse than an invoice that will not build.
@@ -87,32 +95,42 @@ export async function buildLines({ siteId, start, end }) {
       continue;
     }
 
-    const key = `${r.post_id}:${rate}`;
+    const key = `${r.post_id}:${rate}:${holiday?.day ?? ''}`;
     const group = groups.get(key) || {
       post_id: r.post_id,
       post_name: r.post_name,
       rate_cents: rate,
+      holiday,
       minutes: 0,
       cost_cents: 0,
       entries: 0,
     };
+    const payRate = rateOn(book, r, day, r.post_id).rate || 0;
+    const earnsHolidayPay = holiday && r.pay_type === 'hourly' && r.employment_type === 'w2' && !r.exempt;
     group.minutes += minutes;
     group.entries += 1;
-    group.cost_cents += amountForMinutes(minutes, rateOn(book, r, dayOf(r.clock_in_at), r.post_id).rate || 0);
+    group.cost_cents += amountForMinutes(minutes, earnsHolidayPay ? Math.round(payRate * holiday.pay_multiplier) : payRate);
     groups.set(key, group);
   }
 
   const rateCounts = new Map();
-  for (const g of groups.values()) rateCounts.set(g.post_id, (rateCounts.get(g.post_id) || 0) + 1);
+  for (const g of groups.values()) if (!g.holiday) rateCounts.set(g.post_id, (rateCounts.get(g.post_id) || 0) + 1);
 
   const lines = [...groups.values()]
-    .sort((a, b) => a.post_name.localeCompare(b.post_name) || a.rate_cents - b.rate_cents)
+    .sort(
+      (a, b) =>
+        a.post_name.localeCompare(b.post_name) ||
+        (a.holiday?.day ?? '').localeCompare(b.holiday?.day ?? '') ||
+        a.rate_cents - b.rate_cents
+    )
     .map((g, i) => ({
       post_id: g.post_id,
       // Only name the rate when a post has more than one, so the common case
-      // reads as a plain post name.
-      description:
-        rateCounts.get(g.post_id) > 1
+      // reads as a plain post name. A holiday line always says which holiday
+      // and what it multiplies, since that is the question a client asks.
+      description: g.holiday
+        ? `${g.post_name} - ${g.holiday.name}, holiday rate (${g.holiday.bill_multiplier}x, $${(g.rate_cents / 100).toFixed(2)}/hr)`
+        : rateCounts.get(g.post_id) > 1
           ? `${g.post_name} (at $${(g.rate_cents / 100).toFixed(2)}/hr)`
           : g.post_name,
       minutes: g.minutes,

@@ -43,6 +43,7 @@ import { agreementBoard } from '../services/agreements.js';
 import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confirmations.js';
 import { overtimeWatch } from '../services/overtime.js';
 import { fleet } from '../services/vehicles.js';
+import { holidaysForSpan } from '../services/holidays.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -949,11 +950,14 @@ adminRouter.get(
         ...(req.query.userId ? [idParam(req.query.userId, 'person')] : [])
       ));
 
+    // The holidays in the range, so the schedule can mark the days that pay and bill more.
+    const holidays = [...(await holidaysForSpan(from, to)).values()];
     res.json({
       shifts: rows.map((s) => ({
         ...isoFields(s, ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
         ...confirmationOf(s),
       })),
+      holidays,
     });
   })
 );
@@ -1405,6 +1409,7 @@ adminRouter.get(
           break_hours: toHours(r.break_minutes),
           regular_hours: 0,
           overtime_hours: 0,
+          holiday_hours: 0,
           earns_overtime: r.employment_type === 'w2' && !r.exempt && r.pay_type === 'hourly',
           estimated_pay: null,
           estimated_bill: null,
@@ -1423,6 +1428,7 @@ adminRouter.get(
         break_hours: toHours(r.break_minutes),
         regular_hours: toHours(pay.regularMinutes),
         overtime_hours: toHours(pay.overtimeMinutes),
+        holiday_hours: toHours(pay.holidayMinutes || 0),
         earns_overtime: pay.earnsOvertime,
         estimated_pay: pay.payCents != null ? pay.payCents / 100 : null,
         estimated_bill: billCents != null ? billCents / 100 : null,

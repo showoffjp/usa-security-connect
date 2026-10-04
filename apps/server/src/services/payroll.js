@@ -12,6 +12,9 @@
  *  - Overtime is decided per payroll week (Monday to Sunday), never across a
  *    range, at the multiplier over the week's weighted-average rate - the
  *    FLSA "regular rate".
+ *  - A shift that starts on a company holiday bills at the holiday rate and,
+ *    for W-2 officers who earn overtime, pays a holiday premium. Holiday hours
+ *    that are also overtime get the larger premium, not both.
  */
 
 import { db } from '../lib/db.js';
@@ -22,9 +25,11 @@ import {
   billableMinutes,
   amountForMinutes,
   payrollWeekOf,
+  holidayPremiumCents,
   RULES,
 } from '../shared.js';
 import { toSql } from './compliance.js';
+import { holidaysForSpan } from './holidays.js';
 
 /**
  * Every rate change, oldest first per person, plus any differentials the posts
@@ -154,9 +159,11 @@ export async function loadPricedEntries(f) {
     .all(toSql(f.from), toSql(f.to), ...sc.params);
 
   const book = await loadRateBook();
+  const holidays = await holidaysForSpan(f.from, f.to);
 
   return rows.map((r) => {
     const day = toDateString(new Date(sqlToIso(r.clock_in_at)));
+    const holiday = holidays.get(day) || null;
     const applied = rateOn(book, r, day, r.post_id);
     r = { ...r, pay_rate_cents: applied.rate, overtime_multiplier: applied.multiplier || 1.5 };
     const paid = billableMinutes(r.minutes_worked, r.unpaid_break_minutes);
@@ -173,14 +180,23 @@ export async function loadPricedEntries(f) {
         : r.pay_type === 'salary'
           ? 0
           : amountForMinutes(paid, r.pay_rate_cents);
+    // Holiday hours bill at the holiday rate. The premium they pay is worked
+    // out per week by personPay; here it is only the entry's own share, for
+    // the cost an invoice carries against the client's site.
+    const holidayBillRate = holiday && billRate != null ? Math.round(billRate * holiday.bill_multiplier) : billRate;
+    const earnsHolidayPay = r.pay_type === 'hourly' && r.employment_type === 'w2' && !r.exempt;
     return {
       ...r,
       clock_in_at: sqlToIso(r.clock_in_at),
       clock_out_at: sqlToIso(r.clock_out_at),
       paid_minutes: paid,
+      holiday,
       bill_rate_cents: billRate,
-      billed_cents: billRate != null ? amountForMinutes(paid, billRate) : 0,
+      charged_rate_cents: holidayBillRate,
+      billed_cents: holidayBillRate != null ? amountForMinutes(paid, holidayBillRate) : 0,
       base_cost_cents: baseCost,
+      holiday_premium_cents:
+        holiday && earnsHolidayPay && r.pay_rate_cents != null ? Math.round((paid / 60) * r.pay_rate_cents * (holiday.pay_multiplier - 1)) : 0,
       week: payrollWeekOf(sqlToIso(r.clock_in_at)),
       day,
     };
@@ -205,6 +221,8 @@ export function personPay(list) {
     let overtimeMinutes = 0;
     let payCents = list.some((e) => e.pay_rate_cents == null) ? null : 0;
     let overtimePayCents = payCents == null ? null : 0;
+    let holidayMinutes = 0;
+    let holidayPayCents = payCents == null ? null : 0;
     for (const week of groupBy(list, 'week').values()) {
       const weekMinutes = week.reduce((n, e) => n + e.paid_minutes, 0);
       const straight = week.reduce((n, e) => n + (e.paid_minutes / 60) * (e.pay_rate_cents || 0), 0);
@@ -218,6 +236,15 @@ export function personPay(list) {
         overtimePayCents += Math.min(weekPay, Math.round((ot / 60) * regularRate * multiplier));
         payCents += weekPay;
       }
+      if (earnsOvertime) {
+        const ordered = [...week].sort((a, b) => new Date(a.clock_in_at) - new Date(b.clock_in_at));
+        const holiday = holidayPremiumCents(ordered, { thresholdMinutes: threshold, overtimeMultiplier: multiplier });
+        holidayMinutes += holiday.minutes;
+        if (payCents != null) {
+          holidayPayCents += holiday.cents;
+          payCents += holiday.cents;
+        }
+      }
       minutes += weekMinutes;
       overtimeMinutes += ot;
     }
@@ -226,9 +253,11 @@ export function personPay(list) {
       regularMinutes: minutes - overtimeMinutes,
       overtimeMinutes,
       earnsOvertime,
+      holidayMinutes,
       payCents,
-      regularPayCents: payCents == null ? null : payCents - overtimePayCents,
+      regularPayCents: payCents == null ? null : payCents - overtimePayCents - holidayPayCents,
       overtimePayCents,
+      holidayPayCents,
     };
   }
 
@@ -245,8 +274,8 @@ export function personPay(list) {
     overtimeMultiplier: first.overtime_multiplier || 1.5,
     salaryCents: first.salary_cents,
   });
-  // Salary, per-shift and contractor pay carries no overtime premium.
-  return { ...pay, regularPayCents: pay.payCents, overtimePayCents: pay.payCents == null ? null : 0 };
+  // Salary, per-shift and contractor pay carries no overtime or holiday premium.
+  return { ...pay, regularPayCents: pay.payCents, overtimePayCents: pay.payCents == null ? null : 0, holidayMinutes: 0, holidayPayCents: pay.payCents == null ? null : 0 };
 }
 
 export const groupBy = (list, key) => {

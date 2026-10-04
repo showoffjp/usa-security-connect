@@ -157,6 +157,7 @@ export default function ScheduleScreen() {
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
                       <Text style={[S.small, S.strong]}>{fmtRange(s.starts_at, s.ends_at)}</Text>
+                      {s.holiday && <Chip tone="info">{s.holiday.name}</Chip>}
                       {s.late_minutes > 0 && <Chip tone="warn">{s.late_minutes}m late</Chip>}
                       {worked ? (
                         <Chip tone="ok">{toHours(s.minutes_worked)}h</Chip>

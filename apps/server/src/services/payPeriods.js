@@ -139,6 +139,7 @@ function fingerprintOf(list, openEntries) {
         e.employment_type,
         e.exempt ? 1 : 0,
         e.salary_cents,
+        e.holiday ? `${e.holiday.day}@${e.holiday.pay_multiplier}` : '',
       ].join('|')
     );
   parts.push(`open:${openEntries}`);
@@ -216,7 +217,7 @@ export async function reviewPeriod(period) {
     const openEntries = Number(extra.open_entries || 0);
     const pay = list.length
       ? personPay(list)
-      : { minutes: 0, regularMinutes: 0, overtimeMinutes: 0, payCents: 0, regularPayCents: 0, overtimePayCents: 0 };
+      : { minutes: 0, regularMinutes: 0, overtimeMinutes: 0, holidayMinutes: 0, payCents: 0, regularPayCents: 0, overtimePayCents: 0, holidayPayCents: 0 };
 
     const siteMinutes = new Map();
     for (const e of list) siteMinutes.set(e.site_name, (siteMinutes.get(e.site_name) || 0) + e.paid_minutes);
@@ -246,6 +247,10 @@ export async function reviewPeriod(period) {
       issues.push(issue('correction', 'warn', `${pendingCorrections} time correction${pendingCorrections === 1 ? '' : 's'} asked for and not yet decided.`));
     }
     if (pay.overtimeMinutes > 0) issues.push(issue('overtime', 'info', `${toHours(pay.overtimeMinutes)} h of overtime.`));
+    if (pay.holidayMinutes > 0) {
+      const names = [...new Set(list.filter((e) => e.holiday).map((e) => e.holiday.name))].join(', ');
+      issues.push(issue('holiday', 'info', `${toHours(pay.holidayMinutes)} h on a holiday (${names}).`));
+    }
     if (person.employment_type === '1099' && !person.w9_on_file) {
       issues.push(issue('no_w9', 'warn', 'Contractor with no W-9 on file.'));
     }
@@ -269,11 +274,15 @@ export async function reviewPeriod(period) {
       hours: toHours(pay.minutes),
       regular_hours: toHours(pay.regularMinutes),
       overtime_hours: toHours(pay.overtimeMinutes),
+      holiday_minutes: pay.holidayMinutes || 0,
+      holiday_hours: toHours(pay.holidayMinutes || 0),
       regular_pay_cents: pay.regularPayCents ?? null,
       overtime_pay_cents: pay.overtimePayCents ?? null,
+      holiday_pay_cents: pay.holidayPayCents ?? null,
       gross_cents: pay.payCents ?? null,
       regular_pay: dollars(pay.regularPayCents),
       overtime_pay: dollars(pay.overtimePayCents),
+      holiday_pay: dollars(pay.holidayPayCents),
       gross_pay: dollars(pay.payCents),
       sites,
       issues,
@@ -316,11 +325,15 @@ export async function closedLines(period) {
     hours: toHours(l.minutes),
     regular_hours: toHours(l.regular_minutes),
     overtime_hours: toHours(l.overtime_minutes),
+    holiday_minutes: l.holiday_minutes || 0,
+    holiday_hours: toHours(l.holiday_minutes || 0),
     regular_pay_cents: l.regular_pay_cents,
     overtime_pay_cents: l.overtime_pay_cents,
+    holiday_pay_cents: l.holiday_pay_cents ?? 0,
     gross_cents: l.gross_cents,
     regular_pay: dollars(l.regular_pay_cents),
     overtime_pay: dollars(l.overtime_pay_cents),
+    holiday_pay: dollars(l.holiday_pay_cents ?? 0),
     gross_pay: dollars(l.gross_cents),
     sites: l.sites ? JSON.parse(l.sites) : [],
     issues: [],
@@ -350,6 +363,8 @@ export function totalsOf(lines) {
     gross_pay: dollars(sum(lines, 'gross_cents')),
     reimbursements: dollars(sum(lines, 'reimbursement_cents')),
     overtime_pay: dollars(sum(lines, 'overtime_pay_cents')),
+    holiday_hours: toHours(sum(lines, 'holiday_minutes')),
+    holiday_pay: dollars(sum(lines, 'holiday_pay_cents')),
     w2: { people: w2.length, hours: toHours(sum(w2, 'minutes')), pay: dollars(sum(w2, 'gross_cents')), cents: sum(w2, 'gross_cents') },
     contractor: {
       people: contractors.length,
@@ -430,8 +445,8 @@ export async function writeLine(periodId, line, approvedBy) {
       `INSERT INTO pay_period_lines
        (pay_period_id, user_id, fingerprint, approved_by, approved_at, employee_code, officer,
         employment_type, pay_type, entries, minutes, regular_minutes, overtime_minutes,
-        regular_pay_cents, overtime_pay_cents, gross_cents, sites)
-       VALUES (?,?,?,?,now(),?,?,?,?,?,?,?,?,?,?,?,?)
+        regular_pay_cents, overtime_pay_cents, gross_cents, sites, holiday_minutes, holiday_pay_cents)
+       VALUES (?,?,?,?,now(),?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (pay_period_id, user_id) DO UPDATE SET
          fingerprint = excluded.fingerprint, approved_by = excluded.approved_by,
          approved_at = excluded.approved_at, employee_code = excluded.employee_code,
@@ -439,7 +454,8 @@ export async function writeLine(periodId, line, approvedBy) {
          pay_type = excluded.pay_type, entries = excluded.entries, minutes = excluded.minutes,
          regular_minutes = excluded.regular_minutes, overtime_minutes = excluded.overtime_minutes,
          regular_pay_cents = excluded.regular_pay_cents, overtime_pay_cents = excluded.overtime_pay_cents,
-         gross_cents = excluded.gross_cents, sites = excluded.sites`
+         gross_cents = excluded.gross_cents, sites = excluded.sites,
+         holiday_minutes = excluded.holiday_minutes, holiday_pay_cents = excluded.holiday_pay_cents`
     )
     .run(
       periodId,
@@ -457,6 +473,8 @@ export async function writeLine(periodId, line, approvedBy) {
       line.regular_pay_cents,
       line.overtime_pay_cents,
       line.gross_cents,
-      JSON.stringify(line.sites.map(({ site, minutes }) => ({ site, minutes, hours: toHours(minutes) })))
+      JSON.stringify(line.sites.map(({ site, minutes }) => ({ site, minutes, hours: toHours(minutes) }))),
+      line.holiday_minutes || 0,
+      line.holiday_pay_cents ?? 0
     );
 }
