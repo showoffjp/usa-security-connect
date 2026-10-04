@@ -12,6 +12,7 @@
  */
 
 import { call, log, section, signIn, finish } from './harness.mjs';
+import { VEHICLE_INSPECT_GRACE_MINUTES } from '../src/shared.js';
 
 const admin = await signIn('1001', '2468');
 const supervisor = await signIn('1002', '3571');
@@ -37,7 +38,13 @@ const truck = fleet.vehicles.find((v) => v.identifier === 'VEH-RF1');
 const car = fleet.vehicles.find((v) => v.identifier === 'VEH-RP1');
 log(Boolean(truck && car), 'the Riverfront truck and the campus car are on the books');
 log(truck.holder?.employee_code === '1003' && truck.uninspected, 'Marcus has the truck and has not checked it yet');
-log((await alerts()).some((a) => a.key === `vehicle-uninspected:${truck.holder?.assignment_id}`), 'which is in the alerts inbox');
+// It is raised once the truck has been out half an hour unchecked. The demo signs it
+// out just after Marcus clocks in, which is never before a quarter past midnight, so
+// in the first minutes of the day it is not overdue yet - and must not be raised.
+const outMinutes = (Date.now() - new Date(truck.holder?.issued_at).getTime()) / 60000;
+const raised = (await alerts()).some((a) => a.key === `vehicle-uninspected:${truck.holder?.assignment_id}`);
+log(Boolean(truck.holder) && raised === truck.uninspected_overdue && (outMinutes > VEHICLE_INSPECT_GRACE_MINUTES + 1 ? raised : outMinutes < VEHICLE_INSPECT_GRACE_MINUTES - 1 ? !raised : true),
+  outMinutes > VEHICLE_INSPECT_GRACE_MINUTES ? 'which is in the alerts inbox' : 'not raised yet: it was signed out under half an hour ago', `${Math.round(outMinutes)} min`);
 log(fleet.vehicles.some((v) => v.off_road) && (await alerts()).some((a) => a.severity === 'critical'), 'a vehicle that failed its brake check is off the road, and raised as critical');
 log((await call(`/vehicles/${truck.id}`, { token: marcus })).status === 403, 'an officer cannot open a vehicle\'s record');
 

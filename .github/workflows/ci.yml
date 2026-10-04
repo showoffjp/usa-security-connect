@@ -33,6 +33,26 @@ jobs:
           USC_JWT_SECRET: ci-only-secret-not-used-anywhere-real
           USC_PUSH_DISABLED: '1'
 
+  api-us-time:
+    # The live demo runs in America/New_York (api/timezone.mjs). Every suite
+    # again with the server and its database in that zone: a date read as UTC
+    # instead of a local day only shows up west of Greenwich, after 8 p.m.
+    name: API (US time zone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Seed, start and run every suite in New York time
+        run: npm run verify --workspace @usc/server
+        env:
+          TZ: America/New_York
+          USC_JWT_SECRET: ci-only-secret-not-used-anywhere-real
+          USC_PUSH_DISABLED: '1'
+
   web:
     name: Web build
     runs-on: ubuntu-latest

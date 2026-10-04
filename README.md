@@ -1033,6 +1033,28 @@ taps through.
 `npm run check:schema --workspace @usc/server` verifies every expected column and table
 exists after a migration.
 
+### Time zones
+
+A calendar day ("next week", "yesterday", a timesheet's date range) means the server's
+local day, not the UTC one. The server runs each database session in the process's time
+zone, so `current_date` in a query agrees with the day the code works out. Dates sent
+as `YYYY-MM-DD` are read as local days too. The live demo runs on New York time.
+
+CI runs the API suites twice: once in UTC and once with `TZ=America/New_York`. Bugs
+of this kind stay hidden in UTC, where local and UTC days are the same, and show
+up the evening before a UTC midnight. Run the same pair locally:
+
+```bash
+TZ=America/New_York npm run verify --workspace @usc/server -- --fresh
+```
+
+The browser suites take `USC_BROWSER_TZ` (for example `America/New_York`) to run the
+browser in a different zone from the machine. Two checks depend on the time of day.
+The demo never clocks Marcus in before a quarter past midnight. So in the first half
+hour of a day his truck is not yet overdue for its check, and in the first hour no
+check-in is due. The vehicle and scorecard suites expect exactly that, rather than
+failing.
+
 ---
 
 ## Documentation

@@ -122,7 +122,13 @@ log(scores.every((s, i) => i === 0 || scores[i - 1] >= s), 'ranked best first');
 log(cards.data.cards.every((c) => c.shifts.worked + c.shifts.missed === c.shifts.due && c.shifts.onTime <= c.shifts.worked),
   'shifts worked and missed add up, and on time is never more than worked');
 const bell = cards.data.cards.find((c) => c.employee_code === '1003');
-log(bell && bell.hours > 0 && bell.checkIns.answeredPct !== null, 'Marcus Bell has hours and check-ins counted');
+// His first check-in on tonight's shift is due an hour after he clocked in, which
+// the demo puts no earlier than a quarter past midnight: just after midnight there
+// is none to count yet.
+const onShift = (await call('/timeclock/status', { token: marcus })).data?.entry;
+const checkInDue = onShift && Date.now() - new Date(onShift.clock_in_at).getTime() > 61 * 60000;
+log(bell && bell.hours > 0 && (checkInDue ? bell.checkIns.answeredPct !== null : true), 'Marcus Bell has hours and check-ins counted',
+  checkInDue ? '' : '(no check-in due yet on this shift)');
 const missed = cards.data.cards.find((c) => c.shifts.missed > 0 && c.shifts.worked === 0);
 log(!missed || missed.score < 50, 'someone who missed every shift scores low', missed ? `${missed.name} ${missed.score}` : 'none');
 log((await call('/admin/scorecards?days=1', { token: supervisor })).data.days === 7, 'the period is at least a week');

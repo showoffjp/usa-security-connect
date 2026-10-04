@@ -38,3 +38,10 @@ export function finish(suite) {
   console.log(`\n${failures === 0 ? `${suite}: all checks passed.` : `${suite}: ${failures} CHECK(S) FAILED.`}`);
   process.exit(failures === 0 ? 0 : 1);
 }
+
+/** A calendar day as the app reads it - local, not UTC - some days from today. */
+export function localDay(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

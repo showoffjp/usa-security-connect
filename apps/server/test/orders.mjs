@@ -11,7 +11,7 @@
  * and nothing else.
  */
 
-import { BASE, call, log, section, signIn, finish } from './harness.mjs';
+import { BASE, call, log, section, signIn, finish, localDay } from './harness.mjs';
 
 const supervisor = await signIn('1002', '3571');
 const admin = await signIn('1001', '2468');
@@ -279,7 +279,7 @@ log((await addAction({ title: 'Replace the broken gate latch', dueOn: 'next week
 log((await addAction({ title: 'Replace the broken gate latch' }, marcus)).status === 403, 'officers cannot add them');
 log((await addAction({ title: 'Replace the broken gate latch' }, supervisor, 'abc')).status === 422, 'a junk incident id is refused');
 log((await addAction({ title: 'Replace the broken gate latch' }, supervisor, 999999)).status === 404, 'and an unknown one is not found');
-const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+const yesterday = localDay(-1);
 const created = await addAction({ title: 'Replace the broken gate latch', ownerId: renata.id, dueOn: yesterday, clientVisible: true });
 const latch = created.data.actions?.find((a) => a.title === 'Replace the broken gate latch');
 log(created.status === 201 && latch?.owner_name === 'Renata Diaz' && latch.due_on === yesterday && latch.overdue,
@@ -354,8 +354,8 @@ section('incident reports');
 const catalogue = (await call('/admin/reports', { token: admin })).data.reports;
 log(['incidents-by-site', 'incidents-by-category', 'incidents-daily'].every((id) => catalogue.some((r) => r.id === id && r.group === 'Incidents')),
   'the three incident reports are in the catalogue');
-const yearAgo = new Date(Date.now() - 360 * 86400000).toISOString().slice(0, 10);
-const range = `from=${yearAgo}&to=${new Date().toISOString().slice(0, 10)}`;
+const yearAgo = localDay(-360);
+const range = `from=${yearAgo}&to=${localDay()}`;
 log((await call('/admin/reports/incidents-by-site?from=2020-01-01&to=2030-12-31', { token: admin })).status === 422, 'a range longer than a year is refused');
 const bySite = await call(`/admin/reports/incidents-by-site?${range}`, { token: admin });
 const byCat = await call(`/admin/reports/incidents-by-category?${range}`, { token: admin });
@@ -363,8 +363,8 @@ log(bySite.status === 200 && bySite.data.totals.total > 0 && bySite.data.rows.re
   'incidents by site adds up', `${bySite.data.totals?.total}`);
 log(byCat.status === 200 && byCat.data.totals.total === bySite.data.totals.total, 'by type counts the same incidents');
 log(bySite.data.rows.every((r) => r.open <= r.total && r.police <= r.total), 'police and still-open never exceed the total');
-const lastMonth = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-const todayStr = new Date().toISOString().slice(0, 10);
+const lastMonth = localDay(-30);
+const todayStr = localDay();
 const daily = await call(`/admin/reports/incidents-daily?from=${lastMonth}&to=${todayStr}`, { token: admin });
 log(daily.status === 200 && daily.data.rows.length >= 28 && daily.data.chart?.series === 'time', 'by day has a row for every day in the range', `${daily.data.rows?.length}`);
 const siteScoped = await call(`/admin/reports/incidents-by-site?${range}&siteId=${incDetail.data.incident.site_id}`, { token: admin });

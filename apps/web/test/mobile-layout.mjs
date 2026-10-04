@@ -297,6 +297,7 @@ async function audit(who, list, setup) {
       if (width !== WIDTHS[0] && scheme === 'light') continue;
       const context = await browser.newContext({
         viewport: { width, height: 800 }, colorScheme: scheme, isMobile: true, hasTouch: true, serviceWorkers: 'block',
+        ...(process.env.USC_BROWSER_TZ ? { timezoneId: process.env.USC_BROWSER_TZ } : {}),
       });
       // USC_READ_ONLY: for a live site, nothing but signing in may write.
       // Requests go out through Node rather than the browser, which also gets
