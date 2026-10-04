@@ -1,7 +1,10 @@
 # USA Security Connect
 
-Workforce operations platform for **USA Security & Protection Group** — guard tour, time
-and attendance, incident reporting, supervision and billing, in one system:
+**The whole guard-force platform, with a demo company you can sign in to.**
+
+Scheduling, GPS time clock, post logs, payroll, invoicing and a client portal for a
+Florida security contractor, **USA Security & Protection Group**. It covers guard tours,
+time and attendance, incident reporting, supervision and billing, in one system:
 
 - a **web app** for officers *and* the admin console,
 - a **mobile app** built from one codebase for **Android and iPhone**, and
@@ -11,6 +14,206 @@ All three talk to the same API, and the rules that decide "late", "missed check-
 "outside the geofence" live in one shared module so no surface can disagree with
 another. One thing gets captured once: an officer's clock-in is the same record that
 produces their timesheet, the client's coverage report and the invoice line.
+
+The live demo runs with a full sample company: **10** client sites, **43** staff (W-2
+and 1099) and **6** client portal logins. **Anyone can sign in** with the codes below.
+
+**[Open the live demo](https://usa-security-connect.vercel.app/)** ·
+**[Open the client portal](https://usa-security-connect.vercel.app/portal)**
+
+---
+
+## Try the live demo
+
+### Demo sign-ins
+
+| Sign in with | Who |
+|---|---|
+| `1001` / `2468` | Vince Ortega, administrator |
+| `1002` / `3571` | Renata Diaz, field supervisor |
+| `1003` / `4812` | Marcus Bell, officer on post now |
+| `1005` / `6174` | Dwayne Foster, 1099 contractor, armed |
+| `1006` / `7285` | Alicia Nunez, W-2 hourly officer |
+| `dana.whitfield@riverfrontholdings.com` / `riverfront-portal-01` | Client portal: Riverfront Commerce Center |
+
+On the sign-in screen, tap any account in the list to go straight in. Everyone shares
+the same sample company, so what you change may be reset or not show up for someone
+else. Every account, staff and client, is listed under [Quick start](#quick-start).
+
+### Five minutes in the demo
+
+Three short walk-throughs. Each starts on the live demo's sign-in screen.
+
+**A shift on post** (`1003` / `4812`)
+
+1. Answer the status check-in, then read the changed **post orders** and tap **I have read these orders**.
+2. Open **Post log** and tap **Got it** on the pass-down note.
+3. Under **Visitors**, sign in "Kyle Banner" and read the watchlist stop.
+4. Under **Vehicles**, look up plate GHT 4410: a repeat offender.
+5. Log a patrol under **Activity**.
+6. Under **Schedule**, tap **Confirm I'll be there** on tomorrow's shift.
+7. Under **Signed out to you**, check the garage patrol truck before driving.
+
+**Running the operation** (`1002` / `3571`)
+
+1. Open the **bell** in the header: everything waiting on you, most serious first.
+2. Open **Live tracking**: who is off post, late or quiet.
+3. On the **Dashboard**, record a shift **Confirmed by phone** under **Not confirmed yet**.
+4. Open **Fleet** and sign off the brake repair on the vehicle that is off the road.
+5. Press **Ctrl K** and type "bell" to jump to Marcus Bell's record.
+6. Answer the waiting request under **Client requests**.
+7. Under **Post logs → Post orders**, apply Dana Whitfield's requested change as a new version.
+8. Reply to the two-star rating under **Client feedback**.
+
+**The client's view** (`riverfront-portal-01`)
+
+1. See who is on post right now at Riverfront.
+2. Mark the urgent loading-dock issue **seen** or **fixed**.
+3. Rate the month and add a contact for the officers.
+4. Open **Report**, then **Monthly report** for the month on a page.
+5. Under **Orders**, read the lobby's orders and ask for a change.
+6. Ask for extra coverage under **Requests**.
+
+---
+
+## Feature tour
+
+Each screen in a line, by area. [What it does, in detail](#what-it-does-in-detail) has
+the full rules behind each one.
+
+### Live operations
+
+Where everyone is right now, against where they are scheduled to be. *Admin and supervisor.*
+
+- **Dashboard** — On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.
+- **Alerts inbox** — A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.
+- **Live tracking** — Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.
+- **Safety & map** — Duress alerts, check-ins and every post's geofence on one map.
+- **Flags** — Late clock-ins, no-shows, walk-offs, missed check-ins and geofence violations, each closed with a note.
+- **Not confirmed yet** — Who is due on post in the next 12 hours and has not said they will be there, with the number to call. An answer taken on the phone is recorded in one click.
+- **Confirm a shift** — Officers confirm each shift in the week ahead, on the web or the app. A day out, anyone who has not gets one reminder. Moving the shift means confirming it again.
+- **Dispatch** — Every open call for service, waiting ones first: from the client or the office, who has it, and how long it has been going.
+- **Send it to an officer** — Everyone on duty, whoever is at the property first, then by distance; busy or on a break is marked. Every step is timed against the target and logged.
+- **Calls on the officer's phone** — On my way, on scene, clear with what was found, or turn it back with a reason. Clocking out hands an open call back to the office.
+- **Clients request an officer** — Urgent or routine from the portal (emergencies go to 911), followed from sent to on scene, with response times and an email when it is cleared.
+- **Fleet** — Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.
+- **A vehicle's record** — Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.
+- **Check before driving** — Odometer, fuel and nine items, every one answered. A failed safety item says "do not drive". The end check gives the miles.
+- **Incidents** — Reports from the field with photos, severity, police numbers and review status.
+- **Incident follow-ups** — What has to happen after a serious incident, each with an owner and a due date. Overdue ones land in the alerts inbox; done only with a note of what was done, shared with the client or kept internal.
+- **Printable incident report** — One page for the insurer, the police or the client file. Review notes and internal follow-ups stay off it.
+- **Tours** — Checkpoint routes and every run: completed, missed and abandoned.
+- **QR checkpoint tags** — A printable tag for every checkpoint on a tour. Officers scan it with the phone camera to record the checkpoint.
+- **Field visits** — Every site with its last supervisor visit, longest first. Two weeks without one and the site is due: a badge, an alert and a line on site health until someone goes. Failed checks and low ratings are kept, with the supervisor's own notes apart from the note the client reads.
+- **Keys & equipment** — Who holds which key ring, radio or firearm, and what should have come back by now.
+- **Quick search** — Ctrl K from anywhere: officers by name, code or phone, sites, incident numbers and screens.
+- **Keyboard shortcuts** — Press ? for the list; g then a letter jumps to any main screen.
+- **Night mode** — Auto, Light or Night from the account menu. Auto follows the device, so night shifts get a dark screen on their own.
+
+### Post logs
+
+Everything officers record on post, gathered across every site. *Admin and supervisor.*
+
+- **Visitors** — Everyone signed in at every site right now, or any day's log, with vehicle and who let them in.
+- **Activity log** — The officers' running log: patrols, alarms, access and safety, with internal-only entries marked.
+- **Pass-down** — What each shift left for the next, and who has read it.
+- **Building issues** — Lights out, doors that will not lock, leaks and hazards, with the client's reply.
+- **Lost & found** — Items held, returned with a name and ID, or disposed of, with anything over 30 days flagged.
+- **Watchlist** — People not to be let in, by site or company-wide, and every sign-in that overrode a match.
+- **Vehicles** — Parking enforcement by plate, with repeat offenders across every site.
+- **Site contacts** — Who officers call at each site, kept by supervisors and by the client.
+- **Post orders** — Each post's standing orders, versioned. Issue a new version, see which officers have not read it yet, and apply or decline clients' requested changes, with a reply they get in the portal and by email.
+- **Daily activity report** — The day's coverage, patrols, incidents, visitors, parking and activity log, ready to print.
+
+### Scheduling & people
+
+Build rosters, answer requests, keep licences current.
+
+- **Schedule** — The week by post, open shifts, copy-week, and a candidate ranker that blocks anyone who cannot work a shift. Holidays are marked on the day.
+- **Shift requests** — Open-shift claims, swaps and drops waiting for approval.
+- **Client requests** — Extra coverage clients asked for; schedule it as open shifts or decline with a reason.
+- **Service agreements** — The hours each property pays for, against next week's roster and last week's hours worked. Short weeks and renewals coming up are flagged.
+- **Time off** — Requests to approve, with overlaps refused.
+- **Time corrections** — An officer's wrong punch goes to the office with the right time and what happened. An administrator approves (the shift is corrected, the recorded time kept) or declines with a reason; a waiting request holds up closing that week's payroll.
+- **Hiring** — Applications from the public form at /apply and from the office, stage by stage from applied to offer. Licence, background check and right to work must be ticked before an administrator can hire; hiring creates the login and shows the code and PIN once.
+- **Employees** — All 43 staff with role, classification, licence and status; each record has 30-day hours, late arrivals, open flags, pay rate, and every punch with its geofence check.
+- **Licensing** — Class D and G licences and certificates, sorted by what expires first. A licence lapsing within 30 days shows on the officer's home screen.
+- **Sites & posts** — Ten client sites, their posts, geofence radii and bill rates.
+- **Scorecards** — Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.
+- **Site health** — Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.
+
+### Time & pay
+
+Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
+
+- **Holidays** — The company holiday calendar: what each one pays officers and bills clients, time and a half by default. Add the six usual ones in one step, or any federal holiday.
+- **Holidays coming up** — The next holidays and how they are staffed: shifts booked and still open, confirmed, hours, and what the day adds in premium and in billing. Open shifts within two weeks are raised as alerts.
+- **Holiday pay** — Hours on a shift that starts on a holiday pay the premium to hourly W-2 officers, in its own column. Hours that are also overtime get the larger premium, not both.
+- **Overtime watch** — Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over. **Find cover** opens that shift with the officers who could take it, those with hours to spare first.
+- **Payroll** — Weekly pay periods: hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval; closed periods are frozen.
+- **Paid time off** — Hourly W-2 staff earn an hour for every 30 worked, up to 80. Asked for on the web or the phone, approved against the balance, paid by the next close at the officer's rate on the day, with adjustments always given a reason.
+- **Expenses** — What officers spent on the job and want back: parking, tolls, supplies, miles in their own car at the IRS rate. Anything over $25 needs a receipt photo. An administrator approves or declines with a reason, never their own claim; approved claims are paid with the next payroll, apart from gross pay.
+- **Commendations** — A client or supervisor thanks an officer for something specific. The officer reads it word for word on their home screen; client thanks reach the alerts inbox, and the scorecards count them.
+- **Punch log** — Every clock-in and check-in with position, geofence verdict and distance from post.
+- **Timesheets & pay** — Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.
+- **Pay rates** — Classification, overtime and bill rate for everyone, with dated changes and bulk raises.
+- **Reports** — Eight reports over any range, including the payroll register with 1099 W-9 status, and incident trends by site, type and day.
+
+### Billing & client quality
+
+Invoices built from the hours payroll pays, and what clients think of the service.
+
+- **Invoices** — Drafts, sent, paid and overdue, with cost and margin kept on each. Holiday hours are invoiced on their own line naming the holiday.
+- **Invoice questions** — What clients ask about their invoices, waiting ones first, answered in place and emailed back.
+- **Client feedback** — Monthly ratings per property, the lowest first, with replies that go back to the client.
+- **Notices to clients** — A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.
+- **Client portal logins** — Contacts, the properties they can see, invitations and resets.
+
+### Communication & oversight
+
+Notices to the force, required training, and the record of who changed what.
+
+- **Broadcasts** — Priority notices with read and acknowledge receipts per officer.
+- **Training** — Required videos that cannot be marked done until they have been watched.
+- **Audit log** — Every sign-in, pay change, override and export, for administrators.
+
+### Officer app
+
+What Marcus Bell sees on his phone at the Riverfront lobby console. *Officer.*
+
+- **Home** — Check-in due, current post, geofence, slide to clock out. Changed post orders lead the screen until the officer confirms they have read them; clocking out shows what the shift did and offers a pass-down note.
+- **At night** — The same home screen, dark, for the 2 AM round.
+- **Site contacts** — Who to call at this site, a tap away.
+- **Pass-down** — Notes from the last shift, acknowledged one by one.
+- **Activity** — Log a patrol or an alarm in two taps.
+- **Visitors** — Sign people in and out at the desk; a listed name is stopped with the instruction to follow.
+- **Plate lookup** — Every violation for a plate, at any site.
+- **Building issues** — Report what needs fixing; see the client's reply.
+- **Lost & found** — Log an item and hand it back with ID.
+- **Schedule** — Upcoming shifts, holidays marked, confirm I'll be there, and open shifts to claim.
+- **Tours** — Patrol routes with checkpoints to scan.
+- **Report an incident** — Category, severity, people, police and photos.
+- **Updates** — Broadcasts, training and messages.
+- **Profile & pay** — Hours, this week's estimate, closed pay stubs, paid time off and expenses.
+
+### Client portal
+
+What a client sees for their own property, and nothing else: no pay, no staff records, no other clients. *Client.*
+
+- **Overview** — Building issues to act on, who is on post now, and the week's coverage, patrols and incidents.
+- **Rate us & contacts** — A monthly rating, our reply, and the contacts the officers call.
+- **Daily report** — Coverage, patrols, incidents, the activity log, visitors and parking for any day.
+- **Coverage** — Every scheduled shift, who stood it and when they clocked in and out; hours worked each week against the service agreement.
+- **Coming up** — The next 7 or 14 days, day by day: who is booked on each post, who has confirmed, and what is still being arranged.
+- **Patrols** — Each round walked, checkpoint by checkpoint.
+- **Incidents** — Full reports with photographs, and the follow-ups we share: in hand with a due date, or done.
+- **Notices from us** — At the top of every page until the contact marks each one read; urgent first.
+- **Invoices** — Their own invoices, never pay rates or margin; ask about the whole invoice or one line. Holiday rates for the holidays ahead are listed, never what officers are paid.
+- **Requests** — Ask for extra officers, or an officer to a call, and see the answer.
+- **Post orders** — The orders our officers work to at each post, and a way to ask for a change.
+- **Commend an officer** — Thank an officer who worked the property lately.
+- **Monthly report** — One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.
+- **Email me** — Serious incident alerts as they happen, and a daily report each morning, if they want it.
 
 ---
 
@@ -145,7 +348,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 
 ---
 
-## What it does
+## What it does, in detail
 
 ### Officer (web + mobile)
 
@@ -415,6 +618,16 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   - **Locks.** A holiday in a closed pay period cannot be added, changed or removed.
     Invoices already sent keep their figures, and a change says how many cover that
     day.
+  - **Coming up.** A card for the next three holidays shows:
+    - how many shifts are rostered on each, and how many are still open or
+      unconfirmed;
+    - the hours;
+    - roughly what the day adds in holiday premium, at each officer's current rate;
+    - how much more it bills than a normal day.
+
+    It links to that week on the schedule. An open shift on a holiday in the next 14
+    days goes in the alerts inbox and is counted on the sidebar. The alert is
+    critical in the last three days.
 - **Commendations** — on each officer's record: every commendation from a client or
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
@@ -1037,6 +1250,13 @@ the server is running corrupts the data directory.
   - The site's invoice preview turns into holiday lines at twice the rate for the
     same hours, with the premium in their cost.
   - Changing the bill multiplier reprices the day.
+
+  Then the staffing outlook:
+  - An open shift added on a coming holiday is counted as open, with the hours, the
+    estimated premium and the extra billing.
+  - It is raised in the alerts inbox and counted on the sidebar, and the alert goes
+    once the day is no longer a holiday.
+  - Officers cannot read the outlook.
 
   Finally, who sees it:
   - The officer's roster, the supervisors' schedule and the client portal all mark

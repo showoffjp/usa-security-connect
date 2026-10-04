@@ -1432,7 +1432,9 @@ for (const u of STAFF) {
   await checkScreen('admin: add a holiday', adm.page, adm.problems);
   await adm.page.click('[role="dialog"] button:has-text("Add holiday")');
   await adm.page.waitForTimeout(1500);
-  const added = adm.page.locator('.list-item', { hasText: 'E2E Holiday' });
+  // The year's list, not the "Coming up" card above it.
+  const yearList = (page) => page.locator('.card', { has: page.locator('h3', { hasText: /^\d{4}$/ }) });
+  const added = yearList(adm.page).locator('.list-item', { hasText: 'E2E Holiday' });
   log(await added.count() === 1 && await added.locator('text=Bills 2x').count() === 1, 'an administrator adds a holiday that bills double');
 
   await adm.page.goto(WEB + `/admin/schedule?week=${target.monday}`);
@@ -1444,8 +1446,12 @@ for (const u of STAFF) {
   await staffSignIn(sup.page, '1002', '3571');
   await sup.page.goto(WEB + '/admin/holidays');
   await settle(sup.page);
-  log(await sup.page.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 1 && await sup.page.locator('button:has-text("Add a holiday")').count() === 0,
+  log(await yearList(sup.page).locator('.list-item', { hasText: 'E2E Holiday' }).count() === 1 && await sup.page.locator('button:has-text("Add a holiday")').count() === 0,
     'a supervisor reads the calendar but cannot change it');
+  const coming = sup.page.locator('.card', { hasText: 'Coming up' });
+  log(await coming.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 1 && await coming.locator('text=/booked|Nothing rostered yet/').count() >= 1,
+    'and sees how the coming holidays are staffed');
+  await checkScreen('supervisor: holidays coming up', sup.page, sup.problems);
   await sup.context.close();
 
   const client = await watchedPage({ width: 390, height: 844 });
@@ -1467,7 +1473,7 @@ for (const u of STAFF) {
   await settle(adm.page);
   await adm.page.click('button[aria-label="Remove E2E Holiday"]');
   await adm.page.waitForTimeout(1500);
-  log(await adm.page.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 0, 'and removes it again');
+  log(await adm.page.locator('.list-item', { hasText: 'E2E Holiday' }).count() === 0, 'and removes it again, from the calendar and from what is coming up');
   await adm.context.close();
 }
 

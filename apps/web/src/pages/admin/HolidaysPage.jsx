@@ -1,10 +1,76 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { fmtDate, fmtWeekday } from '../../lib/format.js';
+import { fmtDate, fmtMoney, fmtWeekday, toDateInput } from '../../lib/format.js';
 import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Segmented, useToast } from '../../components/ui.jsx';
 
 const times = (n) => `${Number(n)}x`;
+const dollars = (n) => fmtMoney(Math.round(n * 100));
+
+/** Monday of the week a day falls in, for the schedule link. */
+function weekOf(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  const x = new Date(y, m - 1, d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return toDateInput(x);
+}
+
+/**
+ * The next holidays and how they are staffed: shifts booked and still open,
+ * and what the day adds on top of a normal one, so nobody finds a gap the
+ * night before.
+ */
+function ComingUp({ calendar }) {
+  const [outlook, setOutlook] = useState(null);
+  // Read again whenever the calendar changes, so an added or removed holiday shows here too.
+  useEffect(() => {
+    api.get('/holidays/outlook').then(setOutlook).catch(() => setOutlook({ holidays: [] }));
+  }, [calendar]);
+  if (!outlook?.holidays?.length) return null;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Coming up</h3>
+        <span className="tiny muted">Open shifts within {outlook.alert_days} days are raised as alerts</span>
+      </div>
+      <div className="list">
+        {outlook.holidays.map((h) => (
+          <div key={h.day} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+            <div className="grow">
+              <div className="strong">{h.name}</div>
+              <div className="small muted">
+                {fmtWeekday(h.day)}, {fmtDate(h.day)} · {h.days_away === 0 ? 'today' : h.days_away === 1 ? 'tomorrow' : `in ${h.days_away} days`}
+              </div>
+              <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                {h.shifts === 0 ? (
+                  <Chip>Nothing rostered yet</Chip>
+                ) : (
+                  <>
+                    <Chip kind={h.open > 0 ? (h.days_away <= outlook.alert_days ? 'danger' : 'warn') : 'ok'}>
+                      {h.assigned} of {h.shifts} booked
+                    </Chip>
+                    {h.open > 0 && <Chip kind="warn">{h.open} open</Chip>}
+                    <Chip>{h.confirmed} confirmed</Chip>
+                    <Chip>{h.hours}h</Chip>
+                  </>
+                )}
+              </div>
+              {h.shifts > 0 && (
+                <div className="tiny muted" style={{ marginTop: 6 }}>
+                  About {dollars(h.estimated_premium)} in holiday premium and {dollars(h.estimated_bill_uplift)} more billed than a normal day.
+                </div>
+              )}
+            </div>
+            <Link className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} to={`/admin/schedule?week=${weekOf(h.day)}`} aria-label={`Open the week of ${h.name} on the schedule`}>
+              Schedule
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Add a holiday, or change one already on the calendar. */
 function HolidayDialog({ holiday, suggestion, limits, onClose, onSaved }) {
@@ -174,6 +240,8 @@ export default function HolidaysPage() {
         <LoadingPage label="Reading the calendar" />
       ) : (
         <>
+          {year === thisYear && <ComingUp calendar={data} />}
+
           {isAdmin && coreMissing.length > 0 && (
             <Banner
               kind="info"
