@@ -43,7 +43,7 @@ import { agreementBoard } from '../services/agreements.js';
 import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confirmations.js';
 import { overtimeWatch } from '../services/overtime.js';
 import { fleet } from '../services/vehicles.js';
-import { holidaysForSpan } from '../services/holidays.js';
+import { holidaysForSpan, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services/holidays.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -247,6 +247,8 @@ adminRouter.get(
     // Expense claims waiting for an administrator.
     const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
     const overtimeRisk = (await overtimeWatch()).totals.avoidable;
+    // Open shifts on a holiday coming up soon: the hardest days to fill.
+    const holidayGaps = (await holidayOutlook({ withinDays: HOLIDAY_ALERT_DAYS })).reduce((n, h) => n + h.open, 0);
     // Sites rostered short of their agreement, or with one about to run out.
     const agreementSummary = (await agreementBoard()).summary;
     // Officers due on post soon who have not said they will be there.
@@ -301,6 +303,7 @@ adminRouter.get(
         fleetAttention,
         pendingExpenses,
         overtimeRisk,
+        holidayGaps,
       },
       unconfirmed,
       alerts: openAlerts.map((a) => isoFields(a, ['triggered_at', 'acknowledged_at'])),
@@ -2434,6 +2437,17 @@ async function buildAlerts(userId) {
     if (o.status !== 'over' || !t || t.already_over || new Date(t.starts_at) <= new Date()) continue;
     push({ key: `overtime:${o.user_id}:${t.shift_id}`, kind: 'overtime', severity: 'warning', at: new Date().toISOString(), link: '/admin/overtime',
       title: `${o.name} is heading into overtime`, detail: `${o.projected_hours}h this week · ${o.overtime_hours}h over from ${t.post_name}` });
+  }
+
+  // A holiday coming up with shifts nobody is booked on.
+  for (const h of await holidayOutlook({ withinDays: HOLIDAY_ALERT_DAYS })) {
+    if (h.open === 0) continue;
+    const monday = parseDay(h.day);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    push({ key: `holiday-open:${h.day}`, kind: 'holiday', severity: h.days_away <= 3 ? 'critical' : 'warning', at: new Date().toISOString(),
+      link: `/admin/schedule?week=${toDateString(monday)}`,
+      title: `${h.open} open shift${h.open === 1 ? '' : 's'} on ${h.name}`,
+      detail: `${h.days_away === 0 ? 'Today' : h.days_away === 1 ? 'Tomorrow' : `In ${h.days_away} days`} · ${h.assigned} of ${h.shifts} booked · pays ${h.pay_multiplier}x` });
   }
 
   // A client contact thanking an officer: worth passing on, so it is in the inbox for a week.

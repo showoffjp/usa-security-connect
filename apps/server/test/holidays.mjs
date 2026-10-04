@@ -196,7 +196,34 @@ if (ahead) {
   log((await call('/holidays/upcoming', { token: marcus })).data.holidays.some((x) => x.day === aheadDay), 'and it is among their upcoming holidays');
   const board = (await call(`/admin/shifts?from=${at(aheadDay, 0)}&to=${at(aheadDay, 23)}`, { token: supervisor })).data;
   log(board.holidays.some((x) => x.day === aheadDay), 'the schedule marks the day for supervisors');
+
+  // The staffing outlook, with a shift nobody is booked on yet.
+  const before = (await call('/holidays/outlook', { token: supervisor })).data.holidays.find((x) => x.day === aheadDay);
+  const gap = await call('/admin/shifts', {
+    token: admin,
+    method: 'POST',
+    body: { postId: post.id, startsAt: at(aheadDay, 10), endsAt: at(aheadDay, 14), notes: 'Suite: holiday cover nobody has taken yet.' },
+  });
+  const outlook = await call('/holidays/outlook', { token: supervisor });
+  const day = outlook.data.holidays.find((x) => x.day === aheadDay);
+  log(outlook.status === 200 && day && day.shifts === before.shifts + 1 && day.open === before.open + 1 && day.assigned === before.assigned,
+    'the outlook counts the day\'s shifts, and the one still open', day && `${day.assigned} of ${day.shifts} booked`);
+  log(day && day.hours >= 4 && day.estimated_premium > 0 && day.estimated_bill_uplift > 0,
+    'with the hours, and what the day adds in premium and in billing', day && `$${day.estimated_premium} / $${day.estimated_bill_uplift}`);
+  log((await call('/holidays/outlook', { token: marcus })).status === 403, 'officers do not see the outlook');
+  if (day && day.days_away <= outlook.data.alert_days) {
+    const alerts = (await call('/admin/alerts', { token: supervisor })).data.alerts;
+    const raised = alerts.find((a) => a.key === `holiday-open:${aheadDay}`);
+    log(raised && raised.kind === 'holiday' && raised.title.includes('Suite Future Holiday'), 'an open shift on a holiday this close is in the alerts inbox', raised?.title);
+    const counts = (await call('/admin/dashboard', { token: supervisor })).data.counts;
+    log(counts.holidayGaps >= 1, 'and counted in the sidebar', `${counts.holidayGaps}`);
+  } else {
+    log(true, 'the holiday is too far off to raise an alert');
+  }
+  if (gap.data?.shift?.id) await call(`/admin/shifts/${gap.data.shift.id}`, { token: admin, method: 'DELETE' });
   await call(`/holidays/${h.id}`, { token: admin, method: 'DELETE' });
+  log(!(await call('/admin/alerts', { token: supervisor })).data.alerts.some((a) => a.key === `holiday-open:${aheadDay}`),
+    'and once it is no longer a holiday, the alert goes');
 } else {
   log(true, 'Marcus has no shift ahead to mark');
 }

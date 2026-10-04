@@ -24,7 +24,7 @@ import {
   HOLIDAY_MULTIPLIER_MIN,
   HOLIDAY_MULTIPLIER_MAX,
 } from '../shared.js';
-import { presentHoliday, upcomingHolidays } from '../services/holidays.js';
+import { presentHoliday, upcomingHolidays, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services/holidays.js';
 import { closedPeriodOn, periodLabel } from '../services/payPeriods.js';
 
 export const holidaysRouter = Router();
@@ -48,6 +48,15 @@ holidaysRouter.get(
       holidays: holidays.map((h) => ({ day: h.day, name: h.name, pay_multiplier: h.pay_multiplier })),
       earns_premium: Boolean(me && me.employment_type === 'w2' && me.pay_type === 'hourly' && !me.exempt),
     });
+  })
+);
+
+/** How the next few holidays are staffed, and what they will cost and bill on top. */
+holidaysRouter.get(
+  '/outlook',
+  requireRole(ROLES.SUPERVISOR),
+  wrap(async (_req, res) => {
+    res.json({ holidays: await holidayOutlook({ limit: 3 }), alert_days: HOLIDAY_ALERT_DAYS });
   })
 );
 

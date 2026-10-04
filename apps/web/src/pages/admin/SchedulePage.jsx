@@ -501,6 +501,12 @@ function CopyWeekDialog({ weekStart, siteFilter, siteName, onClose, onSaved }) {
 }
 
 /** Rows of officers, columns of days: the view a scheduler actually balances hours in. */
+/** "Today", "Tomorrow" or the weekday: the date itself is on the line below. */
+function dayLabel(d) {
+  const label = fmtDay(d);
+  return ['Today', 'Tomorrow', 'Yesterday'].includes(label) ? label : d.toLocaleDateString([], { weekday: 'short' });
+}
+
 /** A day that pays and bills the holiday rate. */
 function HolidayMark({ holiday }) {
   return (
@@ -543,7 +549,7 @@ function RosterGrid({ shifts, employees, range, siteFilter, showAll, holidays, o
               <th style={{ minWidth: 170 }}>Officer</th>
               {days.map((d) => (
                 <th key={d.toISOString()} style={d.toDateString() === new Date().toDateString() ? { color: 'var(--brand-text)' } : undefined}>
-                  {fmtDay(d)}
+                  {dayLabel(d)}
                   <div className="tiny muted">{d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
                   {holidays.get(toDateInput(d)) && <HolidayMark holiday={holidays.get(toDateInput(d))} />}
                 </th>
@@ -812,7 +818,7 @@ export default function AdminSchedulePage() {
             <div key={day.toISOString()} className="card" style={isToday ? { borderColor: 'var(--brand-400)' } : undefined}>
               <div className="card-head" style={{ padding: '10px 12px' }}>
                 <div>
-                  <div className="strong small">{fmtDay(day)}</div>
+                  <div className="strong small">{dayLabel(day)}</div>
                   <div className="tiny muted">{day.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
                   {holidays.get(toDateInput(day)) && <HolidayMark holiday={holidays.get(toDateInput(day))} />}
                 </div>
