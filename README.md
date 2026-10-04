@@ -194,7 +194,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   device, so a phone set to dark at night gets a dark screen without asking. The
   choice is kept per device and applied before the first paint, so there is no
   white flash. Street maps are dimmed to match. Printing is always on white.
-- **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged.
+- **Schedule** — upcoming and worked shifts, hours, overtime, and anything flagged. A
+  shift on a company holiday is marked with the holiday's name, and the next holiday
+  is named above the list, with the rate it pays if the officer earns the premium.
 - **Signed out to you** — the home screen (web and mobile) lists the keys, radios,
   firearm or patrol vehicle the officer holds, with **Hand back** for the small items.
 - **Patrol vehicle checks** — before driving a signed-out vehicle the officer does a
@@ -218,8 +220,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   hours in a closed pay period have been paid, so those go to the office instead.
 - **My pay** (on the profile page) — the officer's own pay basis, an estimate for the
   week so far, and every closed pay period: hours, regular and overtime pay, gross and
-  where they worked, exactly as payroll approved it, with any expenses paid back alongside. A 1099 contractor sees *My
-  payments*, with no overtime.
+  where they worked, exactly as payroll approved it, with any expenses paid back
+  alongside and any holiday premium beside the overtime. A 1099 contractor sees *My
+  payments*, with no overtime or holiday premium.
 - **My expenses** (profile on the web, the **Worked** tab on the phone) — claim back
   parking, tolls, supplies, meals or miles driven in your own car on the job. Mileage
   is priced at the IRS rate (70¢ a mile) as it is typed; anything else over $25 needs
@@ -388,6 +391,30 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   Overtime that a shift not yet started would cause is counted on the sidebar and
   raised in the alerts inbox. Contractors and salaried staff, who do not earn
   overtime, are left out.
+- **Holidays** (Workforce → Holidays) — the company holiday calendar, by year. Each
+  holiday has a pay multiplier and a bill multiplier, time and a half by default.
+  - **Which shifts count.** A shift counts when it *starts* on the holiday, the same
+    rule that decides which day's pay rate applies. The day is the date itself, not
+    the weekday a bank observes it on: a post is open on the Saturday the Fourth falls
+    on.
+  - **Pay.** W-2 officers paid by the hour, the people who earn overtime, get the
+    holiday premium on top of straight time. Holiday hours that are also overtime get
+    the larger premium, not both. At time and a half each, that means overtime already
+    covers them.
+  - **Billing.** The client is billed at the holiday rate, on its own invoice line
+    naming the holiday and the multiplier. The premium those hours pay counts in the
+    line's cost, so margin stays honest.
+  - **Where it shows.** The schedule marks the day. The payroll register, its CSV
+    export, Timesheets and the payroll report carry holiday hours and the premium. An
+    officer sees a holiday shift marked on their roster (web and phone), the next
+    holiday on their schedule, and holiday pay on their pay stubs.
+  - **Managing it.** Administrators add, change and remove holidays, or add the six
+    usual ones (New Year's Day, Memorial Day, Independence Day, Labor Day,
+    Thanksgiving and Christmas) in one step. The other federal holidays are listed to
+    add one at a time. Supervisors can read the calendar but not change it.
+  - **Locks.** A holiday in a closed pay period cannot be added, changed or removed.
+    Invoices already sent keep their figures, and a change says how many cover that
+    day.
 - **Commendations** — on each officer's record: every commendation from a client or
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
@@ -471,7 +498,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   every step, so an officer without a current Class G licence cannot end up on an armed
   post; approving a claim automatically declines the officers who lost out.
 - **Invoices** — raised from hours already on the clock at the bill rate that applied,
-  one line per post. Preview before committing, tax and payment terms per invoice, a
+  one line per post, plus a line of its own for hours on a company holiday at the
+  holiday rate. Preview before committing, tax and payment terms per invoice, a
   printable invoice document and CSV export, and a receivables view with margin and an
   overdue count. A period that overlaps an existing invoice is flagged before the same
   hours get billed twice. **Client questions** (a tab, and on each invoice) lists what
@@ -590,7 +618,9 @@ a PIN — and sees, for their own properties only:
   property that day is listed too, along with the officers' activity log (without
   entries marked internal) and any building issues reported.
 - **Invoices** — their own issued invoices, with the hours and the rate charged, as a
-  printable document they can save as a PDF. **Ask about an invoice** — the whole of it
+  printable document they can save as a PDF. **Holiday rates** lists the holidays ahead
+  and what each bills at, but not what officers are paid for them. The upcoming
+  coverage marks a shift that falls on one. **Ask about an invoice** — the whole of it
   or one line — and the answer arrives in the portal and by email; up to three
   questions can wait on one invoice at a time, and the list shows which have one
   waiting.
@@ -802,7 +832,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
-One command reseeds the database, starts the API, runs all 33 steps and stops it:
+One command reseeds the database, starts the API, runs all 34 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -988,6 +1018,30 @@ the server is running corrupts the data directory.
   Friday's shift; the contractor is not on the board. A Saturday on top adds to the
   overtime but Friday is still the shift that tips it. This week's avoidable overtime
   matches the sidebar count and the alerts inbox; officers cannot read the board.
+- **`test/holidays.mjs`** — the premium rule on its own first:
+  - 8 holiday hours at $20 pay $80 extra.
+  - After 36 hours in the week, only the 4 hours under 40 get the premium.
+  - At double time, the overtime hours get the half that double time pays beyond
+    overtime.
+
+  Then the calendar:
+  - The usual holidays are seeded, and the federal ones not yet on it are offered.
+  - Only an administrator changes it, with every bad date, name and multiplier refused.
+  - There is one holiday a day, and the six usual ones go on in one step.
+  - Nothing can be added to a closed pay period.
+
+  Then a floater works eight hours on a recent open day, which becomes a holiday:
+  - Her gross goes up by exactly half her rate on each hour, and the register says
+    which holiday.
+  - An earlier approval no longer stands, and the CSV carries the column.
+  - The site's invoice preview turns into holiday lines at twice the rate for the
+    same hours, with the premium in their cost.
+  - Changing the bill multiplier reprices the day.
+
+  Finally, who sees it:
+  - The officer's roster, the supervisors' schedule and the client portal all mark
+    the day, and clients never see the pay multiplier.
+  - Removing the holiday takes the premium and the holiday lines back out.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1012,7 +1066,7 @@ expects it.
 
 The mobile layout audit (`npm run test:mobile --workspace @usc/web`) opens every screen
 as an administrator, an officer and a client, at 360 and 390 pixels wide, in light and
-night mode (291 screens). On each one it measures the layout for faults a phone shows
+night mode (303 screens). On each one it measures the layout for faults a phone shows
 and a desktop hides:
 - text squeezed to a few letters a line;
 - a word wider than its box;

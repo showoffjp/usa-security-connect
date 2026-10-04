@@ -70,6 +70,8 @@ const ADMIN = [
   ['Expenses', '/admin/expenses'],
   ['Overtime watch', '/admin/overtime'],
   ['Overtime watch: next week', '/admin/overtime', async (p) => p.click('button[role="radio"]:has-text("Next week")')],
+  ['Holidays', '/admin/holidays'],
+  ['Holidays: add one', '/admin/holidays', async (p) => p.click('button:has-text("Add a holiday")')],
   ['Expenses: decline', '/admin/expenses', async (p) => p.locator('li.expense-row button:has-text("Decline")').first().click()],
   ['Fleet: a vehicle', '/admin/fleet', async (p) => p.locator('table.data button[aria-label^="Open "]').first().click()],
   ['Post logs: visitors', '/admin/post-logs'],

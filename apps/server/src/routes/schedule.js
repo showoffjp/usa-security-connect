@@ -7,6 +7,7 @@ import { confirmationOf, confirmShift, confirmable, withConfirmation } from '../
 import { toSql } from '../services/compliance.js';
 import { loadPricedEntries, personPay } from '../services/payroll.js';
 import { dayString } from '../services/payPeriods.js';
+import { holidaysForSpan } from '../services/holidays.js';
 
 export const scheduleRouter = Router();
 scheduleRouter.use(requireAuth);
@@ -31,12 +32,18 @@ scheduleRouter.get(
          ORDER BY sh.starts_at`
       )
       .all(req.user.id, toSql(from), toSql(to)));
+    // A shift that starts on a holiday says so: the officer sees it on the roster.
+    const holidays = await holidaysForSpan(from, to);
 
     res.json({
-      shifts: shifts.map((s) => ({
-        ...isoFields(withConfirmation(s), ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
-        confirmable: confirmable(s),
-      })),
+      shifts: shifts.map((s) => {
+        const h = holidays.get(toDateString(new Date(sqlToIso(s.starts_at))));
+        return {
+          ...isoFields(withConfirmation(s), ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
+          confirmable: confirmable(s),
+          holiday: h ? { name: h.name, pay_multiplier: h.pay_multiplier } : null,
+        };
+      }),
       range: { from: from.toISOString(), to: to.toISOString() },
       confirmAheadDays: CONFIRM_AHEAD_DAYS,
     });
@@ -144,7 +151,7 @@ scheduleRouter.get(
     const stubs = await db
       .prepare(
         `SELECT l.minutes, l.regular_minutes, l.overtime_minutes, l.regular_pay_cents, l.overtime_pay_cents,
-                l.gross_cents, l.entries, l.sites, l.employment_type, l.pay_type,
+                l.holiday_minutes, l.holiday_pay_cents, l.gross_cents, l.entries, l.sites, l.employment_type, l.pay_type,
                 p.id AS period_id, p.period_start, p.period_end, p.closed_at,
                 (SELECT COALESCE(SUM(e.amount_cents), 0) FROM expense_claims e
                  WHERE e.pay_period_id = p.id AND e.user_id = l.user_id) AS reimbursement_cents,
@@ -182,6 +189,7 @@ scheduleRouter.get(
         shifts: entries.length,
         hours: toHours(week?.minutes || 0),
         overtime_hours: toHours(week?.overtimeMinutes || 0),
+        holiday_hours: toHours(week?.holidayMinutes || 0),
         estimated_pay: dollars(week?.payCents ?? 0),
       },
       stubs: stubs.map((s) => ({
@@ -195,6 +203,8 @@ scheduleRouter.get(
         overtime_hours: toHours(s.overtime_minutes),
         regular_pay: dollars(s.regular_pay_cents),
         overtime_pay: dollars(s.overtime_pay_cents),
+        holiday_hours: toHours(s.holiday_minutes || 0),
+        holiday_pay: dollars(s.holiday_pay_cents || 0),
         gross_pay: dollars(s.gross_cents),
         reimbursements: dollars(Number(s.reimbursement_cents) || 0),
         pto_pay: dollars(Number(s.pto_pay_cents) || 0),

@@ -78,7 +78,7 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/33  SQL dialect translation\n');
+console.log('1/34  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
@@ -87,16 +87,16 @@ if (dialect !== 0) {
 
 // Also runs before anything starts: it opens a throwaway database of its own,
 // and covers the one case no HTTP suite can reach because no route passes it.
-console.log('\n2/33  Flag detail encoding\n');
+console.log('\n2/34  Flag detail encoding\n');
 const flags = await run('test/flags.mjs');
 
-console.log('\n3/33  Seeding\n');
+console.log('\n3/34  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n4/33  Starting the API');
+console.log('\n4/34  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -125,98 +125,101 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('5/33  Core suite\n');
+console.log('5/34  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n6/33  Feature suite\n');
+console.log('\n6/34  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n7/33  Shift request suite\n');
+console.log('\n7/34  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n8/33  Client portal suite\n');
+console.log('\n8/34  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n9/33  Invoicing suite\n');
+console.log('\n9/34  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
-console.log('\n10/33  Email suite\n');
+console.log('\n10/34  Email suite\n');
 const email = await run('test/email.mjs');
 
-console.log('\n11/33  Security suite\n');
+console.log('\n11/34  Security suite\n');
 const security = await run('test/security.mjs');
 
-console.log('\n12/33  Role permission suite\n');
+console.log('\n12/34  Role permission suite\n');
 const roles = await run('test/roles.mjs');
 
-console.log('\n13/33  Tracking, pay rates and reports suite\n');
+console.log('\n13/34  Tracking, pay rates and reports suite\n');
 const tracking = await run('test/tracking.mjs');
 
-console.log('\n14/33  Keys and equipment suite\n');
+console.log('\n14/34  Keys and equipment suite\n');
 const equipment = await run('test/equipment.mjs');
 
-console.log('\n15/33  Payroll close suite\n');
+console.log('\n15/34  Payroll close suite\n');
 const payroll = await run('test/payroll.mjs');
 
-console.log('\n16/33  Client coverage requests and officer pay suite\n');
+console.log('\n16/34  Client coverage requests and officer pay suite\n');
 const requests = await run('test/requests.mjs');
 
-console.log('\n17/33  Visitor log, pass-down notes and quick search suite\n');
+console.log('\n17/34  Visitor log, pass-down notes and quick search suite\n');
 const postlog = await run('test/postlog.mjs');
 
-console.log('\n18/33  Watchlist, vehicle violations and scorecards suite\n');
+console.log('\n18/34  Watchlist, vehicle violations and scorecards suite\n');
 const watch = await run('test/watch.mjs');
 
-console.log('\n19/33  Activity log, building issues and lost and found suite\n');
+console.log('\n19/34  Activity log, building issues and lost and found suite\n');
 const sitelog = await run('test/sitelog.mjs');
 
-console.log('\n20/33  Site contacts, client feedback and CSV exports suite\n');
+console.log('\n20/34  Site contacts, client feedback and CSV exports suite\n');
 const contactsSuite = await run('test/contacts.mjs');
 
-console.log('\n21/33  Post orders, alerts inbox, QR tags and incident follow-ups suite\n');
+console.log('\n21/34  Post orders, alerts inbox, QR tags and incident follow-ups suite\n');
 const ordersSuite = await run('test/orders.mjs');
 
-console.log('\n22/33  Supervisor field visits suite\n');
+console.log('\n22/34  Supervisor field visits suite\n');
 const visitsSuite = await run('test/visits.mjs');
 
-console.log('\n23/33  Hiring pipeline suite\n');
+console.log('\n23/34  Hiring pipeline suite\n');
 const hiringSuite = await run('test/hiring.mjs');
 
-console.log('\n24/33  Dispatch: calls for service suite\n');
+console.log('\n24/34  Dispatch: calls for service suite\n');
 const dispatchSuite = await run('test/dispatch.mjs');
 
-console.log('\n25/33  Time corrections suite\n');
+console.log('\n25/34  Time corrections suite\n');
 const correctionsSuite = await run('test/corrections.mjs');
 
-console.log('\n26/33  Service agreements suite\n');
+console.log('\n26/34  Service agreements suite\n');
 const agreementsSuite = await run('test/agreements.mjs');
 
-console.log('\n27/33  Shift confirmations suite\n');
+console.log('\n27/34  Shift confirmations suite\n');
 const confirmationsSuite = await run('test/confirmations.mjs');
 
-console.log('\n28/33  Patrol vehicles suite\n');
+console.log('\n28/34  Patrol vehicles suite\n');
 const vehiclesSuite = await run('test/vehicles.mjs');
 
-console.log('\n29/33  Expense claims suite\n');
+console.log('\n29/34  Expense claims suite\n');
 const expensesSuite = await run('test/expenses.mjs');
 
-console.log('\n30/33  Paid time off suite\n');
+console.log('\n30/34  Paid time off suite\n');
 const ptoSuite = await run('test/pto.mjs');
 
-console.log('\n31/33  Commendations suite\n');
+console.log('\n31/34  Commendations suite\n');
 const commendationsSuite = await run('test/commendations.mjs');
 
-console.log('\n32/33  Overtime watch suite\n');
+console.log('\n32/34  Overtime watch suite\n');
 const overtimeSuite = await run('test/overtime.mjs');
+
+console.log('\n33/34  Holiday pay and billing suite\n');
+const holidaysSuite = await run('test/holidays.mjs');
 
 // Last on purpose: it sends malformed writes to every endpoint, some of which
 // change things, and it signs its own sessions out at the end.
-console.log('\n33/33  Endpoint sweep: every route, every caller, good and bad input\n');
+console.log('\n34/34  Endpoint sweep: every route, every caller, good and bad input\n');
 const sweepSuite = await run('test/sweep.mjs');
 
 stop();
 
-const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0 || sitelog !== 0 || sweepSuite !== 0 || contactsSuite !== 0 || ordersSuite !== 0 || visitsSuite !== 0 || hiringSuite !== 0 || dispatchSuite !== 0 || correctionsSuite !== 0 || agreementsSuite !== 0 || confirmationsSuite !== 0 || vehiclesSuite !== 0 || expensesSuite !== 0 || ptoSuite !== 0 || commendationsSuite !== 0 || overtimeSuite !== 0;
+const failed = dialect !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0 || sitelog !== 0 || sweepSuite !== 0 || contactsSuite !== 0 || ordersSuite !== 0 || visitsSuite !== 0 || hiringSuite !== 0 || dispatchSuite !== 0 || correctionsSuite !== 0 || agreementsSuite !== 0 || confirmationsSuite !== 0 || vehiclesSuite !== 0 || expensesSuite !== 0 || ptoSuite !== 0 || commendationsSuite !== 0 || overtimeSuite !== 0 || holidaysSuite !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

@@ -38,6 +38,7 @@ import { currentOrders } from '../services/postOrders.js';
 import { siteMonth, monthKey } from '../services/siteMonth.js';
 import { isConfirmed } from '../services/confirmations.js';
 import { COMMENDATION_SELECT, presentCommendation, commendableOfficers } from '../services/commendations.js';
+import { holidaysForSpan, upcomingHolidays } from '../services/holidays.js';
 import { COMMENDATION_CATEGORIES, COMMENDATION_LABEL, COMMEND_WINDOW_DAYS } from '../shared.js';
 
 export const clientRouter = Router();
@@ -433,8 +434,10 @@ clientRouter.get(
          ORDER BY sh.starts_at, p.name`
       )
       .all(...ids, toSql(from), toSql(until));
+    const holidays = await holidaysForSpan(from, until);
     const shifts = rows.map((r) => {
       const row = isoFields(r, ['starts_at', 'ends_at']);
+      const holiday = holidays.get(toDateString(new Date(row.starts_at)));
       return {
         id: row.id,
         site_id: row.site_id,
@@ -447,6 +450,8 @@ clientRouter.get(
         assigned: Boolean(row.user_id),
         // The officer has said they will be there; only the fact, not when or how.
         confirmed: isConfirmed(r),
+        // Billed at the holiday rate; the client is told which day and the multiplier.
+        holiday: holiday ? { name: holiday.name, bill_multiplier: holiday.bill_multiplier } : null,
       };
     });
     res.json({
@@ -458,6 +463,20 @@ clientRouter.get(
         confirmed: shifts.filter((x) => x.confirmed).length,
       },
     });
+  })
+);
+
+/* ------------------------------------------------------------- holidays --- */
+
+/**
+ * The holidays ahead and what they bill at, so a client is never surprised by
+ * a holiday line on an invoice. What we pay officers for them is ours.
+ */
+clientRouter.get(
+  '/holidays',
+  wrap(async (req, res) => {
+    const holidays = await upcomingHolidays(6);
+    res.json({ holidays: holidays.map((h) => ({ day: h.day, name: h.name, bill_multiplier: h.bill_multiplier })) });
   })
 );
 

@@ -409,6 +409,8 @@ payrollRouter.get(
       'Total hours',
       'Regular pay',
       'Overtime pay',
+      'Holiday hours',
+      'Holiday premium',
       'Gross pay',
       'PTO hours',
       'PTO pay',
@@ -432,6 +434,8 @@ payrollRouter.get(
             l.hours,
             l.regular_pay,
             l.overtime_pay,
+            l.holiday_hours || '',
+            l.holiday_pay || '',
             l.gross_pay,
             l.pto_hours || '',
             l.pto_pay || '',
@@ -446,13 +450,13 @@ payrollRouter.get(
     }
     const t = totalsOf(lines);
     rows.push('');
-    rows.push(['Total W-2', '', '', '', '', '', '', '', t.w2.hours, '', '', t.w2.pay].map(csvCell).join(','));
-    rows.push(['Total 1099', '', '', '', '', '', '', '', t.contractor.hours, '', '', t.contractor.pay].map(csvCell).join(','));
-    rows.push(['Total', '', '', '', '', '', '', t.overtime_hours, t.hours, '', t.overtime_pay, t.gross_pay].map(csvCell).join(','));
+    rows.push(['Total W-2', '', '', '', '', '', '', '', t.w2.hours, '', '', '', '', t.w2.pay].map(csvCell).join(','));
+    rows.push(['Total 1099', '', '', '', '', '', '', '', t.contractor.hours, '', '', '', '', t.contractor.pay].map(csvCell).join(','));
+    rows.push(['Total', '', '', '', '', '', '', t.overtime_hours, t.hours, '', t.overtime_pay, t.holiday_hours || '', t.holiday_pay || '', t.gross_pay].map(csvCell).join(','));
     // Reimbursements are paid with the wages but are not wages: their own total.
     // Paid time off is wages for hours not worked: its own total, beside the gross.
-    if (pto.total) rows.push(['Total paid time off', '', '', '', '', '', '', '', '', '', '', '', pto.hours, pto.total].map(csvCell).join(','));
-    if (expenses.total) rows.push(['Total reimbursements', '', '', '', '', '', '', '', '', '', '', '', '', '', expenses.total].map(csvCell).join(','));
+    if (pto.total) rows.push(['Total paid time off', '', '', '', '', '', '', '', '', '', '', '', '', '', pto.hours, pto.total].map(csvCell).join(','));
+    if (expenses.total) rows.push(['Total reimbursements', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', expenses.total].map(csvCell).join(','));
     // Claims for officers with no hours in the period are paid all the same.
     const lineUsers = new Set(lines.map((l) => l.user_id));
     const orphans = expenses.claims.filter((c) => !lineUsers.has(c.user_id));

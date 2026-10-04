@@ -915,3 +915,71 @@ export function equipmentEligibility({ item, officer, certifications = [] }) {
 
   return { ok: true };
 }
+
+/* ================================================================ holidays === */
+
+/** Holiday pay and the holiday bill rate both default to time and a half. */
+export const HOLIDAY_DEFAULT_MULTIPLIER = 1.5;
+export const HOLIDAY_MULTIPLIER_MIN = 1;
+export const HOLIDAY_MULTIPLIER_MAX = 3;
+
+const ymd = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+/** The nth weekday (0 Sunday .. 6 Saturday) of a month; n = -1 for the last one. */
+function nthWeekday(year, month, weekday, n) {
+  if (n > 0) {
+    const first = new Date(year, month - 1, 1).getDay();
+    return ymd(year, month, 1 + ((weekday - first + 7) % 7) + (n - 1) * 7);
+  }
+  const lastDay = new Date(year, month, 0).getDate();
+  const last = new Date(year, month - 1, lastDay).getDay();
+  return ymd(year, month, lastDay - ((last - weekday + 7) % 7));
+}
+
+/**
+ * The US federal holidays in a year, on the day itself rather than the
+ * weekday a bank observes it on: a guard post is open on the Saturday the
+ * Fourth falls on, and that is the day worked. `core` marks the six that
+ * almost every security contract treats as a holiday.
+ */
+export function usHolidays(year) {
+  return [
+    { day: ymd(year, 1, 1), name: "New Year's Day", core: true },
+    { day: nthWeekday(year, 1, 1, 3), name: 'Martin Luther King Jr. Day', core: false },
+    { day: nthWeekday(year, 2, 1, 3), name: "Presidents' Day", core: false },
+    { day: nthWeekday(year, 5, 1, -1), name: 'Memorial Day', core: true },
+    { day: ymd(year, 6, 19), name: 'Juneteenth', core: false },
+    { day: ymd(year, 7, 4), name: 'Independence Day', core: true },
+    { day: nthWeekday(year, 9, 1, 1), name: 'Labor Day', core: true },
+    { day: nthWeekday(year, 10, 1, 2), name: 'Columbus Day', core: false },
+    { day: ymd(year, 11, 11), name: 'Veterans Day', core: false },
+    { day: nthWeekday(year, 11, 4, 4), name: 'Thanksgiving Day', core: true },
+    { day: ymd(year, 12, 25), name: 'Christmas Day', core: true },
+  ];
+}
+
+/**
+ * The holiday premium on top of straight time for one person's payroll week.
+ *
+ * `entries` are the week's finished shifts in clock-in order, each with its
+ * paid minutes, its pay rate and the holiday it started on, if any. Holiday
+ * hours are paid at the holiday multiplier. Hours that are also overtime are
+ * not paid both premiums on top of each other: they get the larger of the
+ * two, so the holiday adds only what it pays beyond overtime, which is
+ * usually nothing at time and a half each.
+ */
+export function holidayPremiumCents(entries, { thresholdMinutes, overtimeMultiplier = 1.5, earnsOvertime = true }) {
+  let before = 0;
+  let minutes = 0;
+  let cents = 0;
+  for (const e of entries) {
+    const m = e.paid_minutes || 0;
+    const otPart = earnsOvertime ? Math.max(0, before + m - Math.max(thresholdMinutes, before)) : 0;
+    before += m;
+    if (!e.holiday || !m || e.pay_rate_cents == null) continue;
+    const mult = Number(e.holiday.pay_multiplier) || HOLIDAY_DEFAULT_MULTIPLIER;
+    const straightPart = m - otPart;
+    minutes += m;
+    cents += (straightPart / 60) * e.pay_rate_cents * (mult - 1) + (otPart / 60) * e.pay_rate_cents * Math.max(0, mult - overtimeMultiplier);
+  }
+  return { minutes, cents: Math.round(cents) };
+}

@@ -828,6 +828,11 @@ function UpcomingCoverage({ sites, switcher }) {
                             {fmtRange(s.starts_at, s.ends_at)}
                             {s.armed ? ' · armed' : ''}
                           </div>
+                          {s.holiday && (
+                            <div className="tiny" style={{ color: 'var(--warn)', fontWeight: 650 }}>
+                              {s.holiday.name} · holiday rate {s.holiday.bill_multiplier}x
+                            </div>
+                          )}
                         </div>
                         {s.assigned ? (
                           <span className="row wrap" style={{ gap: 6, justifyContent: 'flex-end' }}>
@@ -1470,6 +1475,31 @@ function InvoiceDialog({ id, onClose }) {
   );
 }
 
+/** The holidays ahead, so a holiday line on an invoice is never a surprise. */
+function HolidayRates() {
+  const { data } = usePortal('/client/holidays', []);
+  if (!data?.holidays?.length) return null;
+  return (
+    <div className="card card-pad">
+      <h3 style={{ marginTop: 0 }}>Holiday rates</h3>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Coverage on a shift that starts on one of these days is billed at the holiday rate, on its own line naming the holiday.
+      </p>
+      <ul className="list">
+        {data.holidays.map((h) => (
+          <li key={h.day} className="list-item" style={{ cursor: 'default' }}>
+            <div className="grow">
+              <div className="small strong">{h.name}</div>
+              <div className="tiny muted">{fmtDate(h.day)}</div>
+            </div>
+            <Chip kind="info">{h.bill_multiplier}x</Chip>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function PortalInvoices() {
   const [open, setOpen] = useState(null);
   const { data, error, loading, reload } = usePortal('/client/invoices', []);
@@ -1528,6 +1558,8 @@ export function PortalInvoices() {
                 </ul>
               </div>
             )}
+
+            <HolidayRates />
           </div>
         )}
       </Loaded>
