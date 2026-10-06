@@ -810,6 +810,22 @@ export async function seedExpansion(ctx) {
   }
 
   /* ------------------------------------------------------ on duty now -- */
+  // A shift still running holds its pay period open, so on a Monday morning an
+  // overnight shift that began on Sunday would keep last week from closing.
+  // Like Marcus's shift, which never starts before today, the live shifts here
+  // never start before ten past midnight on the Monday of this payroll week,
+  // and nobody clocks in before that Monday (officers punch in a few minutes
+  // early, so a shift starting at midnight would otherwise begin on Sunday).
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  const earliestStart = new Date(weekStart.getTime() + 10 * MINUTE);
+  for (const l of live) {
+    if (l.starts >= earliestStart) continue;
+    l.starts = earliestStart;
+    await db.prepare(`UPDATE shifts SET starts_at = ? WHERE id = ?`).run(toSql(l.starts), l.shiftId);
+  }
+
   // Earliest starters first, so the three set pieces go to people who have
   // been on post long enough for them to make sense.
   live.sort((a, b) => a.starts - b.starts);
@@ -819,10 +835,10 @@ export async function seedExpansion(ctx) {
     const post = l.post;
     const scenario = scenarios[i] || (i === 3 ? 'late_in' : 'normal');
     const lateBy = scenario === 'late_in' ? 13 : 0;
-    const clockIn = new Date(Math.min(
+    const clockIn = new Date(Math.max(weekStart.getTime(), Math.min(
       l.starts.getTime() + (lateBy ? lateBy + RULES.lateGraceMinutes : -(2 + (i % 4))) * MINUTE,
       now.getTime() - 2 * MINUTE
-    ));
+    )));
     const [inLat, inLng] = positionAt(post, 0, i + 40);
     const inFence = fenceOf(post, inLat, inLng, 7);
     const entryId = Number((await insertEntry.run(

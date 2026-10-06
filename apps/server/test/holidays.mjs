@@ -87,7 +87,9 @@ section('holiday hours: pay');
 
 // The most recent day before today that sits in an open pay period and is not already a holiday.
 const taken = new Set((await call(`/holidays?year=${year}`, { token: supervisor })).data.holidays.map((h) => h.day));
-// When this week has no pay period yet, the suite opens one and removes it at the end.
+// When that day's week has no pay period yet, the suite opens one and removes it at the end. On a
+// Monday every day of last week is in a closed period (the payroll suite has just closed it, and the
+// seed closed the week before), so the search goes back four weeks, to a week with no period at all.
 let day = null;
 let period = null;
 let openedPeriod = null;
@@ -98,7 +100,7 @@ const mondayOf = (d) => {
   return x;
 };
 const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-for (let back = 1; back <= 6 && !day; back++) {
+for (let back = 1; back <= 27 && !day; back++) {
   const d = localDay(-back);
   if (taken.has(d)) continue;
   let p = periods.find((x) => x.period_start <= d && x.period_end >= d);
