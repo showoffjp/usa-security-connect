@@ -121,8 +121,12 @@ export const SHIFT_REQUEST_STATUS = [
  * Returned as a list so the UI can show every reason at once rather than
  * making someone fix them one at a time. An empty list means eligible.
  */
-export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null, training = null }) {
+export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null, training = null, suspended = false }) {
   const reasons = [];
+
+  if (suspended) {
+    reasons.push({ code: 'suspended', message: 'They are suspended on this date.' });
+  }
 
   if (officer?.status !== 'active') {
     reasons.push({ code: 'inactive', message: 'The officer is not active.' });
@@ -225,6 +229,59 @@ export function trainingState(qualification, lastWorkedAt = null, now = new Date
     lastWorkedAt ? new Date(lastWorkedAt).getTime() || 0 : 0
   );
   return now.getTime() - latest > QUALIFICATION_LAPSE_DAYS * 86400000 ? 'lapsed' : 'trained';
+}
+
+/* -------------------------------------------------- coaching & discipline -- */
+
+/**
+ * The steps of progressive discipline, mildest first. Coaching is a
+ * documented conversation, not a warning. A supervisor records the first
+ * three; a final warning or a suspension is an administrator's decision.
+ */
+export const CONDUCT_LEVELS = ['coaching', 'verbal_warning', 'written_warning', 'final_warning', 'suspension'];
+export const CONDUCT_LEVEL_LABEL = {
+  coaching: 'Coaching',
+  verbal_warning: 'Verbal warning',
+  written_warning: 'Written warning',
+  final_warning: 'Final warning',
+  suspension: 'Suspension',
+};
+export const CONDUCT_ADMIN_LEVELS = ['final_warning', 'suspension'];
+
+export const CONDUCT_CATEGORIES = ['attendance', 'post_conduct', 'uniform', 'procedure', 'client_complaint', 'safety', 'other'];
+export const CONDUCT_CATEGORY_LABEL = {
+  attendance: 'Attendance and punctuality',
+  post_conduct: 'Conduct on post',
+  uniform: 'Uniform and appearance',
+  procedure: 'Post orders and procedure',
+  client_complaint: 'Client complaint',
+  safety: 'Safety',
+  other: 'Other',
+};
+
+/** A record counts towards the next step for this long after it happened. */
+export const CONDUCT_ACTIVE_MONTHS = 12;
+/** An officer has this long to read and sign a record before it is chased. */
+export const CONDUCT_SIGN_DAYS = 3;
+
+/** Whether a record still counts: not rescinded, and within CONDUCT_ACTIVE_MONTHS. */
+export function conductActive(record, now = new Date()) {
+  if (!record || record.status === 'rescinded') return false;
+  const d = new Date(`${String(record.occurred_on).slice(0, 10)}T12:00:00`);
+  d.setMonth(d.getMonth() + CONDUCT_ACTIVE_MONTHS);
+  return d > now;
+}
+
+/**
+ * The step a new record about `category` would usually be: one above the
+ * highest record still active for the same thing, capped at a final warning.
+ * A suspension is never suggested; it is always a deliberate decision.
+ */
+export function suggestedConductLevel(records = [], category, now = new Date()) {
+  const active = records.filter((r) => r.category === category && conductActive(r, now));
+  if (!active.length) return 'coaching';
+  const top = Math.max(...active.map((r) => CONDUCT_LEVELS.indexOf(r.level)));
+  return CONDUCT_LEVELS[Math.min(top + 1, CONDUCT_LEVELS.indexOf('final_warning'))];
 }
 
 export const PANIC_STATUS = ['active', 'acknowledged', 'resolved', 'false_alarm'];

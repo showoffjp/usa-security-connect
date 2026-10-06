@@ -13,6 +13,7 @@ import GpsPanel from '../../components/GpsPanel.jsx';
 import ConfirmShift from './ConfirmShift.jsx';
 import HeldEquipment from './HeldEquipment.jsx';
 import { NewCommendations } from './Commendations.jsx';
+import { ConductToSign } from './Conduct.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
 
@@ -748,6 +749,7 @@ export default function HomePage() {
       <PostOrdersCard onDuty={onDuty} />
       <ExpiryReminder user={user} />
       <NewCommendations />
+      <ConductToSign />
       <HeldEquipment />
 
       {/* -------------------------------------------------- post card -- */}

@@ -10,6 +10,7 @@ import { CredentialsDialog } from './EmployeesPage.jsx';
 import PtoCard from './PtoCard.jsx';
 import CommendationsCard from './CommendationsCard.jsx';
 import SiteTrainingCard from './SiteTrainingCard.jsx';
+import ConductCard from './ConductCard.jsx';
 import { ROLE_LABEL, toHours } from '@shared/domain.js';
 
 /** Correcting a punch always records who changed it and why. */
@@ -180,6 +181,10 @@ export default function EmployeeDetailPage() {
       <PtoCard userId={e.id} name={e.full_name} isAdmin={isAdmin} />
 
       {e.role !== 'admin' && <SiteTrainingCard userId={e.id} name={e.full_name} />}
+
+      {e.role !== 'admin' && user?.id !== e.id && (
+        <ConductCard userId={e.id} name={e.full_name} canIssue={e.status === 'active' && (e.role === 'officer' || isAdmin)} />
+      )}
 
       {e.role !== 'admin' && <CommendationsCard userId={e.id} name={e.full_name} isAdmin={isAdmin} isSelf={user?.id === e.id} />}
 

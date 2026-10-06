@@ -1594,6 +1594,71 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* --------------------------------------- round 29: coaching and discipline --- */
+{
+  console.log('\n--- Coaching & discipline: the officer signs a coaching; a supervisor records a warning, and a refusal to sign ---');
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await officer.page.goto(WEB + '/', { waitUntil: 'networkidle' });
+  await settle(officer.page);
+  const card = officer.page.locator('#to-sign');
+  log(await card.count() === 1, 'Marcus has a coaching to read and sign on his home screen');
+  await card.locator('button:has-text("Read and sign")').first().click();
+  await officer.page.waitForSelector('[role="dialog"]');
+  await officer.page.getByLabel('Your side of it').fill('E2E: the bridge was closed on the way in. I will leave earlier.');
+  await officer.page.getByLabel('Type your full name to sign').fill('Marcus Bell');
+  await checkScreen('officer: read and sign a coaching', officer.page, officer.problems);
+  await officer.page.click('[role="dialog"] button:text-is("Sign")');
+  await officer.page.waitForTimeout(1500);
+  log(await officer.page.locator('#to-sign').count() === 0, 'he signs it, and the card goes');
+  await officer.page.goto(WEB + '/profile', { waitUntil: 'networkidle' });
+  await settle(officer.page);
+  const record = officer.page.locator('#my-record');
+  log(await record.locator('text=You signed it').count() >= 1 && await record.locator('text=E2E: the bridge was closed').count() === 1,
+    'his profile keeps it, signed, with his side of it');
+  await checkScreen('officer: coaching and warnings', officer.page, officer.problems);
+  await officer.context.close();
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/conduct');
+  await sup.page.waitForSelector('h1:has-text("Coaching & discipline")', { timeout: 10000 });
+  await settle(sup.page);
+  log(await sup.page.locator('section', { hasText: 'Where officers stand' }).locator('.chip:has-text("Written warning")').count() >= 1,
+    'the board shows who stands where, up to a written warning');
+  await checkScreen('supervisor: coaching and discipline', sup.page, sup.problems);
+  await sup.page.click('button:has-text("Record a step")');
+  await sup.page.waitForSelector('[role="dialog"]');
+  const dlg = sup.page.locator('[role="dialog"]');
+  const pick = dlg.getByLabel('Officer');
+  await pick.selectOption(await pick.locator('option', { hasText: 'Andre Mitchell' }).getAttribute('value'));
+  await sup.page.waitForTimeout(900);
+  log((await dlg.getByLabel('Step').inputValue()) === 'written_warning' && await dlg.locator("text=which is an administrator's decision").count() === 1,
+    'for an officer whose record points to a final warning, a supervisor is offered a written warning and told the rest is an administrator\'s');
+  const value = await pick.locator('option', { hasText: 'Janelle Carter' }).getAttribute('value');
+  await pick.selectOption(value);
+  await sup.page.locator('[role="dialog"]').getByLabel('What it is about').selectOption('uniform');
+  await sup.page.waitForTimeout(800);
+  log((await sup.page.locator('[role="dialog"]').getByLabel('Step').inputValue()) === 'coaching', 'a first uniform problem is suggested as coaching');
+  log(await sup.page.locator('[role="dialog"]').getByLabel('Step').locator('option[value="final_warning"]').count() === 0, 'and a supervisor cannot choose a final warning');
+  await sup.page.locator('[role="dialog"]').getByLabel('What happened').fill('E2E: arrived at the gatehouse without the company jacket or a visible badge.');
+  await sup.page.locator('[role="dialog"]').getByLabel('What is expected from now on').fill('Full uniform on every shift, badge visible.');
+  await checkScreen('supervisor: record a step', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button:has-text("Record coaching")');
+  await sup.page.waitForTimeout(1500);
+  const waiting = sup.page.locator('section', { hasText: "Waiting for the officer's signature" });
+  log(await waiting.locator('.list-item', { hasText: 'Janelle Carter' }).count() === 1, 'the coaching waits for Janelle to sign');
+  await waiting.locator('button[aria-label="Record that Janelle Carter refused to sign"]').click();
+  await sup.page.waitForSelector('[role="dialog"]');
+  await sup.page.locator('[role="dialog"]').getByLabel('Witness').fill('E2E: the site manager');
+  await sup.page.click('[role="dialog"] button:has-text("Record refusal")');
+  await sup.page.waitForTimeout(1500);
+  log(await waiting.locator('.list-item', { hasText: 'Janelle Carter' }).count() === 0
+    && await sup.page.locator('details.conduct-record', { hasText: 'Janelle Carter' }).locator('text=Refused to sign').count() >= 1,
+    'she will not sign; the supervisor records it, with the witness');
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);
