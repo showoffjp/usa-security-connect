@@ -15,11 +15,30 @@ All three talk to the same API, and the rules that decide "late", "missed check-
 another. One thing gets captured once: an officer's clock-in is the same record that
 produces their timesheet, the client's coverage report and the invoice line.
 
-The live demo runs with a full sample company: **10** client sites, **43** staff (W-2
-and 1099) and **6** client portal logins. **Anyone can sign in** with the codes below.
-
 **[Open the live demo](https://usa-security-connect.vercel.app/)** ·
-**[Open the client portal](https://usa-security-connect.vercel.app/portal)**
+**[Open the client portal](https://usa-security-connect.vercel.app/portal)** ·
+[Run it locally](#run-it-locally)
+
+![The live operations dashboard: who is on post, open flags and incidents, unfilled shifts, and what needs attention](docs/screenshots/dashboard.jpg)
+
+<table>
+  <tr>
+    <td width="26%" valign="top"><a href="docs/screenshots/officer-call.jpg"><img src="docs/screenshots/officer-call.jpg" alt="The officer's phone on post: a call sent to them by dispatch"></a><br><sub><b>Officer app.</b> A call from dispatch on the phone of the officer on post at Riverfront.</sub></td>
+    <td width="37%" valign="top"><a href="docs/screenshots/portal-notices.jpg"><img src="docs/screenshots/portal-notices.jpg" alt="The client portal overview for Riverfront Commerce Center, with two notices at the top"></a><br><sub><b>Client portal.</b> Notices, building issues, who is on post and the week's coverage.</sub></td>
+    <td width="37%" valign="top"><a href="docs/screenshots/payroll-period.jpg"><img src="docs/screenshots/payroll-period.jpg" alt="A weekly pay period under review, officer by officer"></a><br><sub><b>Payroll.</b> A week reviewed officer by officer, with what needs a second look.</sub></td>
+  </tr>
+</table>
+
+## Contents
+
+- [Try the live demo](#try-the-live-demo): sign-ins and three five-minute walk-throughs
+- [Feature tour](#feature-tour): every screen, with a picture of each, by area
+- [Run it locally](#run-it-locally): setup, every demo account, the staff tiers and the mobile app
+- [What it does, in detail](#what-it-does-in-detail): the officer app, the admin console and the client portal
+- [How it is built](#how-it-is-built): layout, stack and time zones
+- [Brand](#brand) · [Configuration](#configuration) · [Before going live](#before-going-live)
+- [Tests](#tests): the API suites and the browser suites
+- [Documentation](#documentation)
 
 ---
 
@@ -36,9 +55,11 @@ and 1099) and **6** client portal logins. **Anyone can sign in** with the codes 
 | `1006` / `7285` | Alicia Nunez, W-2 hourly officer |
 | `dana.whitfield@riverfrontholdings.com` / `riverfront-portal-01` | Client portal: Riverfront Commerce Center |
 
-On the sign-in screen, tap any account in the list to go straight in. Everyone shares
-the same sample company, so what you change may be reset or not show up for someone
-else. Every account, staff and client, is listed under [Quick start](#quick-start).
+On the sign-in screen, tap any account in the list to go straight in.
+
+The live demo runs without a database: each server instance builds the sample company
+when it starts, on New York time. Everyone shares it, and nothing is kept for long, so
+what you change may be gone later or not show up for someone else. Every account, staff and client, is listed under [Run it locally](#run-it-locally).
 
 ### Five minutes in the demo
 
@@ -78,152 +99,360 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 
 ## Feature tour
 
-Each screen in a line, by area. [What it does, in detail](#what-it-does-in-detail) has
-the full rules behind each one.
+Every screen, by area, with a picture of each from the demo company. Click a picture to see it full size.
+[What it does, in detail](#what-it-does-in-detail) has the rules behind each one.
 
 ### Live operations
 
 Where everyone is right now, against where they are scheduled to be. *Admin and supervisor.*
 
-- **Dashboard** — On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.
-- **Alerts inbox** — A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.
-- **Live tracking** — Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.
-- **Safety & map** — Duress alerts, check-ins and every post's geofence on one map.
-- **Flags** — Late clock-ins, no-shows, walk-offs, missed check-ins and geofence violations, each closed with a note.
-- **Not confirmed yet** — Who is due on post in the next 12 hours and has not said they will be there, with the number to call. An answer taken on the phone is recorded in one click.
-- **Confirm a shift** — Officers confirm each shift in the week ahead, on the web or the app. A day out, anyone who has not gets one reminder. Moving the shift means confirming it again.
-- **Dispatch** — Every open call for service, waiting ones first: from the client or the office, who has it, and how long it has been going.
-- **Send it to an officer** — Everyone on duty, whoever is at the property first, then by distance; busy or on a break is marked. Every step is timed against the target and logged.
-- **Calls on the officer's phone** — On my way, on scene, clear with what was found, or turn it back with a reason. Clocking out hands an open call back to the office.
-- **Clients request an officer** — Urgent or routine from the portal (emergencies go to 911), followed from sent to on scene, with response times and an email when it is cleared.
-- **Fleet** — Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.
-- **A vehicle's record** — Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.
-- **Check before driving** — Odometer, fuel and nine items, every one answered. A failed safety item says "do not drive". The end check gives the miles.
-- **Incidents** — Reports from the field with photos, severity, police numbers and review status.
-- **Incident follow-ups** — What has to happen after a serious incident, each with an owner and a due date. Overdue ones land in the alerts inbox; done only with a note of what was done, shared with the client or kept internal.
-- **Printable incident report** — One page for the insurer, the police or the client file. Review notes and internal follow-ups stay off it.
-- **Tours** — Checkpoint routes and every run: completed, missed and abandoned.
-- **QR checkpoint tags** — A printable tag for every checkpoint on a tour. Officers scan it with the phone camera to record the checkpoint.
-- **Field visits** — Every site with its last supervisor visit, longest first. Two weeks without one and the site is due: a badge, an alert and a line on site health until someone goes. Failed checks and low ratings are kept, with the supervisor's own notes apart from the note the client reads.
-- **Keys & equipment** — Who holds which key ring, radio or firearm, and what should have come back by now.
-- **Quick search** — Ctrl K from anywhere: officers by name, code or phone, sites, incident numbers and screens.
-- **Keyboard shortcuts** — Press ? for the list; g then a letter jumps to any main screen.
-- **Night mode** — Auto, Light or Night from the account menu. Auto follows the device, so night shifts get a dark screen on their own.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dashboard.jpg"><img src="docs/screenshots/dashboard.jpg" alt="Admin dashboard"></a><br><b>Dashboard</b><br>On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/alerts.jpg"><img src="docs/screenshots/alerts.jpg" alt="Alerts inbox"></a><br><b>Alerts inbox</b><br>A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/live.jpg"><img src="docs/screenshots/live.jpg" alt="Live tracking map"></a><br><b>Live tracking</b><br>Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/safety.jpg"><img src="docs/screenshots/safety.jpg" alt="Safety and map"></a><br><b>Safety &amp; map</b><br>Duress alerts, check-ins and every post's geofence on one map.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/flags.jpg"><img src="docs/screenshots/flags.jpg" alt="Compliance flags"></a><br><b>Flags</b><br>Late clock-ins, no-shows, walk-offs, missed check-ins and geofence violations, each closed with a note.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/unconfirmed-shifts.jpg"><img src="docs/screenshots/unconfirmed-shifts.jpg" alt="Shifts not confirmed yet on the dashboard"></a><br><b>Not confirmed yet</b><br>Who is due on post in the next 12 hours and has not said they will be there, with the number to call. An answer taken on the phone is recorded in one click.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/confirm-shift.jpg"><img src="docs/screenshots/confirm-shift.jpg" alt="An officer confirming an upcoming shift"></a><br><b>Confirm a shift</b><br>Officers confirm each shift in the week ahead, on the web or the app. A day out, anyone who has not gets one reminder. Moving the shift means confirming it again.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/dispatch.jpg"><img src="docs/screenshots/dispatch.jpg" alt="Dispatch board of open calls for service"></a><br><b>Dispatch</b><br>Every open call for service, waiting ones first: from the client or the office, who has it, and how long it has been going.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dispatch-call.jpg"><img src="docs/screenshots/dispatch-call.jpg" alt="A call with the officers who could take it"></a><br><b>Send it to an officer</b><br>Everyone on duty, whoever is at the property first, then by distance; busy or on a break is marked. Every step is timed against the target and logged.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-calls.jpg"><img src="docs/screenshots/portal-calls.jpg" alt="Client portal calls page"></a><br><b>Clients request an officer</b><br>Urgent or routine from the portal (emergencies go to 911), followed from sent to on scene, with response times and an email when it is cleared.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/fleet.jpg"><img src="docs/screenshots/fleet.jpg" alt="The fleet of patrol vehicles"></a><br><b>Fleet</b><br>Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/fleet-vehicle.jpg"><img src="docs/screenshots/fleet-vehicle.jpg" alt="One vehicle's defects, service form and checks"></a><br><b>A vehicle's record</b><br>Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/incidents.jpg"><img src="docs/screenshots/incidents.jpg" alt="Incident reports"></a><br><b>Incidents</b><br>Reports from the field with photos, severity, police numbers and review status.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/follow-ups.jpg"><img src="docs/screenshots/follow-ups.jpg" alt="Incident follow-ups"></a><br><b>Incident follow-ups</b><br>What has to happen after a serious incident, each with an owner and a due date. Overdue ones land in the alerts inbox.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/incident-followups.jpg"><img src="docs/screenshots/incident-followups.jpg" alt="Follow-ups on an incident"></a><br><b>Follow-ups on the incident</b><br>Added from the review; marked done only with a note of what was done, and shared with the client or kept internal.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/incident-print.jpg"><img src="docs/screenshots/incident-print.jpg" alt="Printed incident report"></a><br><b>Printable incident report</b><br>One page for the insurer, the police or the client file. Review notes and internal follow-ups stay off it.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/tours.jpg"><img src="docs/screenshots/tours.jpg" alt="Patrol tours"></a><br><b>Tours</b><br>Checkpoint routes and every run: completed, missed and abandoned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/qr-tags.jpg"><img src="docs/screenshots/qr-tags.jpg" alt="Printable QR checkpoint tags"></a><br><b>QR checkpoint tags</b><br>A printable tag for every checkpoint on a tour. Officers scan it with the phone camera to record the checkpoint.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/field-visits.jpg"><img src="docs/screenshots/field-visits.jpg" alt="Field visits board"></a><br><b>Field visits</b><br>Every site with its last supervisor visit, longest first. Two weeks without one and the site is due: a badge, an alert and a line on site health until someone goes.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/field-visits-problems.jpg"><img src="docs/screenshots/field-visits-problems.jpg" alt="Visits that found a problem"></a><br><b>Visits that found a problem</b><br>Failed checks and low ratings, with the supervisor's own notes kept apart from the note the client reads.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/equipment.jpg"><img src="docs/screenshots/equipment.jpg" alt="Keys and equipment"></a><br><b>Keys &amp; equipment</b><br>Who holds which key ring, radio or firearm, and what should have come back by now.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/search.jpg"><img src="docs/screenshots/search.jpg" alt="Quick search"></a><br><b>Quick search</b><br>Ctrl K from anywhere: officers by name, code or phone, sites, incident numbers and screens.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/shortcuts.jpg"><img src="docs/screenshots/shortcuts.jpg" alt="Keyboard shortcuts"></a><br><b>Keyboard shortcuts</b><br>Press ? for the list; g then a letter jumps to any main screen.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/night-dashboard.jpg"><img src="docs/screenshots/night-dashboard.jpg" alt="Dashboard in night mode"></a><br><b>Night mode</b><br>Auto, Light or Night from the account menu. Auto follows the device, so night shifts get a dark screen on their own.</td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-call.jpg"><img src="docs/screenshots/officer-call.jpg" alt="A call on the officer's phone"></a><br><b>Calls on the officer's phone</b><br>On my way, on scene, clear with what was found, or turn it back with a reason. Clocking out hands an open call back to the office.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-vehicle-check.jpg"><img src="docs/screenshots/officer-vehicle-check.jpg" alt="An officer's check before driving a patrol vehicle"></a><br><b>Check before driving</b><br>Odometer, fuel and nine items, every one answered. A failed safety item says &quot;do not drive&quot;. The end check gives the miles.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-visit.jpg"><img src="docs/screenshots/officer-visit.jpg" alt="Last supervisor visit on the officer home screen"></a><br><b>Your last supervisor visit</b><br>For a week after a visit, the officer sees who came, the rating, each check and what was said.</td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Post logs
 
 Everything officers record on post, gathered across every site. *Admin and supervisor.*
 
-- **Visitors** — Everyone signed in at every site right now, or any day's log, with vehicle and who let them in.
-- **Activity log** — The officers' running log: patrols, alarms, access and safety, with internal-only entries marked.
-- **Pass-down** — What each shift left for the next, and who has read it.
-- **Building issues** — Lights out, doors that will not lock, leaks and hazards, with the client's reply.
-- **Lost & found** — Items held, returned with a name and ID, or disposed of, with anything over 30 days flagged.
-- **Watchlist** — People not to be let in, by site or company-wide, and every sign-in that overrode a match.
-- **Vehicles** — Parking enforcement by plate, with repeat offenders across every site.
-- **Site contacts** — Who officers call at each site, kept by supervisors and by the client.
-- **Post orders** — Each post's standing orders, versioned. Issue a new version, see which officers have not read it yet, and apply or decline clients' requested changes, with a reply they get in the portal and by email.
-- **Daily activity report** — The day's coverage, patrols, incidents, visitors, parking and activity log, ready to print.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/visitors.jpg"><img src="docs/screenshots/visitors.jpg" alt="Visitor log"></a><br><b>Visitors</b><br>Everyone signed in at every site right now, or any day's log, with vehicle and who let them in.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/activity.jpg"><img src="docs/screenshots/activity.jpg" alt="Activity log"></a><br><b>Activity log</b><br>The officers' running log: patrols, alarms, access and safety, with internal-only entries marked.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/passdown.jpg"><img src="docs/screenshots/passdown.jpg" alt="Pass-down notes"></a><br><b>Pass-down</b><br>What each shift left for the next, and who has read it.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/issues.jpg"><img src="docs/screenshots/issues.jpg" alt="Building issues"></a><br><b>Building issues</b><br>Lights out, doors that will not lock, leaks and hazards, with the client's reply.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/found.jpg"><img src="docs/screenshots/found.jpg" alt="Lost and found"></a><br><b>Lost &amp; found</b><br>Items held, returned with a name and ID, or disposed of, with anything over 30 days flagged.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/watchlist.jpg"><img src="docs/screenshots/watchlist.jpg" alt="Watchlist"></a><br><b>Watchlist</b><br>People not to be let in, by site or company-wide, and every sign-in that overrode a match.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/vehicles.jpg"><img src="docs/screenshots/vehicles.jpg" alt="Vehicle violations"></a><br><b>Vehicles</b><br>Parking enforcement by plate, with repeat offenders across every site.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/contacts.jpg"><img src="docs/screenshots/contacts.jpg" alt="Site contacts"></a><br><b>Site contacts</b><br>Who officers call at each site, kept by supervisors and by the client.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/orders.jpg"><img src="docs/screenshots/orders.jpg" alt="Post orders"></a><br><b>Post orders</b><br>Each post's standing orders, versioned. Issue a new version, see which officers have not read it yet, and answer clients' requested changes.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/orders-apply.jpg"><img src="docs/screenshots/orders-apply.jpg" alt="Applying a client's requested change to post orders"></a><br><b>A client's change, applied</b><br>Apply a client's request as the next version, with a reply they get in the portal and by email. Or decline it with a reason.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dar.jpg"><img src="docs/screenshots/dar.jpg" alt="Daily activity report"></a><br><b>Daily activity report</b><br>The day's coverage, patrols, incidents, visitors, parking and activity log, ready to print.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Scheduling & people
 
 Build rosters, answer requests, keep licences current.
 
-- **Schedule** — The week by post, open shifts, copy-week, and a candidate ranker that blocks anyone who cannot work a shift. Holidays are marked on the day.
-- **Shift requests** — Open-shift claims, swaps and drops waiting for approval.
-- **Client requests** — Extra coverage clients asked for; schedule it as open shifts or decline with a reason.
-- **Service agreements** — The hours each property pays for, against next week's roster and last week's hours worked. Short weeks and renewals coming up are flagged.
-- **Time off** — Requests to approve, with overlaps refused.
-- **Time corrections** — An officer's wrong punch goes to the office with the right time and what happened. An administrator approves (the shift is corrected, the recorded time kept) or declines with a reason; a waiting request holds up closing that week's payroll.
-- **Hiring** — Applications from the public form at /apply and from the office, stage by stage from applied to offer. Licence, background check and right to work must be ticked before an administrator can hire; hiring creates the login and shows the code and PIN once.
-- **Employees** — All 43 staff with role, classification, licence and status; each record has 30-day hours, late arrivals, open flags, pay rate, and every punch with its geofence check.
-- **Licensing** — Class D and G licences and certificates, sorted by what expires first. A licence lapsing within 30 days shows on the officer's home screen.
-- **Sites & posts** — Ten client sites, their posts, geofence radii and bill rates.
-- **Scorecards** — Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.
-- **Site health** — Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/schedule.jpg"><img src="docs/screenshots/schedule.jpg" alt="Schedule"></a><br><b>Schedule</b><br>The week by post, open shifts, copy-week, and a candidate ranker that blocks anyone who cannot work a shift.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/shift-requests.jpg"><img src="docs/screenshots/shift-requests.jpg" alt="Shift requests"></a><br><b>Shift requests</b><br>Open-shift claims, swaps and drops waiting for approval.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/coverage-requests.jpg"><img src="docs/screenshots/coverage-requests.jpg" alt="Client coverage requests"></a><br><b>Client requests</b><br>Extra coverage clients asked for; schedule it as open shifts or decline with a reason.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/service-agreements.jpg"><img src="docs/screenshots/service-agreements.jpg" alt="Service agreements against the roster"></a><br><b>Service agreements</b><br>The hours each property pays for, against next week's roster and last week's hours worked. Short weeks and renewals coming up are flagged.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/time-off.jpg"><img src="docs/screenshots/time-off.jpg" alt="Time off"></a><br><b>Time off</b><br>Requests to approve, with overlaps refused.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/corrections.jpg"><img src="docs/screenshots/corrections.jpg" alt="Time correction requests in Timesheets"></a><br><b>Time corrections</b><br>Every request with the time as recorded and as it should be, and why. A waiting request holds up closing that week's payroll.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/correction-approve.jpg"><img src="docs/screenshots/correction-approve.jpg" alt="Approving a time correction"></a><br><b>Approve or decline</b><br>An administrator approves (the shift is corrected, the recorded time kept) or declines with a reason the officer reads.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/hiring-board.jpg"><img src="docs/screenshots/hiring-board.jpg" alt="Hiring board"></a><br><b>Hiring</b><br>Applications from the website and the office, stage by stage from applied to offer, with new ones in the alerts.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/hiring-applicant.jpg"><img src="docs/screenshots/hiring-applicant.jpg" alt="An applicant with the pre-hire checklist"></a><br><b>Pre-hire checks</b><br>Licence, background check and right to work must be ticked before an administrator can hire; hiring creates the login and shows the code and PIN once.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/apply.jpg"><img src="docs/screenshots/apply.jpg" alt="Public job application form"></a><br><b>Apply online</b><br>A public form at /apply, linked from the sign-in screen. No account needed; a confirmation email goes out.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/employees.jpg"><img src="docs/screenshots/employees.jpg" alt="Employees"></a><br><b>Employees</b><br>All 43 staff with role, classification, licence and status.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee.jpg"><img src="docs/screenshots/employee.jpg" alt="Employee record"></a><br><b>Employee record</b><br>30-day hours, late arrivals, open flags, pay rate, paid time off, commendations, and every punch with its geofence check.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/compliance.jpg"><img src="docs/screenshots/compliance.jpg" alt="Licensing"></a><br><b>Licensing</b><br>Class D and G licences and certificates, sorted by what expires first.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/scorecards.jpg"><img src="docs/screenshots/scorecards.jpg" alt="Officer scorecards"></a><br><b>Scorecards</b><br>Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-punches.jpg"><img src="docs/screenshots/officer-punches.jpg" alt="An officer's recent punches with a correction waiting"></a><br><b>Fix a time</b><br>An officer's punches from the last two weeks. A wrong one goes to the office with the right time and what happened; the answer shows here.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-licence.jpg"><img src="docs/screenshots/officer-licence.jpg" alt="Licence renewal reminder"></a><br><b>Licence reminders</b><br>A licence or certificate lapsing within 30 days shows on the home screen.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Time & pay
 
 Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
 
-- **Holidays** — The company holiday calendar: what each one pays officers and bills clients, time and a half by default. Add the six usual ones in one step, or any federal holiday.
-- **Holidays coming up** — The next holidays and how they are staffed: shifts booked and still open, confirmed, hours, and what the day adds in premium and in billing. Open shifts within two weeks are raised as alerts.
-- **Holiday pay** — Hours on a shift that starts on a holiday pay the premium to hourly W-2 officers, in its own column. Hours that are also overtime get the larger premium, not both.
-- **Overtime watch** — Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over. **Find cover** opens that shift with the officers who could take it, those with hours to spare first.
-- **Payroll** — Weekly pay periods: hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval; closed periods are frozen.
-- **Paid time off** — Hourly W-2 staff earn an hour for every 30 worked, up to 80. Asked for on the web or the phone, approved against the balance, paid by the next close at the officer's rate on the day, with adjustments always given a reason.
-- **Expenses** — What officers spent on the job and want back: parking, tolls, supplies, miles in their own car at the IRS rate. Anything over $25 needs a receipt photo. An administrator approves or declines with a reason, never their own claim; approved claims are paid with the next payroll, apart from gross pay.
-- **Commendations** — A client or supervisor thanks an officer for something specific. The officer reads it word for word on their home screen; client thanks reach the alerts inbox, and the scorecards count them.
-- **Punch log** — Every clock-in and check-in with position, geofence verdict and distance from post.
-- **Timesheets & pay** — Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.
-- **Pay rates** — Classification, overtime and bill rate for everyone, with dated changes and bulk raises.
-- **Reports** — Eight reports over any range, including the payroll register with 1099 W-9 status, and incident trends by site, type and day.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/holidays.jpg"><img src="docs/screenshots/holidays.jpg" alt="The company holiday calendar with what each holiday pays and bills"></a><br><b>Holidays</b><br>The company holiday calendar: what each one pays officers and bills clients, time and a half by default. Add the six usual ones in one step, or any federal holiday.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/holidays-coming-up.jpg"><img src="docs/screenshots/holidays-coming-up.jpg" alt="The next holidays and how they are staffed"></a><br><b>Holidays coming up</b><br>Each coming holiday with shifts booked, open and confirmed, the hours, and what the day adds in premium and billing. An open shift within two weeks goes in the alerts inbox.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/holiday-register.jpg"><img src="docs/screenshots/holiday-register.jpg" alt="The payroll register with a holiday column and the premium in the totals"></a><br><b>Holiday pay</b><br>Hours on a shift that starts on a holiday pay the premium to hourly W-2 officers, in its own column. Hours that are also overtime get the larger premium, not both.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/holiday-schedule.jpg"><img src="docs/screenshots/holiday-schedule.jpg" alt="The schedule marking a company holiday"></a><br><b>Holidays on the schedule</b><br>The roster marks the day, so whoever builds the week knows those shifts pay and bill more. Officers see it on their own schedule too.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/overtime.jpg"><img src="docs/screenshots/overtime.jpg" alt="The overtime watch: officers heading past 40 hours this week"></a><br><b>Overtime watch</b><br>Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/overtime-cover.jpg"><img src="docs/screenshots/overtime-cover.jpg" alt="Finding cover for the shift that would cause overtime"></a><br><b>Find cover</b><br>Opens that shift on the schedule, with the overtime warning and the officers who could take it, those with hours to spare first.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll.jpg"><img src="docs/screenshots/payroll.jpg" alt="Payroll periods"></a><br><b>Payroll</b><br>Weekly pay periods: last week waiting to close, the week before closed and frozen.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-period.jpg"><img src="docs/screenshots/payroll-period.jpg" alt="Pay period review"></a><br><b>Pay period review</b><br>Hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/time-off-pto.jpg"><img src="docs/screenshots/time-off-pto.jpg" alt="A supervisor approving time off paid from a balance"></a><br><b>Approve paid time off</b><br>The hours asked for against the balance they come from. Approving spends them, and is refused once they are gone.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-pto.jpg"><img src="docs/screenshots/employee-pto.jpg" alt="An employee's paid time off on their record"></a><br><b>On the employee record</b><br>The statement, and an Adjust button for administrators: a carry-over, a payout, a mistake, always with a reason.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-pto.jpg"><img src="docs/screenshots/payroll-pto.jpg" alt="The paid time off a payroll close pays"></a><br><b>Paid with payroll</b><br>The next close pays it at the officer's rate on the day, beside the pay for hours worked, and credits what the week's hours earned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/expenses.jpg"><img src="docs/screenshots/expenses.jpg" alt="Expense claims waiting for a decision"></a><br><b>Expenses</b><br>What officers spent on the job and want back: parking, tolls, supplies, miles in their own car. An administrator approves or declines with a reason, never their own claim.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/expense-receipt.jpg"><img src="docs/screenshots/expense-receipt.jpg" alt="The receipt photo behind a claim"></a><br><b>The receipt</b><br>Anything over $25 comes with a photo of the receipt, opened right from the claim. Only the officer and staff can see it.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-expenses.jpg"><img src="docs/screenshots/payroll-expenses.jpg" alt="The expenses a payroll close pays"></a><br><b>Paid with payroll</b><br>Approved claims are paid by the next close, apart from gross pay, and carried in the payroll register. A claim still waiting holds the close up.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-commendations.jpg"><img src="docs/screenshots/employee-commendations.jpg" alt="Commendations on an officer's record"></a><br><b>On the officer's record</b><br>From clients and supervisors, with Commend to add one. Client thanks reach the alerts inbox, and the scorecards count them beside the score.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-commend.jpg"><img src="docs/screenshots/portal-commend.jpg" alt="A client commending an officer from the portal"></a><br><b>Commend an officer</b><br>A client thanks an officer who worked their property lately, for something specific. The officer reads it word for word.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/punches.jpg"><img src="docs/screenshots/punches.jpg" alt="Punch log"></a><br><b>Punch log</b><br>Every clock-in and check-in with position, geofence verdict and distance from post.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/timesheets.jpg"><img src="docs/screenshots/timesheets.jpg" alt="Timesheets"></a><br><b>Timesheets &amp; pay</b><br>Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/pay-rates.jpg"><img src="docs/screenshots/pay-rates.jpg" alt="Pay rates"></a><br><b>Pay rates</b><br>Classification, overtime and bill rate for everyone, with dated changes and bulk raises.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/reports.jpg"><img src="docs/screenshots/reports.jpg" alt="Payroll register report"></a><br><b>Reports</b><br>Fifteen reports over any range; here the payroll register, with W-9 status for 1099 contractors.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/report-incidents.jpg"><img src="docs/screenshots/report-incidents.jpg" alt="Incidents by site report"></a><br><b>Incident reports</b><br>Incidents by site, by type and by day: how serious, police called, still open, hours to close, and the worst week.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/overtime-phone.jpg"><img src="docs/screenshots/overtime-phone.jpg" alt="The overtime watch on a phone"></a><br><b>On a phone</b><br>A card per officer: the projection, the overtime and its cost, and the shift that tips it, with Find cover.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-pto.jpg"><img src="docs/screenshots/officer-pto.jpg" alt="An officer's paid time off balance and statement"></a><br><b>Paid time off</b><br>Hourly W-2 staff earn an hour for every 30 worked, up to 80. The balance, what is asked for, what is free, and every hour earned, used or adjusted.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-request-time-off.jpg"><img src="docs/screenshots/officer-request-time-off.jpg" alt="An officer asking for time off, paid from the balance"></a><br><b>Ask for time off</b><br>On the web or the phone, paid from the balance or not. Never more than is free, at most 12 hours a day.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-claim-expense.jpg"><img src="docs/screenshots/officer-claim-expense.jpg" alt="An officer claiming mileage from their phone"></a><br><b>Claim an expense</b><br>From the profile or the phone app. Miles are priced at the IRS rate as they are typed; a receipt is a photo from the camera.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-expenses.jpg"><img src="docs/screenshots/officer-expenses.jpg" alt="An officer's expense claims and what was paid"></a><br><b>My expenses</b><br>What is waiting, approved and paid back, with the pay period that paid it, or why a claim was declined.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-commended.jpg"><img src="docs/screenshots/officer-commended.jpg" alt="An officer's home screen with a new commendation"></a><br><b>You were commended</b><br>On the officer's home screen, web and phone, until read; every one stays on their profile.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Billing & client quality
 
 Invoices built from the hours payroll pays, and what clients think of the service.
 
-- **Invoices** — Drafts, sent, paid and overdue, with cost and margin kept on each. Holiday hours are invoiced on their own line naming the holiday.
-- **Invoice questions** — What clients ask about their invoices, waiting ones first, answered in place and emailed back.
-- **Client feedback** — Monthly ratings per property, the lowest first, with replies that go back to the client.
-- **Notices to clients** — A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.
-- **Client portal logins** — Contacts, the properties they can see, invitations and resets.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/invoices.jpg"><img src="docs/screenshots/invoices.jpg" alt="Invoices"></a><br><b>Invoices</b><br>Drafts, sent, paid and overdue, with cost and margin kept on each. Holiday hours go on their own line naming the holiday.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/invoice-questions.jpg"><img src="docs/screenshots/invoice-questions.jpg" alt="Client questions about invoices"></a><br><b>Invoice questions</b><br>What clients ask about their invoices, waiting ones first, answered in place and emailed back.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/feedback.jpg"><img src="docs/screenshots/feedback.jpg" alt="Client feedback"></a><br><b>Client feedback</b><br>Monthly ratings per property, the lowest first, with replies that go back to the client.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/client-notices.jpg"><img src="docs/screenshots/client-notices.jpg" alt="Notices to clients"></a><br><b>Notices to clients</b><br>A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/clients.jpg"><img src="docs/screenshots/clients.jpg" alt="Client portal logins"></a><br><b>Client portal logins</b><br>Contacts, the properties they can see, invitations and resets.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Communication & oversight
 
 Notices to the force, required training, and the record of who changed what.
 
-- **Broadcasts** — Priority notices with read and acknowledge receipts per officer.
-- **Training** — Required videos that cannot be marked done until they have been watched.
-- **Audit log** — Every sign-in, pay change, override and export, for administrators.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/broadcasts.jpg"><img src="docs/screenshots/broadcasts.jpg" alt="Broadcasts"></a><br><b>Broadcasts</b><br>Priority notices with read and acknowledge receipts per officer.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/training.jpg"><img src="docs/screenshots/training.jpg" alt="Training"></a><br><b>Training</b><br>Required videos that cannot be marked done until they have been watched.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/audit.jpg"><img src="docs/screenshots/audit.jpg" alt="Audit log"></a><br><b>Audit log</b><br>Every sign-in, pay change, override and export, for administrators.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Officer app
 
 What Marcus Bell sees on his phone at the Riverfront lobby console. *Officer.*
 
-- **Home** — Check-in due, current post, geofence, slide to clock out. Changed post orders lead the screen until the officer confirms they have read them; clocking out shows what the shift did and offers a pass-down note.
-- **At night** — The same home screen, dark, for the 2 AM round.
-- **Site contacts** — Who to call at this site, a tap away.
-- **Pass-down** — Notes from the last shift, acknowledged one by one.
-- **Activity** — Log a patrol or an alarm in two taps.
-- **Visitors** — Sign people in and out at the desk; a listed name is stopped with the instruction to follow.
-- **Plate lookup** — Every violation for a plate, at any site.
-- **Building issues** — Report what needs fixing; see the client's reply.
-- **Lost & found** — Log an item and hand it back with ID.
-- **Schedule** — Upcoming shifts, holidays marked, confirm I'll be there, and open shifts to claim.
-- **Tours** — Patrol routes with checkpoints to scan.
-- **Report an incident** — Category, severity, people, police and photos.
-- **Updates** — Broadcasts, training and messages.
-- **Profile & pay** — Hours, this week's estimate, closed pay stubs, paid time off and expenses.
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-home.jpg"><img src="docs/screenshots/officer-home.jpg" alt="Officer home"></a><br><b>Home</b><br>Check-in due, current post, geofence, slide to clock out.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-wrapup.jpg"><img src="docs/screenshots/officer-wrapup.jpg" alt="Before you go, at clock-out"></a><br><b>Before you go</b><br>Clocking out shows what the shift did and offers a pass-down note for the next officer.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/night-officer.jpg"><img src="docs/screenshots/night-officer.jpg" alt="Officer home in night mode"></a><br><b>At night</b><br>The same home screen, dark, for the 2 AM round.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-orders.jpg"><img src="docs/screenshots/officer-orders.jpg" alt="Changed post orders on the officer home"></a><br><b>Post orders</b><br>Changed orders lead the home screen, with what changed, until the officer confirms they have read them.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-contacts.jpg"><img src="docs/screenshots/officer-contacts.jpg" alt="Site contacts on home"></a><br><b>Site contacts</b><br>Who to call at this site, a tap away.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-passdown.jpg"><img src="docs/screenshots/officer-passdown.jpg" alt="Pass-down"></a><br><b>Pass-down</b><br>Notes from the last shift, acknowledged one by one.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-activity.jpg"><img src="docs/screenshots/officer-activity.jpg" alt="Activity log"></a><br><b>Activity</b><br>Log a patrol or an alarm in two taps.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-visitors.jpg"><img src="docs/screenshots/officer-visitors.jpg" alt="Visitors"></a><br><b>Visitors</b><br>Sign people in and out at the desk; a name on the watchlist is stopped.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-match.jpg"><img src="docs/screenshots/officer-match.jpg" alt="Watchlist match"></a><br><b>Watchlist stop</b><br>A listed name is stopped with the instruction to follow.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-plate.jpg"><img src="docs/screenshots/officer-plate.jpg" alt="Plate lookup"></a><br><b>Plate lookup</b><br>Every violation for a plate, at any site.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-watchlist.jpg"><img src="docs/screenshots/officer-watchlist.jpg" alt="Watchlist"></a><br><b>Watchlist</b><br>Who is not to be let in here.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-issues.jpg"><img src="docs/screenshots/officer-issues.jpg" alt="Building issues"></a><br><b>Building issues</b><br>Report what needs fixing; see the client's reply.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-found.jpg"><img src="docs/screenshots/officer-found.jpg" alt="Lost and found"></a><br><b>Lost &amp; found</b><br>Log an item and hand it back with ID.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-schedule.jpg"><img src="docs/screenshots/officer-schedule.jpg" alt="Schedule"></a><br><b>Schedule</b><br>Upcoming shifts, holidays marked, Confirm I'll be there, and open shifts to claim.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-tours.jpg"><img src="docs/screenshots/officer-tours.jpg" alt="Tours"></a><br><b>Tours</b><br>Patrol routes with checkpoints to scan.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-incident.jpg"><img src="docs/screenshots/officer-incident.jpg" alt="Report an incident"></a><br><b>Report an incident</b><br>Category, severity, people, police and photos.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-updates.jpg"><img src="docs/screenshots/officer-updates.jpg" alt="Updates"></a><br><b>Updates</b><br>Broadcasts, training and messages.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-profile.jpg"><img src="docs/screenshots/officer-profile.jpg" alt="Profile and pay"></a><br><b>Profile &amp; pay</b><br>Hours, this week's estimate, closed pay stubs, paid time off and expenses.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Client portal
 
 What a client sees for their own property, and nothing else: no pay, no staff records, no other clients. *Client.*
 
-- **Overview** — Building issues to act on, who is on post now, and the week's coverage, patrols and incidents.
-- **Rate us & contacts** — A monthly rating, our reply, and the contacts the officers call.
-- **Daily report** — Coverage, patrols, incidents, the activity log, visitors and parking for any day.
-- **Coverage** — Every scheduled shift, who stood it and when they clocked in and out; hours worked each week against the service agreement.
-- **Coming up** — The next 7 or 14 days, day by day: who is booked on each post, who has confirmed, and what is still being arranged.
-- **Patrols** — Each round walked, checkpoint by checkpoint.
-- **Incidents** — Full reports with photographs, and the follow-ups we share: in hand with a due date, or done.
-- **Notices from us** — At the top of every page until the contact marks each one read; urgent first.
-- **Invoices** — Their own invoices, never pay rates or margin; ask about the whole invoice or one line. Holiday rates for the holidays ahead are listed, never what officers are paid.
-- **Requests** — Ask for extra officers, or an officer to a call, and see the answer.
-- **Post orders** — The orders our officers work to at each post, and a way to ask for a change.
-- **Commend an officer** — Thank an officer who worked the property lately.
-- **Monthly report** — One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.
-- **Email me** — Serious incident alerts as they happen, and a daily report each morning, if they want it.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal.jpg"><img src="docs/screenshots/portal.jpg" alt="Client portal overview"></a><br><b>Overview</b><br>Building issues to act on, who is on post now, and the week's coverage, patrols and incidents.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-notices.jpg"><img src="docs/screenshots/portal-notices.jpg" alt="Notices in the client portal"></a><br><b>Notices from us</b><br>At the top of every page until the contact marks each one read; urgent first.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-rate.jpg"><img src="docs/screenshots/portal-rate.jpg" alt="Rating and contacts"></a><br><b>Rate us &amp; contacts</b><br>A monthly rating, our reply, and the contacts the officers call.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-report.jpg"><img src="docs/screenshots/portal-report.jpg" alt="Daily report"></a><br><b>Daily report</b><br>Coverage, patrols, incidents, the activity log, visitors and parking for any day.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-coverage.jpg"><img src="docs/screenshots/portal-coverage.jpg" alt="Coverage"></a><br><b>Coverage</b><br>Every scheduled shift, who stood it and when they clocked in and out.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-coming-up.jpg"><img src="docs/screenshots/portal-coming-up.jpg" alt="Coming up: the schedule ahead"></a><br><b>Coming up</b><br>The next 7 or 14 days, day by day: who is booked on each post and what is still being arranged.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-patrols.jpg"><img src="docs/screenshots/portal-patrols.jpg" alt="Patrols"></a><br><b>Patrols</b><br>Each round walked, checkpoint by checkpoint.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-incidents.jpg"><img src="docs/screenshots/portal-incidents.jpg" alt="Incidents"></a><br><b>Incidents</b><br>Full reports with photographs.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-followups.jpg"><img src="docs/screenshots/portal-followups.jpg" alt="What we are doing about it"></a><br><b>What we are doing about it</b><br>On each incident, the follow-ups we share: in hand with a due date, or done. Who owns them and our notes stay with us.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-invoices.jpg"><img src="docs/screenshots/portal-invoices.jpg" alt="Invoices"></a><br><b>Invoices</b><br>Their own invoices, never pay rates or margin.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-invoice-question.jpg"><img src="docs/screenshots/portal-invoice-question.jpg" alt="Asking about an invoice in the portal"></a><br><b>Ask about an invoice</b><br>About the whole invoice or one line; the answer arrives here and by email.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-requests.jpg"><img src="docs/screenshots/portal-requests.jpg" alt="Coverage requests"></a><br><b>Requests</b><br>Ask for extra officers and see the answer.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-orders.jpg"><img src="docs/screenshots/portal-orders.jpg" alt="Post orders in the client portal"></a><br><b>Post orders</b><br>The orders our officers work to at each post, and a way to ask for a change.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-monthly.jpg"><img src="docs/screenshots/portal-monthly.jpg" alt="Monthly service report"></a><br><b>Monthly report</b><br>One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-emails.jpg"><img src="docs/screenshots/portal-emails.jpg" alt="Email settings in the client portal"></a><br><b>Email me</b><br>Serious incident alerts as they happen, and a daily report each morning, if they want it.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/portal-agreement-hours.jpg"><img src="docs/screenshots/portal-agreement-hours.jpg" alt="Client portal hours against the agreement"></a><br><b>Hours against the agreement</b><br>Clients see the hours worked each week against what they pay for, and what is rostered next.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/portal-confirmed.jpg"><img src="docs/screenshots/portal-confirmed.jpg" alt="Client portal showing confirmed shifts"></a><br><b>Confirmed, for the client</b><br>Clients see which of the coming shifts the officer has confirmed.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/holiday-rates-phone.jpg"><img src="docs/screenshots/holiday-rates-phone.jpg" alt="The client portal listing upcoming holidays and their bill rate"></a><br><b>Holiday rates for clients</b><br>Clients see the holidays ahead and what each bills at, never what officers are paid. Holiday hours are invoiced on their own line naming the holiday.</td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ---
 
-## Quick start
+## Run it locally
 
 ```bash
 npm install
 npm run seed      # demo sites, posts, officers, shifts, incidents, tours
 npm run dev       # API on :4000, web app on :5173
 ```
+
+You need Node 22.5 or later (CI uses 22). There is no database to install: without
+`DATABASE_URL` the API runs Postgres in-process with PGlite (see
+[How it is built](#how-it-is-built)).
+
+### Demo accounts
 
 Open <http://localhost:5173> and sign in with a demo code + PIN:
 
@@ -239,8 +468,8 @@ Open <http://localhost:5173> and sign in with a demo code + PIN:
 | `1008` | `9351` | Renee Okafor | **1099 contractor**, paid per shift |
 
 Around those eight, the seed builds a regional operation: **ten client sites** from
-Pensacola to Miami, **43 staff** (27 W-2, 8 1099 contractors, 4 armed), a month of
-rosters, 6,000+ GPS points, and a live "right now" whatever hour you seed it - officers
+Pensacola to Miami, **43 staff** (35 W-2 and 8 1099 contractors; 5 hold a Class G
+armed licence), a month of rosters, 6,000+ GPS points, and a live "right now" whatever hour you seed it - officers
 on post, one who has walked off it, one on a meal break, one whose phone has gone
 quiet, one running late and one who never turned up. Every one of them can sign in:
 
@@ -296,7 +525,7 @@ sets him back to active under Employees. Every other code above signs in.
 > These fixed PINs exist only in the demo seed. Real accounts get a random PIN
 > generated in the admin console and shown exactly once.
 
-### The three staff tiers
+### Three staff tiers, and a client
 
 The three accounts at the top of that table are one of each kind. They do not
 merely see more or less of the same screen — they get different applications.
@@ -304,10 +533,10 @@ merely see more or less of the same screen — they get different applications.
 | | Officer `1003` | Supervisor `1002` | Administrator `1001` |
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
-| **Navigation** | 5 tabs | 26 destinations | 27 destinations |
+| **Navigation** | 5 tabs | 37 destinations | 38 destinations |
 | **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
 | **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
-| **Audit log** | — | — | Yes |
+| **Audit log** | — | — | Yes: the 38th destination |
 
 A supervisor is a working officer too — they still have their own time clock.
 
@@ -316,7 +545,7 @@ The boundaries are enforced in the API, not just hidden in the UI:
 gets hidden but not gated will fail the suite.
 
 A **client contact** is not a staff account at all. Separate sign-in, separate
-token, 6 destinations, and no path to any of the above.
+token, 9 tabs, and no path to any of the above.
 
 The client portal is at <http://localhost:5173/portal>, with its own sign-in:
 
@@ -503,60 +732,53 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 
 ### Admin console (web)
 
-- **Keyboard shortcuts** — **?** lists them; **g** then a letter jumps to a screen
-  (d dashboard, l live tracking, f flags, i incidents, p post logs, s schedule,
-  e employees, t timesheets, r reports, h site health, v field visits, c client portal). Off while
-  typing in a field.
-- **Hiring** (Workforce → Hiring) — applications from the public form at **/apply** and
-  the walk-ins and referrals the office adds, on a board by stage: applied, screening,
-  interview, offer. Each applicant has their details, a pre-hire checklist (licence
-  verified with FDACS, background check and I-9 right to work are required; drug test,
-  references and orientation are tracked), notes, and a move to the next stage or a
-  close with a reason. An administrator hires from the offer stage once the required
-  checks are done: that makes the employee record, with the licence they applied with,
-  and shows the employee code and a starting PIN once. New applications are in the
-  alerts inbox and counted in the sidebar until someone picks them up. Applicants are
-  not users: no code, no PIN and no access until they are hired.
-- **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
-  the search button in the header. Find an officer by name, code or phone, a site by
-  name, city or client, an incident by its number, or any screen by name. Arrow keys
-  and Enter open the result.
-- **Post logs** — everyone signed in at a site right now, with a count per site and in
-  the sidebar; any day's visitor log; and every pass-down note with who has read it.
-  The daily activity report lists the day's visitors.
-  The same screen has each day's **activity log** across sites (internal entries
-  marked), every **building issue** with its status and the client's reply (reopen
-  or close them), and **lost and found** with the items held over 30 days picked
-  out. It also keeps the **watchlist** (add, edit, lapse or remove entries, and
-  see every sign-in that overrode a match) and **vehicles** (repeat offenders by
-  plate, and every violation by site and period).
+Supervisors and administrators share one console; what an administrator can change
+and a supervisor can only read is noted where it matters.
+
+#### Live operations
+
+- **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
+  officers outside their geofence, unfilled shifts, and a strip counting who is off
+  post or has not clocked in for a shift that has started.
 - **Alerts inbox** — the bell in the header, with the unread count, lists everything
-  waiting on a supervisor: open duress alerts, no-shows, missed check-ins and
-  walk-offs from the last three days, watchlist overrides, urgent building issues,
-  unanswered low client ratings, open coverage requests, client requests to change
-  post orders, patrols finished with required checkpoints skipped or never finished,
-  and licences lapsing within 14 days. Most serious first; opening one goes to the screen that deals with it and
-  marks it read. Alerts are worked out from the records, so they clear themselves when
-  the problem is resolved; only who has read what is stored, per person.
-- **Post orders** (Post logs → Post orders) — each post's standing orders, versioned.
-  Issuing new orders, or editing the instructions on the Sites screen, makes a new
-  version; the old ones stay on record with who acknowledged each. Every post shows
-  who has not yet read the version in force: anyone who worked it in the last 30 days
-  or is scheduled on it in the next 14. A client's requested change shows on its post
-  with **Apply as a new version** (the reply goes with it) or **Decline**.
-- **Site contacts** (Post logs → Site contacts) — who officers call at each site,
-  kept by supervisors and by the client; each entry says who added it.
-- **Client notices** (Client portal → Notices) — post a notice to every property or to
-  chosen ones, as information, important or urgent, from now or scheduled up to 60 days
-  ahead, until a date or until withdrawn, and optionally email it to every contact who
-  can see it. Each shows whether it is live, scheduled, ended or withdrawn, and how many
-  of its contacts have read it.
-- **Client feedback** — every client's monthly rating per property with their
-  comment. Two stars or fewer without a reply is counted on the dashboard and in
-  the sidebar. The reply goes back to the client's portal.
-- **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
-  issues, lost and found), the scorecards and client feedback. Any cell starting
-  with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
+  waiting on a supervisor, most serious first:
+  - **On post:** open duress alerts; no-shows, missed check-ins, walk-offs and other
+    open flags from the last three days; watchlist overrides; patrols finished with
+    required checkpoints skipped, or never finished; calls for service nobody has been
+    sent to, or not acknowledged within three minutes; shifts starting within 12 hours
+    that nobody has confirmed.
+  - **Fleet:** vehicles off the road, signed out without a start check, or due for a
+    service.
+  - **Clients:** urgent building issues, unanswered low ratings, coverage requests,
+    requests to change post orders, invoice questions and commendations.
+  - **Follow-up:** overdue incident follow-ups, sites due a supervisor visit and visits
+    that found a problem, licences lapsing within 14 days, and service agreements
+    rostered short or inside their notice period.
+  - **Office:** new applicants, time corrections and expense claims waiting, overtime a
+    shift not yet started would cause, and open shifts on a holiday in the next 14 days.
+
+  Opening one goes to the screen that deals with it and marks it read. Alerts are
+  worked out from the records, so they clear themselves when the problem is resolved;
+  only who has read what is stored, per person.
+- **Live tracking** — every officer's actual position against their assigned post, on a
+  map and in a table: status (on post, off post, on break, late, no-show, starting
+  soon), the job and its address, the shift window, clock-in time and lateness, distance
+  from the post with GPS accuracy and how long ago it was seen, missed check-ins, and
+  hours today and this week with an overtime marker. Anyone outside the fence gets a
+  dashed line back to where they should be. Filters by attention, site and search;
+  refreshes every 20 seconds. Each officer's **GPS track** for any day replays the trail
+  they walked, time inside the fence, walk-offs and distance covered.
+- **Safety & live map** — open duress alerts with one-tap call and directions, plus a
+  map of every post, its geofence, and where each officer actually clocked in.
+  Refreshes every 15 seconds.
+- **Flags** — the compliance queue: late clock-in, missed check-in, geofence violation,
+  missed clock-out, early departure, no-show. Closing one requires a written outcome.
+- **Shift confirmations** — the dashboard's **Not confirmed yet** card lists every
+  officer due on post in the next 12 hours who has not confirmed, critical inside 2
+  hours, with whether the reminder went out, a tap-to-call number and **Confirmed by
+  phone** (with an optional note) for the answer taken on the phone. Each is also in the
+  alerts inbox, and the next-12-hours table and the schedule board show who has
+  confirmed.
 - **Dispatch** (Operations → Dispatch, **g k**) — calls for service: raise one the office
   took by phone (site, post, type, emergency/urgent/routine, where, what, caller), or
   pick up one a client raised in the portal. Each call lists every officer on duty,
@@ -567,6 +789,21 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   including an officer turning it back. A call nobody has been sent to, or one not
   acknowledged within three minutes, is in the alerts inbox; the sidebar counts open
   calls. The **call response times** report breaks it down by site.
+- **Incidents** — review queue with severity adjustment and notes back to the officer.
+  **Print report** turns an incident into a one-page document for an insurer, the police
+  or the client's file: the facts, what happened, how it was resolved, who was notified
+  and the shared follow-ups with their owners. Review notes, cost recovery and internal
+  follow-ups stay off it. Clients print the same document from the portal, without the
+  owners.
+  **Follow-ups** turn a serious incident into the things that have to happen next
+  ("get the fence panel repaired", "pull the camera footage for the police"): each has
+  an owner (a supervisor or administrator), a due date, and is marked done only with a
+  note of what was done. The Follow-ups tab lists them across every incident (open,
+  overdue, mine, all), an overdue one lands in the alerts inbox, and each is either
+  shared with the client or kept internal.
+- **Tours** — build routes and checkpoints, and see completed walks as proof of service.
+  **QR tags** prints a tag for every checkpoint on a tour (three to a page, in walking
+  order), each encoding the checkpoint's own tag ID, or `USC-CP-<id>` when it has none.
 - **Field visits** (Operations → Field visits) — every active site with its last
   supervisor visit, longest first; a site with no visit in 14 days is **due** (a badge in
   the sidebar, an alert in the inbox, a line on site health) until someone goes. Every
@@ -574,18 +811,80 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   the client reads; filter to the ones that found a problem, or by site. A visit can be
   logged from the desk too, dated up to a week back. A visit that found a problem is
   raised in the alerts inbox.
-- **Site health** (Reporting → Site health) — every active site's month side by side,
-  worst first, scored out of 100 with the reasons listed: shifts not covered, checkpoints
-  not scanned, serious incidents, building issues left open, a low client rating, a
-  site overdue for a supervisor visit. The
-  numbers are the ones each client reads in their monthly report (the two share one
-  calculation), and any site's full month opens from the board, ready to print.
-- **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
-  ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
-  25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
-  half), clean record 15 (compliance flags per shift). A part with nothing to judge
-  is left out rather than scored as zero. Filter to those under 75. Commendations are
-  counted beside the score (and how many came from clients), never part of it.
+- **Fleet** (Operations → Fleet) — every patrol vehicle: who has it and whether they
+  checked it, the last check, the odometer, miles over the last 7 and 30 days, and the
+  next service against the odometer. A vehicle with a failed safety check is **off the
+  road**: it can't be signed out, and it goes into maintenance when it comes back,
+  until a supervisor signs the repair off. Each vehicle's record has its open defects,
+  a **Record a service** form (the next one defaults to 5,000 miles on), every check
+  and service, and its trips. The alerts inbox raises vehicles off the road (critical),
+  vehicles signed out for 30 minutes without a start check, and services due or
+  overdue. The **patrol vehicle mileage** report covers any date range.
+- **Keys & equipment** — who holds which key ring, radio, firearm or patrol vehicle,
+  signed out and back with its condition each way, and what should have come back by
+  now. One item, one holder: two people cannot hold the same key ring, a firearm needs a
+  current Class G licence, and an item cannot be marked available while somebody still
+  has it.
+- **Quick search** — press **Ctrl+K** (Cmd+K, or `/`) anywhere in the console, or use
+  the search button in the header. Find an officer by name, code or phone, a site by
+  name, city or client, an incident by its number, or any screen by name. Arrow keys
+  and Enter open the result.
+- **Keyboard shortcuts** — **?** lists them; **g** then a letter jumps to a screen
+  (d dashboard, l live tracking, f flags, i incidents, p post logs, s schedule,
+  e employees, t timesheets, r reports, h site health, v field visits, c client portal). Off while
+  typing in a field.
+
+#### Post logs
+
+- **Post logs** — everyone signed in at a site right now, with a count per site and in
+  the sidebar; any day's visitor log; and every pass-down note with who has read it.
+  The daily activity report lists the day's visitors.
+  The same screen has each day's **activity log** across sites (internal entries
+  marked), every **building issue** with its status and the client's reply (reopen
+  or close them), and **lost and found** with the items held over 30 days picked
+  out. It also keeps the **watchlist** (add, edit, lapse or remove entries, and
+  see every sign-in that overrode a match) and **vehicles** (repeat offenders by
+  plate, and every violation by site and period).
+- **Post orders** (Post logs → Post orders) — each post's standing orders, versioned.
+  Issuing new orders, or editing the instructions on the Sites screen, makes a new
+  version; the old ones stay on record with who acknowledged each. Every post shows
+  who has not yet read the version in force: anyone who worked it in the last 30 days
+  or is scheduled on it in the next 14. A client's requested change shows on its post
+  with **Apply as a new version** (the reply goes with it) or **Decline**.
+- **Site contacts** (Post logs → Site contacts) — who officers call at each site,
+  kept by supervisors and by the client; each entry says who added it.
+- **Daily Activity Report** — the client-facing document, assembled from the day's
+  clock, patrol and incident data, laid out to print straight to PDF.
+- **CSV downloads** from every post-log tab (visitors, vehicles, activity, building
+  issues, lost and found), the scorecards and client feedback. Any cell starting
+  with `=`, `+`, `-` or `@` is neutralised so a spreadsheet cannot run it.
+
+#### Scheduling & people
+
+- **Schedule** — a roster grid by officer (weekly hours per person, overtime flagged,
+  click any empty day to add a shift) or by day, conflict detection, **copy a week's
+  roster forward** (clashes are left open rather than double-booked), a recurring roster
+  builder that handles overnight shifts, and print.
+- **Suggested officers** — adding or editing a shift ranks everyone who could cover it:
+  eligible first (current Class G for an armed post, no overlapping shift, no approved
+  leave, within their stated availability), then without overtime, then those who have
+  worked that post before or are based at that site. Each shows their hours that week
+  with the shift added, overtime it would cause, what it would cost and the margin.
+  Picking someone who should not take it shows why before you save, and the API
+  refuses the assignment unless the supervisor overrides it with a written reason,
+  which goes on the audit log. Recurring rosters skip days the officer cannot work,
+  and copying a week leaves those shifts open.
+- **Officers are told** — adding, moving, reassigning or removing an upcoming shift
+  sends the officer a push notification, and a recurring roster or copied week sends
+  one summary instead of dozens.
+- **Shift requests** — open shifts officers can claim, swaps they can offer each other,
+  and drop requests, all landing in one supervisor queue. Eligibility is checked at
+  every step, so an officer without a current Class G licence cannot end up on an armed
+  post; approving a claim automatically declines the officers who lost out.
+- **Client requests** — extra coverage clients have asked for from the portal. A
+  supervisor schedules a request (which puts that many open shifts on one of the site's
+  posts, armed posts only for an armed request) or declines it with a reason the
+  client reads. The dashboard and menu count the ones waiting.
 - **Overtime watch** (Workforce → Overtime watch) — W-2 officers paid by the hour
   heading past 40 hours this payroll week or next: hours worked, hours still on the
   roster, the projection, the overtime hours and the premium they cost, and the shift
@@ -594,6 +893,84 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   Overtime that a shift not yet started would cause is counted on the sidebar and
   raised in the alerts inbox. Contractors and salaried staff, who do not earn
   overtime, are left out.
+- **Time off** — approve or deny with a note; approving reports how many rostered
+  shifts still need re-covering. A request paid from a balance shows the hours and the
+  balance they come from; approving spends them, and is refused if they are no longer
+  there. The next payroll close pays it at the officer's rate on the day, listed under
+  **Paid time off this close pays** and in the register's PTO columns, beside (not inside)
+  the pay for hours worked; a paid request waiting for a decision holds the close up,
+  and a reopen hands it back and takes back the hours the close credited. Each
+  employee's record has their balance and statement, and an administrator can
+  **Adjust** it with a reason (a carry-over, a payout, a mistake), within 0 to 80 hours.
+- **Hiring** (Workforce → Hiring) — applications from the public form at **/apply** and
+  the walk-ins and referrals the office adds, on a board by stage: applied, screening,
+  interview, offer. Each applicant has their details, a pre-hire checklist (licence
+  verified with FDACS, background check and I-9 right to work are required; drug test,
+  references and orientation are tracked), notes, and a move to the next stage or a
+  close with a reason. An administrator hires from the offer stage once the required
+  checks are done: that makes the employee record, with the licence they applied with,
+  and shows the employee code and a starting PIN once. New applications are in the
+  alerts inbox and counted in the sidebar until someone picks them up. Applicants are
+  not users: no code, no PIN and no access until they are hired.
+- **Employee profiles** — contact details, mailing address, emergency contact and
+  relationship, uniform size, hire date, home site, internal notes, and
+  **PIN generation/reset shown once**.
+- **Employment classification** — W-2 or 1099 per person, with the paperwork that goes
+  with it. A 1099 cannot be made active without a W-9 on file, and "exempt" is refused
+  on a contractor. Contractor records carry business name, tax ID last four, signed
+  agreement and certificate-of-insurance expiry.
+- **Licensing & certifications** — one board for state licences, certifications and
+  contractor insurance, showing what has expired and what lapses in the next 30/60/90
+  days.
+- **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
+  ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
+  25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
+  half), clean record 15 (compliance flags per shift). A part with nothing to judge
+  is left out rather than scored as zero. Filter to those under 75. Commendations are
+  counted beside the score (and how many came from clients), never part of it.
+- **Commendations** — on each officer's record: every commendation from a client or
+  a supervisor, with **Commend** to add one (a supervisor never commends themselves).
+  A client's thanks goes to the alerts inbox for a week; an administrator can remove
+  one that should not have been sent, on the audit log.
+- **Sites & posts** — set each post's location **on a map** (search an address, drop or
+  drag the pin, or use your current position), with the geofence drawn to scale.
+  Check-in cadence, post orders and the armed flag live here too.
+
+#### Time & pay
+
+- **Punch log** — every clock-in, clock-out, break start and end, answered and missed
+  check-in, with the position, geofence verdict, distance from the post, method and
+  device. Filter by date range, officer, site, punch type or "outside the geofence only";
+  print or export CSV.
+- **Timesheets** — hours by officer with the regular/overtime split **driven by
+  classification**, unpaid break deductions, exception badges, estimated pay, client
+  billing and margin, every individual punch, and **CSV export for payroll**. The
+  **Corrections** tab lists officers' requests to fix a punch, as recorded and as they
+  should be, with the hours either way and why. An administrator approves (the shift is
+  corrected the same way as their own corrections, the recorded times kept, a late flag
+  or a system-closed flag resolved when the new times settle it) or declines with a
+  reason the officer reads; supervisors see the queue. Waiting requests are in the
+  alerts inbox and counted on the sidebar.
+- **Payroll** — weekly (or up to four-week) pay periods, each reviewed officer by
+  officer: hours, regular and overtime pay, gross, sites worked, and what needs a second
+  look (open shifts, corrected punches, off-site clock-ins, unresolved flags, missing
+  W-9s, corrections still waiting). A time correction waiting on hours in the period
+  stops it closing until it is decided. Approve one, a selection or everyone ready; an approval is pinned to the exact
+  hours and rates, so a later correction shows as **changed since approval**. Closing
+  freezes the figures and locks the period against punch corrections and back-dated
+  rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
+  1099 separately. Approved expense claims are paid with the close, listed under
+  **Expenses this close pays** and as a Reimbursements column in the register, kept
+  apart from gross pay; a claim waiting for a decision stops the period it falls in
+  closing, and reopening a period hands its claims back.
+- **Pay rates** — every officer's classification (W-2 or 1099), pay basis, rate,
+  overtime rate, bill rate and margin in one table, with 28-day hours and pay. Change a
+  rate with an **effective date and a reason**; raise a whole group at once (W-2 or 1099,
+  armed or unarmed, by percent or dollars) with a preview first. Every change - from
+  this screen, a bulk raise or the employee record - lands in the rate history.
+  Supervisors can read rates; only administrators can change them.
+- **Pay & billing** — hourly, salary or per-shift; pay rate, client bill rate, and
+  overtime multiplier. A live preview shows a worked example before you save.
 - **Holidays** (Workforce → Holidays) — the company holiday calendar, by year. Each
   holiday has a pay multiplier and a bill multiplier, time and a half by default.
   - **Which shifts count.** A shift counts when it *starts* on the holiday, the same
@@ -628,88 +1005,25 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
     It links to that week on the schedule. An open shift on a holiday in the next 14
     days goes in the alerts inbox and is counted on the sidebar. The alert is
     critical in the last three days.
-- **Commendations** — on each officer's record: every commendation from a client or
-  a supervisor, with **Commend** to add one (a supervisor never commends themselves).
-  A client's thanks goes to the alerts inbox for a week; an administrator can remove
-  one that should not have been sent, on the audit log.
-- **Live dashboard** — who is on post right now, minutes on post, missed check-ins,
-  officers outside their geofence, unfilled shifts, and a strip counting who is off
-  post or has not clocked in for a shift that has started.
-- **Live tracking** — every officer's actual position against their assigned post, on a
-  map and in a table: status (on post, off post, on break, late, no-show, starting
-  soon), the job and its address, the shift window, clock-in time and lateness, distance
-  from the post with GPS accuracy and how long ago it was seen, missed check-ins, and
-  hours today and this week with an overtime marker. Anyone outside the fence gets a
-  dashed line back to where they should be. Filters by attention, site and search;
-  refreshes every 20 seconds. Each officer's **GPS track** for any day replays the trail
-  they walked, time inside the fence, walk-offs and distance covered.
-- **Punch log** — every clock-in, clock-out, break start and end, answered and missed
-  check-in, with the position, geofence verdict, distance from the post, method and
-  device. Filter by date range, officer, site, punch type or "outside the geofence only";
-  print or export CSV.
-- **Pay rates** — every officer's classification (W-2 or 1099), pay basis, rate,
-  overtime rate, bill rate and margin in one table, with 28-day hours and pay. Change a
-  rate with an **effective date and a reason**; raise a whole group at once (W-2 or 1099,
-  armed or unarmed, by percent or dollars) with a preview first. Every change - from
-  this screen, a bulk raise or the employee record - lands in the rate history.
-  Supervisors can read rates; only administrators can change them.
-- **Client requests** — extra coverage clients have asked for from the portal. A
-  supervisor schedules a request (which puts that many open shifts on one of the site's
-  posts, armed posts only for an armed request) or declines it with a reason the
-  client reads. The dashboard and menu count the ones waiting.
-- **Payroll** — weekly (or up to four-week) pay periods, each reviewed officer by
-  officer: hours, regular and overtime pay, gross, sites worked, and what needs a second
-  look (open shifts, corrected punches, off-site clock-ins, unresolved flags, missing
-  W-9s, corrections still waiting). A time correction waiting on hours in the period
-  stops it closing until it is decided. Approve one, a selection or everyone ready; an approval is pinned to the exact
-  hours and rates, so a later correction shows as **changed since approval**. Closing
-  freezes the figures and locks the period against punch corrections and back-dated
-  rates until it is reopened with a reason. Exports a payroll register CSV, W-2 and
-  1099 separately. Approved expense claims are paid with the close, listed under
-  **Expenses this close pays** and as a Reimbursements column in the register, kept
-  apart from gross pay; a claim waiting for a decision stops the period it falls in
-  closing, and reopening a period hands its claims back.
-- **Reports** — fourteen reports over any period, site, officer or classification, each
+- **Expenses** (Workforce → Expenses) — officers' expense claims: waiting, approved,
+  paid and declined, with totals, the receipt photo, and **Approve** or **Decline**
+  (with a reason the officer reads). Only an administrator decides, and never their
+  own claim; supervisors see the queue. New claims go to the alerts inbox.
+- **Reports** — fifteen reports over any period, site, officer or classification, each
   with summary figures, a chart, a sortable table with totals, print and CSV export:
-  hours &amp; pay by officer, the **payroll register** (W-2 overtime decided week by week;
-  1099 payees with W-9 status and masked TIN), overtime watch, hours &amp; margin by site,
-  where officers worked, daily hours, attendance &amp; punctuality, GPS &amp; geofence
-  compliance, **supervisor visits by site** (visits, rating, problems found, days since
-  the last one), and three on incidents: **by site** (how serious, police called, still
-  open), **by type** (with the serious share and the average hours to close) and **by
-  day** (to spot a bad week, with the busiest day and worst weekday).
-- **Safety &amp; live map** — open duress alerts with one-tap call and directions, plus a
-  map of every post, its geofence, and where each officer actually clocked in.
-  Refreshes every 15 seconds.
-- **Employee profiles** — contact details, mailing address, emergency contact and
-  relationship, uniform size, hire date, home site, internal notes, and
-  **PIN generation/reset shown once**.
-- **Employment classification** — W-2 or 1099 per person, with the paperwork that goes
-  with it. A 1099 cannot be made active without a W-9 on file, and "exempt" is refused
-  on a contractor. Contractor records carry business name, tax ID last four, signed
-  agreement and certificate-of-insurance expiry.
-- **Pay &amp; billing** — hourly, salary or per-shift; pay rate, client bill rate, and
-  overtime multiplier. A live preview shows a worked example before you save.
-- **Schedule** — a roster grid by officer (weekly hours per person, overtime flagged,
-  click any empty day to add a shift) or by day, conflict detection, **copy a week's
-  roster forward** (clashes are left open rather than double-booked), a recurring roster
-  builder that handles overnight shifts, and print.
-- **Suggested officers** — adding or editing a shift ranks everyone who could cover it:
-  eligible first (current Class G for an armed post, no overlapping shift, no approved
-  leave, within their stated availability), then without overtime, then those who have
-  worked that post before or are based at that site. Each shows their hours that week
-  with the shift added, overtime it would cause, what it would cost and the margin.
-  Picking someone who should not take it shows why before you save, and the API
-  refuses the assignment unless the supervisor overrides it with a written reason,
-  which goes on the audit log. Recurring rosters skip days the officer cannot work,
-  and copying a week leaves those shifts open.
-- **Officers are told** — adding, moving, reassigning or removing an upcoming shift
-  sends the officer a push notification, and a recurring roster or copied week sends
-  one summary instead of dozens.
-- **Shift requests** — open shifts officers can claim, swaps they can offer each other,
-  and drop requests, all landing in one supervisor queue. Eligibility is checked at
-  every step, so an officer without a current Class G licence cannot end up on an armed
-  post; approving a claim automatically declines the officers who lost out.
+  - **People and pay:** hours & pay by officer; the **payroll register** (W-2 overtime
+    decided week by week, holiday hours and premium; 1099 payees with W-9 status and a
+    masked TIN); overtime watch; where officers worked; daily hours.
+  - **Sites:** hours & margin by site; hours against service agreements; supervisor
+    visits by site (visits, rating, problems found, days since the last one); call
+    response times by site; patrol vehicle mileage.
+  - **Compliance:** attendance & punctuality; GPS & geofence compliance.
+  - **Incidents:** by site (how serious, police called, still open), by type (with the
+    serious share and the average hours to close) and by day (to spot a bad week, with
+    the busiest day and the worst weekday).
+
+#### Billing & clients
+
 - **Invoices** — raised from hours already on the clock at the bill rate that applied,
   one line per post, plus a line of its own for hours on a company holiday at the
   holiday rate. Preview before committing, tax and payment terms per invoice, a
@@ -727,74 +1041,33 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   sidebar. The **hours against agreements** report spreads the weekly figure over any
   date range and sets the hours worked against it. Administrators edit; supervisors
   read.
-- **Fleet** (Operations → Fleet) — every patrol vehicle: who has it and whether they
-  checked it, the last check, the odometer, miles over the last 7 and 30 days, and the
-  next service against the odometer. A vehicle with a failed safety check is **off the
-  road**: it can't be signed out, and it goes into maintenance when it comes back,
-  until a supervisor signs the repair off. Each vehicle's record has its open defects,
-  a **Record a service** form (the next one defaults to 5,000 miles on), every check
-  and service, and its trips. The alerts inbox raises vehicles off the road (critical),
-  vehicles signed out for 30 minutes without a start check, and services due or
-  overdue. The **patrol vehicle mileage** report covers any date range.
-- **Expenses** (Workforce → Expenses) — officers' expense claims: waiting, approved,
-  paid and declined, with totals, the receipt photo, and **Approve** or **Decline**
-  (with a reason the officer reads). Only an administrator decides, and never their
-  own claim; supervisors see the queue. New claims go to the alerts inbox.
-- **Shift confirmations** — the dashboard's **Not confirmed yet** card lists every
-  officer due on post in the next 12 hours who has not confirmed, critical inside 2
-  hours, with whether the reminder went out, a tap-to-call number and **Confirmed by
-  phone** (with an optional note) for the answer taken on the phone. Each is also in the
-  alerts inbox, and the next-12-hours table and the schedule board show who has
-  confirmed.
+- **Site health** (Reporting → Site health) — every active site's month side by side,
+  worst first, scored out of 100 with the reasons listed: shifts not covered, checkpoints
+  not scanned, serious incidents, building issues left open, a low client rating, a
+  site overdue for a supervisor visit. The
+  numbers are the ones each client reads in their monthly report (the two share one
+  calculation), and any site's full month opens from the board, ready to print.
 - **Client portal logins** — create a read-only account for a site contact, choose which
   properties it can see, reset the password or suspend it.
+- **Client notices** (Client portal → Notices) — post a notice to every property or to
+  chosen ones, as information, important or urgent, from now or scheduled up to 60 days
+  ahead, until a date or until withdrawn, and optionally email it to every contact who
+  can see it. Each shows whether it is live, scheduled, ended or withdrawn, and how many
+  of its contacts have read it.
+- **Client feedback** — every client's monthly rating per property with their
+  comment. Two stars or fewer without a reply is counted on the dashboard and in
+  the sidebar. The reply goes back to the client's portal.
 - **Outbox** — every message the system decided to send: invoice notices to client
   contacts, portal account notices. Each one is recorded whether or not a mail provider
   is configured, so with no provider set this becomes the list of what to send by hand,
   with the text ready to copy. Passwords are never included in a message.
-- **Timesheets** — hours by officer with the regular/overtime split **driven by
-  classification**, unpaid break deductions, exception badges, estimated pay, client
-  billing and margin, every individual punch, and **CSV export for payroll**. The
-  **Corrections** tab lists officers' requests to fix a punch, as recorded and as they
-  should be, with the hours either way and why. An administrator approves (the shift is
-  corrected the same way as their own corrections, the recorded times kept, a late flag
-  or a system-closed flag resolved when the new times settle it) or declines with a
-  reason the officer reads; supervisors see the queue. Waiting requests are in the
-  alerts inbox and counted on the sidebar.
-- **Time off** — approve or deny with a note; approving reports how many rostered
-  shifts still need re-covering. A request paid from a balance shows the hours and the
-  balance they come from; approving spends them, and is refused if they are no longer
-  there. The next payroll close pays it at the officer's rate on the day, listed under
-  **Paid time off this close pays** and in the register's PTO columns, beside (not inside)
-  the pay for hours worked; a paid request waiting for a decision holds the close up,
-  and a reopen hands it back and takes back the hours the close credited. Each
-  employee's record has their balance and statement, and an administrator can
-  **Adjust** it with a reason (a carry-over, a payout, a mistake), within 0 to 80 hours.
-- **Licensing &amp; certifications** — one board for state licences, certifications and
-  contractor insurance, showing what has expired and what lapses in the next 30/60/90
-  days.
-- **Daily Activity Report** — the client-facing document, assembled from the day's
-  clock, patrol and incident data, laid out to print straight to PDF.
-- **Flags** — the compliance queue: late clock-in, missed check-in, geofence violation,
-  missed clock-out, early departure, no-show. Closing one requires a written outcome.
-- **Incidents** — review queue with severity adjustment and notes back to the officer.
-  **Print report** turns an incident into a one-page document for an insurer, the police
-  or the client's file: the facts, what happened, how it was resolved, who was notified
-  and the shared follow-ups with their owners. Review notes, cost recovery and internal
-  follow-ups stay off it. Clients print the same document from the portal, without the
-  owners.
-  **Follow-ups** turn a serious incident into the things that have to happen next
-  ("get the fence panel repaired", "pull the camera footage for the police"): each has
-  an owner (a supervisor or administrator), a due date, and is marked done only with a
-  note of what was done. The Follow-ups tab lists them across every incident (open,
-  overdue, mine, all), an overdue one lands in the alerts inbox, and each is either
-  shared with the client or kept internal.
-- **Sites & posts** — set each post's location **on a map** (search an address, drop or
-  drag the pin, or use your current position), with the geofence drawn to scale.
-  Check-in cadence, post orders and the armed flag live here too.
-- **Tours** — build routes and checkpoints, and see completed walks as proof of service.
-  **QR tags** prints a tag for every checkpoint on a tour (three to a page, in walking
-  order), each encoding the checkpoint's own tag ID, or `USC-CP-<id>` when it has none.
+
+#### Communication & oversight
+
+- **Broadcasts** — priority notices to the force, with a read and an acknowledge
+  receipt per officer.
+- **Training** — required videos, with each officer's progress. A video cannot be
+  marked complete until it has actually been watched.
 - **Audit log** — every sign-in, clock event, PIN reset and record change.
 
 ### Client portal (web, `/portal`)
@@ -901,7 +1174,7 @@ pin by hand.
 
 ---
 
-## Layout
+## How it is built
 
 ```
 usa-security-connect/
@@ -910,7 +1183,7 @@ usa-security-connect/
 │  ├─ server/              Node + Express API, Postgres, JWT, compliance engine
 │  ├─ web/                 React + Vite (officer app, admin console, client portal)
 │  └─ mobile/              Expo / React Native (Android + iOS)
-├─ api/index.js            The same Express app, as a Vercel function
+├─ api/index.mjs           The same Express app, as a Vercel function
 └─ docs/
 ```
 
@@ -919,13 +1192,13 @@ geofence radius, overtime line — so changing a rule changes it everywhere at o
 
 ### Stack notes
 
-- **Postgres, two drivers, one data layer.** Production uses Neon over HTTP;
+- **Postgres, two drivers, one data layer.** Production uses Neon's serverless driver;
   development and CI use **PGlite** — Postgres compiled to WebAssembly — so there is no
   database server to install and no Docker. Both are real Postgres running the same
   schema (`apps/server/src/lib/schema.js`), and `apps/server/src/lib/db.js` is the only file that knows which is in
   use. Money is stored in integer cents, calendar fields as `date`, events as
   `timestamptz`.
-- **One Express app, two front doors.** `src/index.js` listens on a port; `api/index.js`
+- **One Express app, two front doors.** `src/index.js` listens on a port; `api/index.mjs`
   exports the same app as a Vercel function. The schema is applied lazily on the first
   request, so a cold start costs one round trip and nothing afterwards.
 - **PINs and portal passwords** are hashed with scrypt and a per-record salt, never
@@ -938,6 +1211,28 @@ geofence radius, overtime line — so changing a rule changes it everywhere at o
   a long-running host, and via `POST /api/cron/sweep` behind `CRON_SECRET` where there
   is no such process. It is idempotent — a unique constraint on the flag means running
   it repeatedly never duplicates an alert.
+
+### Time zones
+
+A calendar day ("next week", "yesterday", a timesheet's date range) means the server's
+local day, not the UTC one. The server runs each database session in the process's time
+zone, so `current_date` in a query agrees with the day the code works out. Dates sent
+as `YYYY-MM-DD` are read as local days too. The live demo runs on New York time.
+
+CI runs the API suites twice: once in UTC and once with `TZ=America/New_York`. Bugs
+of this kind stay hidden in UTC, where local and UTC days are the same, and show
+up the evening before a UTC midnight. Run the same pair locally:
+
+```bash
+TZ=America/New_York npm run verify --workspace @usc/server -- --fresh
+```
+
+The browser suites take `USC_BROWSER_TZ` (for example `America/New_York`) to run the
+browser in a different zone from the machine. Two checks depend on the time of day.
+The demo never clocks Marcus in before a quarter past midnight. So in the first half
+hour of a day his truck is not yet overdue for its check, and in the first hour no
+check-in is due. The vehicle and scorecard suites expect exactly that, rather than
+failing.
 
 ---
 
@@ -979,18 +1274,23 @@ icons.
 | Variable | Where | Default | Notes |
 |----------|-------|---------|-------|
 | `PORT` | server | `4000` | |
-| `DATABASE_URL` | server | unset | A Postgres connection string (Neon). Without it the server uses a local PGlite database, which is what `npm run dev` does. |
+| `DATABASE_URL` | server | unset | A Postgres connection string (Neon); `POSTGRES_URL` is read too, as Vercel's storage integration names it. Without either the server uses a local PGlite database, which is what `npm run dev` does. |
 | `USC_JWT_SECRET` | server | dev-only fallback | **Required in production** — the server refuses to start without it when `NODE_ENV=production`. |
 | `USC_TOKEN_TTL` | server | `12h` | Staff session. Long enough for a full shift. |
 | `USC_CLIENT_TOKEN_TTL` | server | `8h` | Client portal session. Shorter: they are not mid-shift. |
 | `CRON_SECRET` | server | unset | Required to call `/api/cron/sweep`. Set it on any host without a long-running process. |
 | `BLOB_READ_WRITE_TOKEN` | server | unset | Vercel Blob. Without it, incident photos go to `USC_DATA_DIR/uploads`. |
 | `USC_DATA_DIR` | server | `apps/server/data` | Local PGlite database + incident photos, when neither of the above is set. |
+| `USC_PGLITE_MEMORY` | server | unset | Set to `1` for a throwaway in-memory database (used by tests that run without the API). |
+| `TZ` | server | the machine's | The time zone calendar days are read in; see [Time zones](#time-zones). A deployment with no database defaults to `America/New_York`. |
 | `USC_ALLOWED_ORIGINS` | server | all | Comma-separated list; set this in production. |
 | `USC_MAPS_API_KEY` | server | unset | Google geocoding key. Without it, address lookup uses OpenStreetMap. |
 | `USC_PUSH_DISABLED` | server | unset | Set to `1` to switch push delivery off (used by the test suite). |
 | `USC_MIN_PING_GAP_SECONDS` | server | `20` | Location reports closer together than this are acknowledged but not stored. The test run shortens it. |
 | `USC_LOGIN_LIMIT_PER_IP` / `USC_LOGIN_LIMIT_PER_CODE` | server | `60` / `10` | Staff sign-ins allowed per five minutes. Raised only for the local test run; leave unset in production. |
+| `USC_CLIENT_LOGIN_LIMIT_PER_IP` | server | `60` | Client portal sign-ins allowed per five minutes from one address. Each email is also held to 10, which cannot be raised. |
+| `USC_APPLY_LIMIT_PER_IP` | server | `5` | Applications through the public `/apply` form per hour from one address. |
+| `USC_INVITE_HOURS` / `USC_RESET_HOURS` | server | `168` / `24` | How long a client's set-password link lasts: an invitation, and a reset. |
 | `USC_EMAIL_API_KEY` | server | unset | A [Resend](https://resend.com) API key. Without it nothing is sent; messages are still composed and recorded in the outbox. |
 | `USC_EMAIL_FROM` | server | Resend's test sender | e.g. `USA Security Connect <billing@usasecuritygroup.com>`. The domain must be verified with your provider. |
 | `USC_EMAIL_DISABLED` | server | unset | Set to `1` to switch email off even when a key is present (used by the test suite). |
@@ -1005,7 +1305,10 @@ icons.
 1. **Set `USC_JWT_SECRET`** and `USC_ALLOWED_ORIGINS`, and serve everything over HTTPS —
    PINs, passwords and tokens must never cross plain HTTP.
 2. **Point `DATABASE_URL` at a real Postgres** (Neon, or anything else). PGlite is for
-   development and CI; it is single-writer and lives on local disk.
+   development and CI; it is single-writer and lives on local disk. A Vercel deployment
+   with no database is the public demo: it fills itself with the sample company and
+   lists the demo sign-ins on its sign-in screen, which is right for a demo and wrong for
+   anything else.
 3. **Set `CRON_SECRET` and schedule the sweep** if the API is serverless. Without it,
    late and missed-check-in flags are never raised. On a long-running host an internal
    timer does this and no secret is needed.
@@ -1045,6 +1348,8 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ## Tests
 
+### API suites
+
 One command reseeds the database, starts the API, runs all 34 steps and stops it:
 
 ```bash
@@ -1052,8 +1357,16 @@ npm run verify --workspace @usc/server            # add --fresh to wipe the data
 ```
 
 The order matters and the script enforces it: PGlite is single-writer, so seeding while
-the server is running corrupts the data directory.
+the server is running corrupts the data directory. CI runs the same command twice, in
+UTC and in New York time (see [Time zones](#time-zones)), alongside the web build and
+the mobile bundle for Android and iOS.
 
+The suites, in the order they run:
+
+- **`test/dialect.mjs`** — every SQLite-style expression the route code uses, translated to
+  Postgres and run, so a query cannot work on one database and break on the other.
+- **`test/flags.mjs`** — compliance flag details round-trip as JSON whatever a caller hands
+  over. Runs on its own throwaway database before the API starts.
 - **`test/smoke.mjs`** — authentication, PIN lockout, geofenced clock-in, status
   check-ins, tours and NFC tag validation, training enforcement, scheduling conflicts,
   the compliance sweep and the payroll export.
@@ -1076,40 +1389,27 @@ the server is running corrupts the data directory.
   raised in the alerts inbox until answered, and never naming who answered.
 - **`test/email.mjs`** — what gets composed, who it is addressed to, and above all that
   no generated password appears in any message.
+- **`test/security.mjs`** — set-password links and the shared rate limiter, almost all
+  about what is refused: a spent link, a stale link, a guessed token and a caller who
+  keeps trying.
+- **`test/roles.mjs`** — what each kind of account can do, every boundary checked in both
+  directions: the tier that should have it does, and the tier below is refused.
 - **`test/tracking.mjs`** — location reports (thinned, judged, never stored off duty),
   one walk-off flag however long an officer stays out, the live board, GPS tracks, the
   punch log and its filters, pay-rate changes and history, bulk raises that touch
   exactly who they should, every report - with W-2 overtime recomputed week by week
   from the raw punches rather than trusted - and copying a week's roster.
+- **`test/equipment.mjs`** — keys, radios and firearms, mostly refusals: two people cannot
+  hold one key ring, an unlicensed officer cannot draw a weapon, and an item cannot be
+  marked available while someone has it. The chain of custody survives a full round trip
+  with both conditions recorded.
+- **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
+  after a corrected punch, pay agreeing with the reports to the cent, closing, and every
+  way of changing a closed period's pay being refused until it is reopened.
 - **`test/requests.mjs`** — client coverage requests across the client/staff line: a
   client sees and touches only their own property's requests, answering one puts exactly
   that many open shifts on the right post and emails the client, and an officer's own
   pay matches the payroll line it comes from to the cent.
-- **`apps/web/test/roles-e2e.mjs`** — signs in through the real screens as an
-  administrator, a supervisor, a W-2 officer, a 1099 contractor, an officer who must
-  change their PIN and a client, opens every screen each one is offered, and fails on
-  any refused or broken request, script error, error message, blank page or sideways
-  scroll. Ends with a client requesting coverage and a supervisor scheduling it. Then
-  an officer on post signs a visitor in, which the supervisor sees under Post logs and
-  the client sees in the day's report. The supervisor also finds the officer with
-  Ctrl+K, issues new post orders the officer then reads and acknowledges, opens an
-  alert from the bell, and prints a tour's QR tags. Last, a client asks for an officer
-  from the portal, a supervisor sends the call to the officer at the property, who
-  acknowledges, arrives and clears it from their phone, and the client sees it cleared
-  with the response time. Then an officer asks for a clock-out to be fixed and an
-  administrator approves it, an administrator sets a service agreement for a
-  month-to-month site, and an officer confirms their next shift, a supervisor records
-  another confirmed by phone and the client sees which shifts are confirmed. Last, the
-  officer checks the patrol truck before driving and hands it back with the end check,
-  and a supervisor signs a brake repair off on the Fleet page. Last, an officer claims
-  miles from their phone, an administrator opens a receipt and approves the claim, and
-  the pay period lists the expenses it pays. Then an officer asks for four hours of
-  paid time off from their phone, a supervisor sees the balance and approves it, the
-  officer's statement shows it spent, and the pay period lists the time off it pays.
-  Last, a client commends an officer from the portal, the officer reads it on their
-  home screen, and a supervisor adds one from the officer's record. Then a supervisor
-  opens the overtime watch for next week and follows **Find cover** to the shift that
-  tips an officer over, which opens with the overtime warning and the suggestions.
 - **`test/postlog.mjs`** — the visitor log and pass-down notes, mostly the lines
   around them: an officer off duty cannot write to any post's log, cannot sign out a
   visitor at another site, and cannot read or acknowledge another post's notes. A
@@ -1271,63 +1571,83 @@ the server is running corrupts the data directory.
   parameters, a broadcast receipt that failed when a message was acknowledged
   after being opened, and training progress that could never be saved on
   Postgres. All are fixed and checked here.
-- **`test/payroll.mjs`** — pay periods end to end: approval, "changed since approved"
-  after a corrected punch, pay agreeing with the reports to the cent, closing, and every
-  way of changing a closed period's pay being refused until it is reopened.
 
-The accessibility audit (`npm run test:a11y --workspace @usc/web`) drives 126 screens
-and dialogs through axe-core, signed in as an administrator, an officer on post and a
-client, then audits eleven screens again in night mode with colour contrast enforced
-(the dark palette is ours, so a contrast failure there fails the run). It stops rather than carrying on if a sign-in fails, so it cannot quietly audit
-the sign-in screen in place of the real ones. It also fails any screen showing a table
-without one of our table classes, which renders with the browser's defaults; several
-screens shipped that way before the check existed. Set `USC_CHROMIUM_PATH` if your Chromium is not where Playwright
-expects it.
+### Browser suites
 
-The mobile layout audit (`npm run test:mobile --workspace @usc/web`) opens every screen
-as an administrator, an officer and a client, at 360 and 390 pixels wide, in light and
-night mode (303 screens). On each one it measures the layout for faults a phone shows
-and a desktop hides:
-- text squeezed to a few letters a line;
-- a word wider than its box;
-- anything past the screen edge outside a scroller;
-- text spilling over the side of its card, though still on the screen;
-- a control with something else lying over its middle, so a tap lands on the other thing;
-- controls drawn on top of each other;
-- a page wider than the screen.
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 347
+  checks) — signs in through the real screens as an administrator, a supervisor, a W-2
+  officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
+  every screen each one is offered, and fails on any refused or broken request, script
+  error, error message, blank page or sideways scroll. Then it walks the work from both
+  ends:
+  - a client requests coverage and a supervisor schedules it;
+  - an officer signs a visitor in, which the supervisor sees under Post logs and the
+    client in the day's report;
+  - the supervisor finds the officer with Ctrl+K, issues new post orders the officer
+    reads and acknowledges, opens an alert from the bell and prints a tour's QR tags;
+  - a client calls for an officer, a supervisor sends the officer at the property, who
+    acknowledges, arrives and clears it from their phone, and the client sees it cleared
+    with the response time;
+  - an officer asks for a clock-out to be fixed and an administrator approves it;
+  - an administrator sets a service agreement for a month-to-month site;
+  - an officer confirms their next shift, a supervisor records another confirmed by
+    phone, and the client sees which shifts are confirmed;
+  - an officer checks the patrol truck before driving and hands it back, and a
+    supervisor signs a brake repair off on the Fleet page;
+  - an officer claims miles from their phone, an administrator opens the receipt and
+    approves it, and the pay period lists the expenses it pays;
+  - an officer asks for paid time off, a supervisor approves it against the balance, and
+    the pay period pays it;
+  - a client commends an officer, the officer reads it, and a supervisor adds one;
+  - a supervisor follows **Find cover** from the overtime watch to the shift that tips an
+    officer over;
+  - an administrator adds a holiday that bills double; the schedule and the client's
+    holiday rates show it, a supervisor sees how it is staffed, and it is removed again;
+  - in New York time, a picked date stays the date picked and the overtime watch's next
+    week starts on the right Monday.
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 119
+  screens and dialogs through axe-core, signed in as an administrator, an officer on post
+  and a client, then audits eleven again in night mode with colour contrast enforced (the
+  dark palette is ours, so a contrast failure there fails the run): 130 audits in all. It
+  stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
+  screen in place of the real ones. It also fails any screen showing a table without one
+  of our table classes, which renders with the browser's defaults; several screens
+  shipped that way before the check existed.
+- **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
+  screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
+  light and night mode (303 screens). On each one it measures the layout for faults a
+  phone shows and a desktop hides:
+  - text squeezed to a few letters a line;
+  - a word wider than its box;
+  - anything past the screen edge outside a scroller;
+  - text spilling over the side of its card, though still on the screen;
+  - a control with something else lying over its middle, so a tap lands on the other
+    thing;
+  - controls drawn on top of each other;
+  - a page wider than the screen.
 
-Set `USC_SHOT_DIR` to also save a full-page screenshot of every screen. Its first run
-found 271 faults, including dashboard rows read one letter per line. Others were site
-pickers and date rows pushing pages sideways, table columns squeezed to a word a line,
-and a client tab bar with every label cut off. All are fixed. The check for something lying over a
-control found the toast area: even with no message showing it left an invisible strip
-across the middle of dialog buttons on a phone, so a tap there did nothing. It now lets
-taps through.
+  Its first run found 271 faults, including dashboard rows read one letter per line, site
+  pickers and date rows pushing pages sideways, table columns squeezed to a word a line,
+  and a client tab bar with every label cut off. All are fixed. The check for something
+  lying over a control found the toast area: even with no message showing, it left an
+  invisible strip across the middle of dialog buttons on a phone, so a tap there did
+  nothing. It now lets taps through.
 
-`npm run check:schema --workspace @usc/server` verifies every expected column and table
-exists after a migration.
+The browser suites need the API on :4000 and the web app on :5173 (`npm run dev`, after
+a fresh `npm run seed`). They take a few settings:
 
-### Time zones
+| Variable | What it does |
+|----------|--------------|
+| `USC_CHROMIUM_PATH` | The Chromium to drive, if it is not where Playwright expects it. |
+| `USC_WEB_URL` | Point a suite at another deployment instead of localhost; the mobile audit also takes `USC_API_URL`. |
+| `USC_READ_ONLY=1` | The mobile audit only signs in and reads, so it can check a live deployment safely. |
+| `USC_SHOT_DIR` | Save a full-page screenshot of every screen the mobile audit opens. |
+| `USC_WIDTHS` | The phone widths the mobile audit uses (default `360,390`). |
+| `USC_BROWSER_TZ` | Run the browser in another time zone, e.g. `America/New_York`. |
 
-A calendar day ("next week", "yesterday", a timesheet's date range) means the server's
-local day, not the UTC one. The server runs each database session in the process's time
-zone, so `current_date` in a query agrees with the day the code works out. Dates sent
-as `YYYY-MM-DD` are read as local days too. The live demo runs on New York time.
-
-CI runs the API suites twice: once in UTC and once with `TZ=America/New_York`. Bugs
-of this kind stay hidden in UTC, where local and UTC days are the same, and show
-up the evening before a UTC midnight. Run the same pair locally:
-
-```bash
-TZ=America/New_York npm run verify --workspace @usc/server -- --fresh
-```
-
-The browser suites take `USC_BROWSER_TZ` (for example `America/New_York`) to run the
-browser in a different zone from the machine. Two checks depend on the time of day.
-The demo never clocks Marcus in before a quarter past midnight. So in the first half
-hour of a day his truck is not yet overdue for its check, and in the first hour no
-check-in is due. The vehicle and scorecard suites expect exactly that, rather than
-failing.
+`node apps/web/tools/capture-roles.mjs [dir]` screenshots what each kind of account
+gets, side by side: a quick way to see whether a change has leaked a control into a tier
+that should not have it.
 
 ---
 
