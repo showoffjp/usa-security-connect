@@ -32,6 +32,7 @@ import { toSql } from '../services/compliance.js';
 import { notifyInvoiceIssued, notifyInvoiceQueryAnswered, emailKind } from '../services/email.js';
 import { loadRateBook, rateOn, dayOf } from '../services/payroll.js';
 import { holidaysForSpan } from '../services/holidays.js';
+import { periodSignoffs } from '../services/signoffs.js';
 
 export const invoicesRouter = Router();
 invoicesRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -206,6 +207,8 @@ invoicesRouter.get(
       unpriced,
       totals: invoiceTotals(lines, taxPercent),
       overlapping,
+      // Whether the client has signed off the weeks these hours fall in.
+      signoff: await periodSignoffs(siteId, start, exclusiveEnd(end)),
     });
   })
 );

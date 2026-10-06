@@ -1146,3 +1146,9 @@ select { min-width: 0; }
   .notice-more { display: inline; margin-top: 4px; }
 }
 .link-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; font-weight: 650; cursor: pointer; }
+
+/* Client sign-off of the week's hours. */
+.section-title { font-size: 1.05rem; margin: 6px 0 0; }
+.signoff-dispute { padding: 8px 10px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--surface-2, transparent); }
+.signoff-week .card-head { flex-wrap: wrap; gap: 8px; }
+.tight-list { margin: 4px 0 0; padding-left: 18px; }

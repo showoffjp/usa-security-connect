@@ -612,6 +612,21 @@ function AgreementHours() {
   );
 }
 
+/** Weeks of hours waiting on the client's sign-off, with the way there. */
+function SignOffNudge() {
+  const { data } = usePortal('/client/signoffs', []);
+  if (!data?.waiting) return null;
+  return (
+    <Banner
+      kind="warn"
+      title={`${data.waiting} week${data.waiting === 1 ? '' : 's'} of hours to sign off`}
+      action={<Link className="btn btn-sm btn-primary" to="/portal/coverage?view=signoff">Sign off the hours</Link>}
+    >
+      Check the hours our officers worked at your property and sign them off, or tell us what looks wrong.
+    </Banner>
+  );
+}
+
 export function PortalOverview({ sites }) {
   const { data, error, loading, reload } = usePortal('/client/overview?days=7', []);
 
@@ -632,6 +647,7 @@ export function PortalOverview({ sites }) {
       <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading your coverage">
         {data && (
           <div className="stack">
+            <SignOffNudge />
             <BuildingIssues />
 
             <section className="card">
@@ -745,19 +761,228 @@ export function PortalOverview({ sites }) {
 /** Worked shifts, or the schedule ahead. */
 export function PortalCoverage({ sites }) {
   const [params, setParams] = useSearchParams();
-  const view = params.get('view') === 'upcoming' ? 'upcoming' : 'worked';
+  const view = ['upcoming', 'signoff'].includes(params.get('view')) ? params.get('view') : 'worked';
   const switcher = (
     <Segmented
       label="Coverage view"
       value={view}
-      onChange={(v) => setParams(v === 'upcoming' ? { view: v } : {}, { replace: true })}
+      onChange={(v) => setParams(v === 'worked' ? {} : { view: v }, { replace: true })}
       options={[
         { value: 'worked', label: 'Worked' },
         { value: 'upcoming', label: 'Coming up' },
+        { value: 'signoff', label: 'Sign off' },
       ]}
     />
   );
+  if (view === 'signoff') return <HoursSignOff sites={sites} switcher={switcher} />;
   return view === 'upcoming' ? <UpcomingCoverage sites={sites} switcher={switcher} /> : <CoverageRecord sites={sites} switcher={switcher} />;
+}
+
+const SIGNOFF_CHIP = {
+  waiting: ['warn', 'Waiting for you'],
+  changed: ['warn', 'Changed since you signed'],
+  approved: ['ok', 'Signed off'],
+  disputed: ['danger', 'Disputed'],
+  not_ready: ['', 'A shift is still running'],
+  no_hours: ['', 'No hours'],
+};
+
+/** Tell us what looks wrong with a week's hours. */
+function DisputeDialog({ site, week, onClose, onDone }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const send = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await clientApi.post('/client/signoffs', { siteId: site.id, weekStart: week.week_of, decision: 'dispute', note: note.trim() });
+      onDone();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Query the week of ${fmtDate(`${week.week_of}T12:00:00`)}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={send} disabled={busy || note.trim().length < 10}>
+            {busy ? 'Sending...' : 'Send to our office'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack-sm">
+        <p className="small muted" style={{ margin: 0 }}>
+          {site.name}: {fmtHours(week.hours)} on {week.shifts} shift{week.shifts === 1 ? '' : 's'}. Your account manager checks it against the
+          clock-in records and replies here and by email.
+        </p>
+        <Field label="What looks wrong?" error={error || undefined} hint="A post, a day or a shift helps us find it quickly.">
+          <textarea rows={4} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} autoFocus />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Each finished week at their properties: the hours worked on each post, to
+ * sign off or query. These are the hours the invoice is built from.
+ */
+function HoursSignOff({ sites, switcher }) {
+  const [siteId, setSiteId] = useState(null);
+  const qs = siteId ? `?siteId=${siteId}` : '';
+  const { data, error, loading, reload } = usePortal(`/client/signoffs${qs}`, [siteId]);
+  const [disputing, setDisputing] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [failed, setFailed] = useState('');
+
+  const approve = async (site, week) => {
+    setBusy(`${site.id}:${week.week_of}`);
+    setFailed('');
+    try {
+      await clientApi.post('/client/signoffs', { siteId: site.id, weekStart: week.week_of, decision: 'approve' });
+      await reload();
+    } catch (err) {
+      setFailed(err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Sign off the hours</h1>
+          <p className="muted">
+            Each finished week at your property: the hours our officers worked on each post. Sign them off, or tell us what looks
+            wrong. These are the hours we invoice.
+          </p>
+        </div>
+      </div>
+      <div className="row wrap" style={{ gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+        {switcher}
+        <SitePicker sites={sites} value={siteId} onChange={setSiteId} />
+      </div>
+      {failed && (
+        <div style={{ marginBottom: 12 }}>
+          <Banner kind="danger" title="That did not go through">{failed}</Banner>
+        </div>
+      )}
+      <Loaded loading={loading} error={error} data={data} reload={reload} label="Loading the weeks">
+        {data?.waiting > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <Banner kind="warn" title={`${data.waiting} week${data.waiting === 1 ? '' : 's'} waiting for your sign-off`}>
+              Signing off tells us the hours match what you saw at the property.
+            </Banner>
+          </div>
+        )}
+        <div className="stack">
+          {(data?.sites || []).map((site) => (
+            <section key={site.id} className="stack-sm" aria-labelledby={`signoff-site-${site.id}`}>
+              <h2 id={`signoff-site-${site.id}`} className="section-title">{site.name}</h2>
+              {site.weeks.length === 0 && <Empty title="No finished weeks yet">Weeks appear here once they are over.</Empty>}
+              {site.weeks.map((w) => {
+                const [kind, label] = SIGNOFF_CHIP[w.status] || ['', w.status];
+                const key = `${site.id}:${w.week_of}`;
+                const s = w.signoff;
+                const canSign = ['waiting', 'changed', 'disputed'].includes(w.status);
+                return (
+                  <article key={key} className="card signoff-week" aria-labelledby={`signoff-${key}`}>
+                    <div className="card-head">
+                      <h3 id={`signoff-${key}`}>Week of {fmtDate(`${w.week_of}T12:00:00`)}</h3>
+                      <div className="row" style={{ gap: 8 }}>
+                        <span className="strong">{fmtHours(w.hours)}</span>
+                        <Chip kind={kind}>{label}</Chip>
+                      </div>
+                    </div>
+                    <div className="card-pad stack-sm">
+                      {w.posts.length > 0 && (
+                        <div className="table-wrap">
+                          <table className="data">
+                            <thead>
+                              <tr><th scope="col">Post</th><th scope="col" className="num">Shifts</th><th scope="col" className="num">Hours</th></tr>
+                            </thead>
+                            <tbody>
+                              {w.posts.map((p) => (
+                                <tr key={p.post_id}>
+                                  <td>{p.post_name}</td>
+                                  <td className="num">{p.shifts}</td>
+                                  <td className="num">{fmtHours(p.hours)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {w.status === 'not_ready' && (
+                        <p className="small muted" style={{ margin: 0 }}>A shift that week is still running. It can be signed off once the officer has clocked out.</p>
+                      )}
+                      {s && w.status === 'approved' && (
+                        <p className="small muted" style={{ margin: 0 }}>Signed off by {s.client_name || 'you'}, {fmtDateTime(s.decided_at)}.</p>
+                      )}
+                      {s && w.status === 'changed' && (
+                        <Banner kind="warn" title="The hours changed after you signed them off">
+                          You signed off {fmtHours(s.hours)} on {fmtDateTime(s.decided_at)}; after a correction to a clock-in or clock-out
+                          the week now comes to {fmtHours(w.hours)}.
+                        </Banner>
+                      )}
+                      {s && w.status === 'disputed' && (
+                        <div className="signoff-dispute small">
+                          <div><strong>{s.client_name || 'You'} asked:</strong> {s.note}</div>
+                          <div className="tiny muted">{fmtDateTime(s.decided_at)}</div>
+                          {s.response ? (
+                            <div className="invoice-answer">
+                              <strong>Our reply:</strong> {s.response}
+                              <div className="tiny muted">{fmtDateTime(s.responded_at)}</div>
+                            </div>
+                          ) : (
+                            <div className="tiny muted" style={{ marginTop: 4 }}>Your account manager is checking it and will reply here and by email.</div>
+                          )}
+                        </div>
+                      )}
+                      {(canSign || w.status === 'approved') && (
+                        <div className="row wrap" style={{ gap: 8 }}>
+                          {canSign && (
+                            <button className="btn btn-primary btn-sm" onClick={() => approve(site, w)} disabled={busy === key}
+                              aria-label={`Sign off the hours for the week of ${fmtDate(`${w.week_of}T12:00:00`)}`}>
+                              <Icon name="check" size={14} /> {busy === key ? 'Signing off...' : 'Sign off these hours'}
+                            </button>
+                          )}
+                          {w.status !== 'disputed' && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => setDisputing({ site, week: w })}
+                              aria-label={`Something looks wrong with the week of ${fmtDate(`${w.week_of}T12:00:00`)}`}>
+                              Something looks wrong
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+          ))}
+        </div>
+      </Loaded>
+      {disputing && (
+        <DisputeDialog
+          site={disputing.site}
+          week={disputing.week}
+          onClose={() => setDisputing(null)}
+          onDone={() => {
+            setDisputing(null);
+            reload();
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 /** The next week or two at their properties, day by day. */

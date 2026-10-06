@@ -31,6 +31,7 @@ import { toHours, daysOverdue, CALL_TYPES } from '../shared.js';
 import { callSelect, loadCall, logEvent, presentCallForClient, pushToSupervisors, OPEN_SQL } from '../services/dispatch.js';
 import { pushAsync } from '../services/push.js';
 import { agreementBoard, deliveredByWeek } from '../services/agreements.js';
+import { siteWeeks, weekHours, signableWeek, signoffRow, presentSignoff, SIGNOFF_WEEKS } from '../services/signoffs.js';
 import * as storage from '../services/storage.js';
 import { toSql } from '../services/compliance.js';
 import { contactsFor, contactSchema } from './siteLog.js';
@@ -1376,6 +1377,74 @@ clientRouter.get(
       });
     }
     res.json({ sites });
+  })
+);
+
+/* ======================================================= hours sign-off === */
+
+/**
+ * The last few completed weeks at each of their properties: the hours worked
+ * on each post, and whether they have signed them off. The same hours the
+ * invoice is built from, without a rate in sight.
+ */
+clientRouter.get(
+  '/signoffs',
+  requireClient,
+  wrap(async (req, res) => {
+    const { ids } = sitesFilter(req);
+    const sites = [];
+    for (const id of ids) {
+      const site = await db.prepare(`SELECT id, name FROM sites WHERE id = ?`).get(id);
+      if (site) sites.push({ ...site, weeks: await siteWeeks(id) });
+    }
+    const waiting = sites.reduce((n, s) => n + s.weeks.filter((w) => w.status === 'waiting' || w.status === 'changed').length, 0);
+    res.json({ weeks: SIGNOFF_WEEKS, waiting, sites });
+  })
+);
+
+const signoffSchema = z
+  .object({
+    siteId: z.number().int().positive(),
+    weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the week to answer for.'),
+    decision: z.enum(['approve', 'dispute']),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .refine((b) => b.decision !== 'dispute' || (b.note || '').length >= 10, {
+    message: 'Tell us what looks wrong, so we can check it.',
+    path: ['note'],
+  });
+
+/** Sign off a week's hours, or dispute them with a reason. */
+clientRouter.post(
+  '/signoffs',
+  requireClient,
+  wrap(async (req, res) => {
+    const body = parse(signoffSchema, req.body);
+    const siteId = assertSite(req, body.siteId);
+    const { start, error } = signableWeek(body.weekStart);
+    if (error) throw new HttpError(422, error);
+    const week = await weekHours(siteId, start);
+    if (week.running > 0) throw new HttpError(409, 'A shift that week is still running. It can be signed off once the officer has clocked out.');
+    if (!week.shifts) throw new HttpError(409, 'No hours were worked at this property that week.');
+    const existing = await signoffRow(siteId, week.week_of);
+    if (body.decision === 'approve' && existing?.status === 'approved' && existing.fingerprint === week.fingerprint) {
+      throw new HttpError(409, 'Those hours are already signed off.');
+    }
+    const status = body.decision === 'approve' ? 'approved' : 'disputed';
+    await db
+      .prepare(
+        `INSERT INTO hours_signoffs (site_id, week_start, status, minutes, fingerprint, note, client_user_id, decided_at)
+         VALUES (?,?,?,?,?,?,?, now())
+         ON CONFLICT (site_id, week_start) DO UPDATE SET status = excluded.status, minutes = excluded.minutes,
+           fingerprint = excluded.fingerprint, note = excluded.note, client_user_id = excluded.client_user_id,
+           decided_at = now(), response = NULL, responded_by = NULL, responded_at = NULL`
+      )
+      .run(siteId, week.week_of, status, week.minutes, week.fingerprint, body.note || null, req.client.id);
+    await audit(null, `signoff.${status}`, 'site', siteId,
+      { weekOf: week.week_of, hours: week.hours, clientUserId: req.client.id, note: body.note || null }, req.ip);
+    const saved = presentSignoff(await signoffRow(siteId, week.week_of));
+    const { fingerprint: _fp, client_user_id: _c, responded_by: _r, ...shown } = saved;
+    res.status(existing ? 200 : 201).json({ signoff: shown });
   })
 );
 
