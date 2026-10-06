@@ -1031,7 +1031,12 @@ and a supervisor can only read is noted where it matters.
   overdue count. A period that overlaps an existing invoice is flagged before the same
   hours get billed twice. **Client questions** (a tab, and on each invoice) lists what
   clients have asked, waiting ones first, each answered in place; a waiting question is
-  in the alerts inbox.
+  in the alerts inbox. **Client sign-off** (a tab) shows every property's last four
+  weeks and whether the client has signed off the hours: signed off, waiting, disputed,
+  or changed since it was signed (a punch corrected afterwards). A dispute is in the
+  alerts inbox and on the Invoices badge until an administrator replies, and the reply
+  reaches the client in the portal and by email. Raising an invoice says whether the
+  client has signed off each week it bills, and quotes any dispute.
 - **Service agreements** (Billing → Service agreements) — the hours a week each property
   pays for, its start and end dates, notice period and whether it renews on its own,
   with internal notes. Each site is shown against the next 7 days' roster (filled
@@ -1110,6 +1115,13 @@ a PIN — and sees, for their own properties only:
   or one line — and the answer arrives in the portal and by email; up to three
   questions can wait on one invoice at a time, and the list shows which have one
   waiting.
+- **Sign off the hours** (Coverage → Sign off) — each finished week of the last six at
+  their property: the hours worked on each post, the same clocked hours the invoice is
+  built from, with no rate shown. The contact signs the week off, or says what looks
+  wrong; our reply comes back here and by email, and they can sign off once it looks
+  right. A week whose hours change after it was signed (a corrected punch) says so, with
+  the hours signed and the hours now, and is signed again. A week with a shift still
+  running waits until the officer clocks out. The overview says when weeks are waiting.
 - **Building issues** — on the overview: whatever our officers found wrong with the
   property, urgent first. The client marks each one "seen, it's in hand" or "fixed",
   with a note for the officer on post. The officer who reported it stays internal.
@@ -1350,7 +1362,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 34 steps and stops it:
+One command reseeds the database, starts the API, runs all 35 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1562,6 +1574,18 @@ The suites, in the order they run:
   - The officer's roster, the supervisors' schedule and the client portal all mark
     the day, and clients never see the pay multiplier.
   - Removing the holiday takes the premium and the holiday lines back out.
+- **`test/signoffs.mjs`** — a Harborview contact sees only their property's weeks,
+  newest first, each the sum of its posts, with no rate or internal field in sight.
+  - This week, a Tuesday, a week ten weeks ago and another client's property are all
+    refused (the last as not found), and a dispute needs a reason.
+  - Signing off last week is recorded once; the invoice preview for that week then says
+    it is signed off.
+  - Changing their mind to a dispute shows in the preview with the reason, on the
+    supervisors' board, in the alerts inbox and on the sidebar count.
+  - Only an administrator replies, and the reply reaches the client in the portal and
+    by email; the alert then goes, and once signed off there is nothing to reply to.
+  - Capital Plaza's week, seeded as signed off before a punch was corrected, reads as
+    changed with both figures, and is signed again at the hours as they stand.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
