@@ -23,16 +23,16 @@ produces their timesheet, the client's coverage report and the invoice line.
 
 <table>
   <tr>
-    <td width="26%" valign="top"><img src="docs/screenshots/officer-home.jpg" alt="The officer's phone on post: a call sent to them and changed post orders"><br><sub><b>Officer app.</b> A call from dispatch and changed post orders, on post at Riverfront.</sub></td>
-    <td width="37%" valign="top"><img src="docs/screenshots/client-portal.jpg" alt="The client portal overview for Riverfront Commerce Center"><br><sub><b>Client portal.</b> Notices, building issues, who is on post and the week's coverage.</sub></td>
-    <td width="37%" valign="top"><img src="docs/screenshots/payroll.jpg" alt="A weekly pay period under review, officer by officer"><br><sub><b>Payroll.</b> A week reviewed officer by officer, with what needs a second look.</sub></td>
+    <td width="26%" valign="top"><a href="docs/screenshots/officer-call.jpg"><img src="docs/screenshots/officer-call.jpg" alt="The officer's phone on post: a call sent to them by dispatch"></a><br><sub><b>Officer app.</b> A call from dispatch on the phone of the officer on post at Riverfront.</sub></td>
+    <td width="37%" valign="top"><a href="docs/screenshots/portal-notices.jpg"><img src="docs/screenshots/portal-notices.jpg" alt="The client portal overview for Riverfront Commerce Center, with two notices at the top"></a><br><sub><b>Client portal.</b> Notices, building issues, who is on post and the week's coverage.</sub></td>
+    <td width="37%" valign="top"><a href="docs/screenshots/payroll-period.jpg"><img src="docs/screenshots/payroll-period.jpg" alt="A weekly pay period under review, officer by officer"></a><br><sub><b>Payroll.</b> A week reviewed officer by officer, with what needs a second look.</sub></td>
   </tr>
 </table>
 
 ## Contents
 
 - [Try the live demo](#try-the-live-demo): sign-ins and three five-minute walk-throughs
-- [Feature tour](#feature-tour): every screen in a line, by area
+- [Feature tour](#feature-tour): every screen, with a picture of each, by area
 - [Run it locally](#run-it-locally): setup, every demo account, the staff tiers and the mobile app
 - [What it does, in detail](#what-it-does-in-detail): the officer app, the admin console and the client portal
 - [How it is built](#how-it-is-built): layout, stack and time zones
@@ -99,142 +99,344 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 
 ## Feature tour
 
-Each screen in a line, by area. [What it does, in detail](#what-it-does-in-detail) has
-the rules behind each one.
+Every screen, by area, with a picture of each from the demo company. Click a picture to see it full size.
+[What it does, in detail](#what-it-does-in-detail) has the rules behind each one.
 
 ### Live operations
 
 Where everyone is right now, against where they are scheduled to be. *Admin and supervisor.*
 
-- **Dashboard** — On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.
-- **Alerts inbox** — A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.
-- **Live tracking** — Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.
-- **Safety & map** — Duress alerts, check-ins and every post's geofence on one map.
-- **Flags** — Late clock-ins, no-shows, walk-offs, missed check-ins and geofence violations, each closed with a note.
-- **Not confirmed yet** — Who is due on post in the next 12 hours and has not said they will be there, with the number to call. An answer taken on the phone is recorded in one click.
-- **Confirm a shift** — Officers confirm each shift in the week ahead, on the web or the app. A day out, anyone who has not gets one reminder. Moving the shift means confirming it again.
-- **Dispatch** — Every open call for service, waiting ones first: from the client or the office, who has it, and how long it has been going.
-- **Send it to an officer** — Everyone on duty, whoever is at the property first, then by distance; busy or on a break is marked. Every step is timed against the target and logged.
-- **Calls on the officer's phone** — On my way, on scene, clear with what was found, or turn it back with a reason. Clocking out hands an open call back to the office.
-- **Clients request an officer** — Urgent or routine from the portal (emergencies go to 911), followed from sent to on scene, with response times and an email when it is cleared.
-- **Fleet** — Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.
-- **A vehicle's record** — Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.
-- **Check before driving** — Odometer, fuel and nine items, every one answered. A failed safety item says "do not drive". The end check gives the miles.
-- **Incidents** — Reports from the field with photos, severity, police numbers and review status.
-- **Incident follow-ups** — What has to happen after a serious incident, each with an owner and a due date. Overdue ones land in the alerts inbox; done only with a note of what was done, shared with the client or kept internal.
-- **Printable incident report** — One page for the insurer, the police or the client file. Review notes and internal follow-ups stay off it.
-- **Tours** — Checkpoint routes and every run: completed, missed and abandoned.
-- **QR checkpoint tags** — A printable tag for every checkpoint on a tour. Officers scan it with the phone camera to record the checkpoint.
-- **Field visits** — Every site with its last supervisor visit, longest first. Two weeks without one and the site is due: a badge, an alert and a line on site health until someone goes. Failed checks and low ratings are kept, with the supervisor's own notes apart from the note the client reads.
-- **Keys & equipment** — Who holds which key ring, radio or firearm, and what should have come back by now.
-- **Quick search** — Ctrl K from anywhere: officers by name, code or phone, sites, incident numbers and screens.
-- **Keyboard shortcuts** — Press ? for the list; g then a letter jumps to any main screen.
-- **Night mode** — Auto, Light or Night from the account menu. Auto follows the device, so night shifts get a dark screen on their own.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dashboard.jpg"><img src="docs/screenshots/dashboard.jpg" alt="Admin dashboard"></a><br><b>Dashboard</b><br>On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/alerts.jpg"><img src="docs/screenshots/alerts.jpg" alt="Alerts inbox"></a><br><b>Alerts inbox</b><br>A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/live.jpg"><img src="docs/screenshots/live.jpg" alt="Live tracking map"></a><br><b>Live tracking</b><br>Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/safety.jpg"><img src="docs/screenshots/safety.jpg" alt="Safety and map"></a><br><b>Safety &amp; map</b><br>Duress alerts, check-ins and every post's geofence on one map.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/flags.jpg"><img src="docs/screenshots/flags.jpg" alt="Compliance flags"></a><br><b>Flags</b><br>Late clock-ins, no-shows, walk-offs, missed check-ins and geofence violations, each closed with a note.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/unconfirmed-shifts.jpg"><img src="docs/screenshots/unconfirmed-shifts.jpg" alt="Shifts not confirmed yet on the dashboard"></a><br><b>Not confirmed yet</b><br>Who is due on post in the next 12 hours and has not said they will be there, with the number to call. An answer taken on the phone is recorded in one click.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/confirm-shift.jpg"><img src="docs/screenshots/confirm-shift.jpg" alt="An officer confirming an upcoming shift"></a><br><b>Confirm a shift</b><br>Officers confirm each shift in the week ahead, on the web or the app. A day out, anyone who has not gets one reminder. Moving the shift means confirming it again.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/dispatch.jpg"><img src="docs/screenshots/dispatch.jpg" alt="Dispatch board of open calls for service"></a><br><b>Dispatch</b><br>Every open call for service, waiting ones first: from the client or the office, who has it, and how long it has been going.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dispatch-call.jpg"><img src="docs/screenshots/dispatch-call.jpg" alt="A call with the officers who could take it"></a><br><b>Send it to an officer</b><br>Everyone on duty, whoever is at the property first, then by distance; busy or on a break is marked. Every step is timed against the target and logged.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-calls.jpg"><img src="docs/screenshots/portal-calls.jpg" alt="Client portal calls page"></a><br><b>Clients request an officer</b><br>Urgent or routine from the portal (emergencies go to 911), followed from sent to on scene, with response times and an email when it is cleared.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/fleet.jpg"><img src="docs/screenshots/fleet.jpg" alt="The fleet of patrol vehicles"></a><br><b>Fleet</b><br>Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/fleet-vehicle.jpg"><img src="docs/screenshots/fleet-vehicle.jpg" alt="One vehicle's defects, service form and checks"></a><br><b>A vehicle's record</b><br>Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/incidents.jpg"><img src="docs/screenshots/incidents.jpg" alt="Incident reports"></a><br><b>Incidents</b><br>Reports from the field with photos, severity, police numbers and review status.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/follow-ups.jpg"><img src="docs/screenshots/follow-ups.jpg" alt="Incident follow-ups"></a><br><b>Incident follow-ups</b><br>What has to happen after a serious incident, each with an owner and a due date. Overdue ones land in the alerts inbox.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/incident-followups.jpg"><img src="docs/screenshots/incident-followups.jpg" alt="Follow-ups on an incident"></a><br><b>Follow-ups on the incident</b><br>Added from the review; marked done only with a note of what was done, and shared with the client or kept internal.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/incident-print.jpg"><img src="docs/screenshots/incident-print.jpg" alt="Printed incident report"></a><br><b>Printable incident report</b><br>One page for the insurer, the police or the client file. Review notes and internal follow-ups stay off it.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/tours.jpg"><img src="docs/screenshots/tours.jpg" alt="Patrol tours"></a><br><b>Tours</b><br>Checkpoint routes and every run: completed, missed and abandoned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/qr-tags.jpg"><img src="docs/screenshots/qr-tags.jpg" alt="Printable QR checkpoint tags"></a><br><b>QR checkpoint tags</b><br>A printable tag for every checkpoint on a tour. Officers scan it with the phone camera to record the checkpoint.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/field-visits.jpg"><img src="docs/screenshots/field-visits.jpg" alt="Field visits board"></a><br><b>Field visits</b><br>Every site with its last supervisor visit, longest first. Two weeks without one and the site is due: a badge, an alert and a line on site health until someone goes.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/field-visits-problems.jpg"><img src="docs/screenshots/field-visits-problems.jpg" alt="Visits that found a problem"></a><br><b>Visits that found a problem</b><br>Failed checks and low ratings, with the supervisor's own notes kept apart from the note the client reads.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/equipment.jpg"><img src="docs/screenshots/equipment.jpg" alt="Keys and equipment"></a><br><b>Keys &amp; equipment</b><br>Who holds which key ring, radio or firearm, and what should have come back by now.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/search.jpg"><img src="docs/screenshots/search.jpg" alt="Quick search"></a><br><b>Quick search</b><br>Ctrl K from anywhere: officers by name, code or phone, sites, incident numbers and screens.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/shortcuts.jpg"><img src="docs/screenshots/shortcuts.jpg" alt="Keyboard shortcuts"></a><br><b>Keyboard shortcuts</b><br>Press ? for the list; g then a letter jumps to any main screen.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/night-dashboard.jpg"><img src="docs/screenshots/night-dashboard.jpg" alt="Dashboard in night mode"></a><br><b>Night mode</b><br>Auto, Light or Night from the account menu. Auto follows the device, so night shifts get a dark screen on their own.</td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-call.jpg"><img src="docs/screenshots/officer-call.jpg" alt="A call on the officer's phone"></a><br><b>Calls on the officer's phone</b><br>On my way, on scene, clear with what was found, or turn it back with a reason. Clocking out hands an open call back to the office.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-vehicle-check.jpg"><img src="docs/screenshots/officer-vehicle-check.jpg" alt="An officer's check before driving a patrol vehicle"></a><br><b>Check before driving</b><br>Odometer, fuel and nine items, every one answered. A failed safety item says &quot;do not drive&quot;. The end check gives the miles.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-visit.jpg"><img src="docs/screenshots/officer-visit.jpg" alt="Last supervisor visit on the officer home screen"></a><br><b>Your last supervisor visit</b><br>For a week after a visit, the officer sees who came, the rating, each check and what was said.</td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Post logs
 
 Everything officers record on post, gathered across every site. *Admin and supervisor.*
 
-- **Visitors** — Everyone signed in at every site right now, or any day's log, with vehicle and who let them in.
-- **Activity log** — The officers' running log: patrols, alarms, access and safety, with internal-only entries marked.
-- **Pass-down** — What each shift left for the next, and who has read it.
-- **Building issues** — Lights out, doors that will not lock, leaks and hazards, with the client's reply.
-- **Lost & found** — Items held, returned with a name and ID, or disposed of, with anything over 30 days flagged.
-- **Watchlist** — People not to be let in, by site or company-wide, and every sign-in that overrode a match.
-- **Vehicles** — Parking enforcement by plate, with repeat offenders across every site.
-- **Site contacts** — Who officers call at each site, kept by supervisors and by the client.
-- **Post orders** — Each post's standing orders, versioned. Issue a new version, see which officers have not read it yet, and apply or decline clients' requested changes, with a reply they get in the portal and by email.
-- **Daily activity report** — The day's coverage, patrols, incidents, visitors, parking and activity log, ready to print.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/visitors.jpg"><img src="docs/screenshots/visitors.jpg" alt="Visitor log"></a><br><b>Visitors</b><br>Everyone signed in at every site right now, or any day's log, with vehicle and who let them in.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/activity.jpg"><img src="docs/screenshots/activity.jpg" alt="Activity log"></a><br><b>Activity log</b><br>The officers' running log: patrols, alarms, access and safety, with internal-only entries marked.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/passdown.jpg"><img src="docs/screenshots/passdown.jpg" alt="Pass-down notes"></a><br><b>Pass-down</b><br>What each shift left for the next, and who has read it.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/issues.jpg"><img src="docs/screenshots/issues.jpg" alt="Building issues"></a><br><b>Building issues</b><br>Lights out, doors that will not lock, leaks and hazards, with the client's reply.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/found.jpg"><img src="docs/screenshots/found.jpg" alt="Lost and found"></a><br><b>Lost &amp; found</b><br>Items held, returned with a name and ID, or disposed of, with anything over 30 days flagged.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/watchlist.jpg"><img src="docs/screenshots/watchlist.jpg" alt="Watchlist"></a><br><b>Watchlist</b><br>People not to be let in, by site or company-wide, and every sign-in that overrode a match.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/vehicles.jpg"><img src="docs/screenshots/vehicles.jpg" alt="Vehicle violations"></a><br><b>Vehicles</b><br>Parking enforcement by plate, with repeat offenders across every site.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/contacts.jpg"><img src="docs/screenshots/contacts.jpg" alt="Site contacts"></a><br><b>Site contacts</b><br>Who officers call at each site, kept by supervisors and by the client.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/orders.jpg"><img src="docs/screenshots/orders.jpg" alt="Post orders"></a><br><b>Post orders</b><br>Each post's standing orders, versioned. Issue a new version, see which officers have not read it yet, and answer clients' requested changes.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/orders-apply.jpg"><img src="docs/screenshots/orders-apply.jpg" alt="Applying a client's requested change to post orders"></a><br><b>A client's change, applied</b><br>Apply a client's request as the next version, with a reply they get in the portal and by email. Or decline it with a reason.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/dar.jpg"><img src="docs/screenshots/dar.jpg" alt="Daily activity report"></a><br><b>Daily activity report</b><br>The day's coverage, patrols, incidents, visitors, parking and activity log, ready to print.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Scheduling & people
 
 Build rosters, answer requests, keep licences current.
 
-- **Schedule** — The week by post, open shifts, copy-week, and a candidate ranker that blocks anyone who cannot work a shift. Holidays are marked on the day.
-- **Shift requests** — Open-shift claims, swaps and drops waiting for approval.
-- **Client requests** — Extra coverage clients asked for; schedule it as open shifts or decline with a reason.
-- **Service agreements** — The hours each property pays for, against next week's roster and last week's hours worked. Short weeks and renewals coming up are flagged.
-- **Time off** — Requests to approve, with overlaps refused.
-- **Time corrections** — An officer's wrong punch goes to the office with the right time and what happened. An administrator approves (the shift is corrected, the recorded time kept) or declines with a reason; a waiting request holds up closing that week's payroll.
-- **Hiring** — Applications from the public form at /apply and from the office, stage by stage from applied to offer. Licence, background check and right to work must be ticked before an administrator can hire; hiring creates the login and shows the code and PIN once.
-- **Employees** — All 43 staff with role, classification, licence and status; each record has 30-day hours, late arrivals, open flags, pay rate, and every punch with its geofence check.
-- **Licensing** — Class D and G licences and certificates, sorted by what expires first. A licence lapsing within 30 days shows on the officer's home screen.
-- **Sites & posts** — Ten client sites, their posts, geofence radii and bill rates.
-- **Scorecards** — Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.
-- **Site health** — Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/schedule.jpg"><img src="docs/screenshots/schedule.jpg" alt="Schedule"></a><br><b>Schedule</b><br>The week by post, open shifts, copy-week, and a candidate ranker that blocks anyone who cannot work a shift.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/shift-requests.jpg"><img src="docs/screenshots/shift-requests.jpg" alt="Shift requests"></a><br><b>Shift requests</b><br>Open-shift claims, swaps and drops waiting for approval.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/coverage-requests.jpg"><img src="docs/screenshots/coverage-requests.jpg" alt="Client coverage requests"></a><br><b>Client requests</b><br>Extra coverage clients asked for; schedule it as open shifts or decline with a reason.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/service-agreements.jpg"><img src="docs/screenshots/service-agreements.jpg" alt="Service agreements against the roster"></a><br><b>Service agreements</b><br>The hours each property pays for, against next week's roster and last week's hours worked. Short weeks and renewals coming up are flagged.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/time-off.jpg"><img src="docs/screenshots/time-off.jpg" alt="Time off"></a><br><b>Time off</b><br>Requests to approve, with overlaps refused.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/corrections.jpg"><img src="docs/screenshots/corrections.jpg" alt="Time correction requests in Timesheets"></a><br><b>Time corrections</b><br>Every request with the time as recorded and as it should be, and why. A waiting request holds up closing that week's payroll.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/correction-approve.jpg"><img src="docs/screenshots/correction-approve.jpg" alt="Approving a time correction"></a><br><b>Approve or decline</b><br>An administrator approves (the shift is corrected, the recorded time kept) or declines with a reason the officer reads.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/hiring-board.jpg"><img src="docs/screenshots/hiring-board.jpg" alt="Hiring board"></a><br><b>Hiring</b><br>Applications from the website and the office, stage by stage from applied to offer, with new ones in the alerts.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/hiring-applicant.jpg"><img src="docs/screenshots/hiring-applicant.jpg" alt="An applicant with the pre-hire checklist"></a><br><b>Pre-hire checks</b><br>Licence, background check and right to work must be ticked before an administrator can hire; hiring creates the login and shows the code and PIN once.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/apply.jpg"><img src="docs/screenshots/apply.jpg" alt="Public job application form"></a><br><b>Apply online</b><br>A public form at /apply, linked from the sign-in screen. No account needed; a confirmation email goes out.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/employees.jpg"><img src="docs/screenshots/employees.jpg" alt="Employees"></a><br><b>Employees</b><br>All 43 staff with role, classification, licence and status.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee.jpg"><img src="docs/screenshots/employee.jpg" alt="Employee record"></a><br><b>Employee record</b><br>30-day hours, late arrivals, open flags, pay rate, paid time off, commendations, and every punch with its geofence check.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/compliance.jpg"><img src="docs/screenshots/compliance.jpg" alt="Licensing"></a><br><b>Licensing</b><br>Class D and G licences and certificates, sorted by what expires first.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/scorecards.jpg"><img src="docs/screenshots/scorecards.jpg" alt="Officer scorecards"></a><br><b>Scorecards</b><br>Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-punches.jpg"><img src="docs/screenshots/officer-punches.jpg" alt="An officer's recent punches with a correction waiting"></a><br><b>Fix a time</b><br>An officer's punches from the last two weeks. A wrong one goes to the office with the right time and what happened; the answer shows here.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-licence.jpg"><img src="docs/screenshots/officer-licence.jpg" alt="Licence renewal reminder"></a><br><b>Licence reminders</b><br>A licence or certificate lapsing within 30 days shows on the home screen.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Time & pay
 
 Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
 
-- **Holidays** — The company holiday calendar: what each one pays officers and bills clients, time and a half by default. Add the six usual ones in one step, or any federal holiday.
-- **Holidays coming up** — The next holidays and how they are staffed: shifts booked and still open, confirmed, hours, and what the day adds in premium and in billing. Open shifts within two weeks are raised as alerts.
-- **Holiday pay** — Hours on a shift that starts on a holiday pay the premium to hourly W-2 officers, in its own column. Hours that are also overtime get the larger premium, not both.
-- **Overtime watch** — Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over. **Find cover** opens that shift with the officers who could take it, those with hours to spare first.
-- **Payroll** — Weekly pay periods: hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval; closed periods are frozen.
-- **Paid time off** — Hourly W-2 staff earn an hour for every 30 worked, up to 80. Asked for on the web or the phone, approved against the balance, paid by the next close at the officer's rate on the day, with adjustments always given a reason.
-- **Expenses** — What officers spent on the job and want back: parking, tolls, supplies, miles in their own car at the IRS rate. Anything over $25 needs a receipt photo. An administrator approves or declines with a reason, never their own claim; approved claims are paid with the next payroll, apart from gross pay.
-- **Commendations** — A client or supervisor thanks an officer for something specific. The officer reads it word for word on their home screen; client thanks reach the alerts inbox, and the scorecards count them.
-- **Punch log** — Every clock-in and check-in with position, geofence verdict and distance from post.
-- **Timesheets & pay** — Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.
-- **Pay rates** — Classification, overtime and bill rate for everyone, with dated changes and bulk raises.
-- **Reports** — Fifteen reports over any range, from the payroll register with 1099 W-9 status to call response times and incident trends by site, type and day.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/holidays.jpg"><img src="docs/screenshots/holidays.jpg" alt="The company holiday calendar with what each holiday pays and bills"></a><br><b>Holidays</b><br>The company holiday calendar: what each one pays officers and bills clients, time and a half by default. Add the six usual ones in one step, or any federal holiday.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/holidays-coming-up.jpg"><img src="docs/screenshots/holidays-coming-up.jpg" alt="The next holidays and how they are staffed"></a><br><b>Holidays coming up</b><br>Each coming holiday with shifts booked, open and confirmed, the hours, and what the day adds in premium and billing. An open shift within two weeks goes in the alerts inbox.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/holiday-register.jpg"><img src="docs/screenshots/holiday-register.jpg" alt="The payroll register with a holiday column and the premium in the totals"></a><br><b>Holiday pay</b><br>Hours on a shift that starts on a holiday pay the premium to hourly W-2 officers, in its own column. Hours that are also overtime get the larger premium, not both.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/holiday-schedule.jpg"><img src="docs/screenshots/holiday-schedule.jpg" alt="The schedule marking a company holiday"></a><br><b>Holidays on the schedule</b><br>The roster marks the day, so whoever builds the week knows those shifts pay and bill more. Officers see it on their own schedule too.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/overtime.jpg"><img src="docs/screenshots/overtime.jpg" alt="The overtime watch: officers heading past 40 hours this week"></a><br><b>Overtime watch</b><br>Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/overtime-cover.jpg"><img src="docs/screenshots/overtime-cover.jpg" alt="Finding cover for the shift that would cause overtime"></a><br><b>Find cover</b><br>Opens that shift on the schedule, with the overtime warning and the officers who could take it, those with hours to spare first.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll.jpg"><img src="docs/screenshots/payroll.jpg" alt="Payroll periods"></a><br><b>Payroll</b><br>Weekly pay periods: last week waiting to close, the week before closed and frozen.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-period.jpg"><img src="docs/screenshots/payroll-period.jpg" alt="Pay period review"></a><br><b>Pay period review</b><br>Hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/time-off-pto.jpg"><img src="docs/screenshots/time-off-pto.jpg" alt="A supervisor approving time off paid from a balance"></a><br><b>Approve paid time off</b><br>The hours asked for against the balance they come from. Approving spends them, and is refused once they are gone.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-pto.jpg"><img src="docs/screenshots/employee-pto.jpg" alt="An employee's paid time off on their record"></a><br><b>On the employee record</b><br>The statement, and an Adjust button for administrators: a carry-over, a payout, a mistake, always with a reason.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-pto.jpg"><img src="docs/screenshots/payroll-pto.jpg" alt="The paid time off a payroll close pays"></a><br><b>Paid with payroll</b><br>The next close pays it at the officer's rate on the day, beside the pay for hours worked, and credits what the week's hours earned.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/expenses.jpg"><img src="docs/screenshots/expenses.jpg" alt="Expense claims waiting for a decision"></a><br><b>Expenses</b><br>What officers spent on the job and want back: parking, tolls, supplies, miles in their own car. An administrator approves or declines with a reason, never their own claim.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/expense-receipt.jpg"><img src="docs/screenshots/expense-receipt.jpg" alt="The receipt photo behind a claim"></a><br><b>The receipt</b><br>Anything over $25 comes with a photo of the receipt, opened right from the claim. Only the officer and staff can see it.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/payroll-expenses.jpg"><img src="docs/screenshots/payroll-expenses.jpg" alt="The expenses a payroll close pays"></a><br><b>Paid with payroll</b><br>Approved claims are paid by the next close, apart from gross pay, and carried in the payroll register. A claim still waiting holds the close up.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-commendations.jpg"><img src="docs/screenshots/employee-commendations.jpg" alt="Commendations on an officer's record"></a><br><b>On the officer's record</b><br>From clients and supervisors, with Commend to add one. Client thanks reach the alerts inbox, and the scorecards count them beside the score.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-commend.jpg"><img src="docs/screenshots/portal-commend.jpg" alt="A client commending an officer from the portal"></a><br><b>Commend an officer</b><br>A client thanks an officer who worked their property lately, for something specific. The officer reads it word for word.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/punches.jpg"><img src="docs/screenshots/punches.jpg" alt="Punch log"></a><br><b>Punch log</b><br>Every clock-in and check-in with position, geofence verdict and distance from post.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/timesheets.jpg"><img src="docs/screenshots/timesheets.jpg" alt="Timesheets"></a><br><b>Timesheets &amp; pay</b><br>Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/pay-rates.jpg"><img src="docs/screenshots/pay-rates.jpg" alt="Pay rates"></a><br><b>Pay rates</b><br>Classification, overtime and bill rate for everyone, with dated changes and bulk raises.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/reports.jpg"><img src="docs/screenshots/reports.jpg" alt="Payroll register report"></a><br><b>Reports</b><br>Fifteen reports over any range; here the payroll register, with W-9 status for 1099 contractors.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/report-incidents.jpg"><img src="docs/screenshots/report-incidents.jpg" alt="Incidents by site report"></a><br><b>Incident reports</b><br>Incidents by site, by type and by day: how serious, police called, still open, hours to close, and the worst week.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/overtime-phone.jpg"><img src="docs/screenshots/overtime-phone.jpg" alt="The overtime watch on a phone"></a><br><b>On a phone</b><br>A card per officer: the projection, the overtime and its cost, and the shift that tips it, with Find cover.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-pto.jpg"><img src="docs/screenshots/officer-pto.jpg" alt="An officer's paid time off balance and statement"></a><br><b>Paid time off</b><br>Hourly W-2 staff earn an hour for every 30 worked, up to 80. The balance, what is asked for, what is free, and every hour earned, used or adjusted.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-request-time-off.jpg"><img src="docs/screenshots/officer-request-time-off.jpg" alt="An officer asking for time off, paid from the balance"></a><br><b>Ask for time off</b><br>On the web or the phone, paid from the balance or not. Never more than is free, at most 12 hours a day.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-claim-expense.jpg"><img src="docs/screenshots/officer-claim-expense.jpg" alt="An officer claiming mileage from their phone"></a><br><b>Claim an expense</b><br>From the profile or the phone app. Miles are priced at the IRS rate as they are typed; a receipt is a photo from the camera.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-expenses.jpg"><img src="docs/screenshots/officer-expenses.jpg" alt="An officer's expense claims and what was paid"></a><br><b>My expenses</b><br>What is waiting, approved and paid back, with the pay period that paid it, or why a claim was declined.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-commended.jpg"><img src="docs/screenshots/officer-commended.jpg" alt="An officer's home screen with a new commendation"></a><br><b>You were commended</b><br>On the officer's home screen, web and phone, until read; every one stays on their profile.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Billing & client quality
 
 Invoices built from the hours payroll pays, and what clients think of the service.
 
-- **Invoices** — Drafts, sent, paid and overdue, with cost and margin kept on each. Holiday hours are invoiced on their own line naming the holiday.
-- **Invoice questions** — What clients ask about their invoices, waiting ones first, answered in place and emailed back.
-- **Client feedback** — Monthly ratings per property, the lowest first, with replies that go back to the client.
-- **Notices to clients** — A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.
-- **Client portal logins** — Contacts, the properties they can see, invitations and resets.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/invoices.jpg"><img src="docs/screenshots/invoices.jpg" alt="Invoices"></a><br><b>Invoices</b><br>Drafts, sent, paid and overdue, with cost and margin kept on each. Holiday hours go on their own line naming the holiday.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/invoice-questions.jpg"><img src="docs/screenshots/invoice-questions.jpg" alt="Client questions about invoices"></a><br><b>Invoice questions</b><br>What clients ask about their invoices, waiting ones first, answered in place and emailed back.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/feedback.jpg"><img src="docs/screenshots/feedback.jpg" alt="Client feedback"></a><br><b>Client feedback</b><br>Monthly ratings per property, the lowest first, with replies that go back to the client.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/client-notices.jpg"><img src="docs/screenshots/client-notices.jpg" alt="Notices to clients"></a><br><b>Notices to clients</b><br>A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/clients.jpg"><img src="docs/screenshots/clients.jpg" alt="Client portal logins"></a><br><b>Client portal logins</b><br>Contacts, the properties they can see, invitations and resets.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Communication & oversight
 
 Notices to the force, required training, and the record of who changed what.
 
-- **Broadcasts** — Priority notices with read and acknowledge receipts per officer.
-- **Training** — Required videos that cannot be marked done until they have been watched.
-- **Audit log** — Every sign-in, pay change, override and export, for administrators.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/broadcasts.jpg"><img src="docs/screenshots/broadcasts.jpg" alt="Broadcasts"></a><br><b>Broadcasts</b><br>Priority notices with read and acknowledge receipts per officer.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/training.jpg"><img src="docs/screenshots/training.jpg" alt="Training"></a><br><b>Training</b><br>Required videos that cannot be marked done until they have been watched.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/audit.jpg"><img src="docs/screenshots/audit.jpg" alt="Audit log"></a><br><b>Audit log</b><br>Every sign-in, pay change, override and export, for administrators.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ### Officer app
 
 What Marcus Bell sees on his phone at the Riverfront lobby console. *Officer.*
 
-- **Home** — Check-in due, current post, geofence, slide to clock out. Changed post orders lead the screen until the officer confirms they have read them; clocking out shows what the shift did and offers a pass-down note.
-- **At night** — The same home screen, dark, for the 2 AM round.
-- **Site contacts** — Who to call at this site, a tap away.
-- **Pass-down** — Notes from the last shift, acknowledged one by one.
-- **Activity** — Log a patrol or an alarm in two taps.
-- **Visitors** — Sign people in and out at the desk; a listed name is stopped with the instruction to follow.
-- **Plate lookup** — Every violation for a plate, at any site.
-- **Building issues** — Report what needs fixing; see the client's reply.
-- **Lost & found** — Log an item and hand it back with ID.
-- **Schedule** — Upcoming shifts, holidays marked, confirm I'll be there, and open shifts to claim.
-- **Tours** — Patrol routes with checkpoints to scan.
-- **Report an incident** — Category, severity, people, police and photos.
-- **Updates** — Broadcasts, training and messages.
-- **Profile & pay** — Hours, this week's estimate, closed pay stubs, paid time off and expenses.
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-home.jpg"><img src="docs/screenshots/officer-home.jpg" alt="Officer home"></a><br><b>Home</b><br>Check-in due, current post, geofence, slide to clock out.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-wrapup.jpg"><img src="docs/screenshots/officer-wrapup.jpg" alt="Before you go, at clock-out"></a><br><b>Before you go</b><br>Clocking out shows what the shift did and offers a pass-down note for the next officer.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/night-officer.jpg"><img src="docs/screenshots/night-officer.jpg" alt="Officer home in night mode"></a><br><b>At night</b><br>The same home screen, dark, for the 2 AM round.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-orders.jpg"><img src="docs/screenshots/officer-orders.jpg" alt="Changed post orders on the officer home"></a><br><b>Post orders</b><br>Changed orders lead the home screen, with what changed, until the officer confirms they have read them.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-contacts.jpg"><img src="docs/screenshots/officer-contacts.jpg" alt="Site contacts on home"></a><br><b>Site contacts</b><br>Who to call at this site, a tap away.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-passdown.jpg"><img src="docs/screenshots/officer-passdown.jpg" alt="Pass-down"></a><br><b>Pass-down</b><br>Notes from the last shift, acknowledged one by one.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-activity.jpg"><img src="docs/screenshots/officer-activity.jpg" alt="Activity log"></a><br><b>Activity</b><br>Log a patrol or an alarm in two taps.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-visitors.jpg"><img src="docs/screenshots/officer-visitors.jpg" alt="Visitors"></a><br><b>Visitors</b><br>Sign people in and out at the desk; a name on the watchlist is stopped.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-match.jpg"><img src="docs/screenshots/officer-match.jpg" alt="Watchlist match"></a><br><b>Watchlist stop</b><br>A listed name is stopped with the instruction to follow.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-plate.jpg"><img src="docs/screenshots/officer-plate.jpg" alt="Plate lookup"></a><br><b>Plate lookup</b><br>Every violation for a plate, at any site.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-watchlist.jpg"><img src="docs/screenshots/officer-watchlist.jpg" alt="Watchlist"></a><br><b>Watchlist</b><br>Who is not to be let in here.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-issues.jpg"><img src="docs/screenshots/officer-issues.jpg" alt="Building issues"></a><br><b>Building issues</b><br>Report what needs fixing; see the client's reply.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-found.jpg"><img src="docs/screenshots/officer-found.jpg" alt="Lost and found"></a><br><b>Lost &amp; found</b><br>Log an item and hand it back with ID.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-schedule.jpg"><img src="docs/screenshots/officer-schedule.jpg" alt="Schedule"></a><br><b>Schedule</b><br>Upcoming shifts, holidays marked, Confirm I'll be there, and open shifts to claim.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-tours.jpg"><img src="docs/screenshots/officer-tours.jpg" alt="Tours"></a><br><b>Tours</b><br>Patrol routes with checkpoints to scan.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-incident.jpg"><img src="docs/screenshots/officer-incident.jpg" alt="Report an incident"></a><br><b>Report an incident</b><br>Category, severity, people, police and photos.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-updates.jpg"><img src="docs/screenshots/officer-updates.jpg" alt="Updates"></a><br><b>Updates</b><br>Broadcasts, training and messages.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-profile.jpg"><img src="docs/screenshots/officer-profile.jpg" alt="Profile and pay"></a><br><b>Profile &amp; pay</b><br>Hours, this week's estimate, closed pay stubs, paid time off and expenses.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ### Client portal
 
 What a client sees for their own property, and nothing else: no pay, no staff records, no other clients. *Client.*
 
-- **Overview** — Building issues to act on, who is on post now, and the week's coverage, patrols and incidents.
-- **Rate us & contacts** — A monthly rating, our reply, and the contacts the officers call.
-- **Daily report** — Coverage, patrols, incidents, the activity log, visitors and parking for any day.
-- **Coverage** — Every scheduled shift, who stood it and when they clocked in and out; hours worked each week against the service agreement.
-- **Coming up** — The next 7 or 14 days, day by day: who is booked on each post, who has confirmed, and what is still being arranged.
-- **Patrols** — Each round walked, checkpoint by checkpoint.
-- **Incidents** — Full reports with photographs, and the follow-ups we share: in hand with a due date, or done.
-- **Notices from us** — At the top of every page until the contact marks each one read; urgent first.
-- **Invoices** — Their own invoices, never pay rates or margin; ask about the whole invoice or one line. Holiday rates for the holidays ahead are listed, never what officers are paid.
-- **Requests** — Ask for extra officers, or an officer to a call, and see the answer.
-- **Post orders** — The orders our officers work to at each post, and a way to ask for a change.
-- **Commend an officer** — Thank an officer who worked the property lately.
-- **Monthly report** — One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.
-- **Email me** — Serious incident alerts as they happen, and a daily report each morning, if they want it.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal.jpg"><img src="docs/screenshots/portal.jpg" alt="Client portal overview"></a><br><b>Overview</b><br>Building issues to act on, who is on post now, and the week's coverage, patrols and incidents.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-notices.jpg"><img src="docs/screenshots/portal-notices.jpg" alt="Notices in the client portal"></a><br><b>Notices from us</b><br>At the top of every page until the contact marks each one read; urgent first.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-rate.jpg"><img src="docs/screenshots/portal-rate.jpg" alt="Rating and contacts"></a><br><b>Rate us &amp; contacts</b><br>A monthly rating, our reply, and the contacts the officers call.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-report.jpg"><img src="docs/screenshots/portal-report.jpg" alt="Daily report"></a><br><b>Daily report</b><br>Coverage, patrols, incidents, the activity log, visitors and parking for any day.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-coverage.jpg"><img src="docs/screenshots/portal-coverage.jpg" alt="Coverage"></a><br><b>Coverage</b><br>Every scheduled shift, who stood it and when they clocked in and out.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-coming-up.jpg"><img src="docs/screenshots/portal-coming-up.jpg" alt="Coming up: the schedule ahead"></a><br><b>Coming up</b><br>The next 7 or 14 days, day by day: who is booked on each post and what is still being arranged.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-patrols.jpg"><img src="docs/screenshots/portal-patrols.jpg" alt="Patrols"></a><br><b>Patrols</b><br>Each round walked, checkpoint by checkpoint.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-incidents.jpg"><img src="docs/screenshots/portal-incidents.jpg" alt="Incidents"></a><br><b>Incidents</b><br>Full reports with photographs.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-followups.jpg"><img src="docs/screenshots/portal-followups.jpg" alt="What we are doing about it"></a><br><b>What we are doing about it</b><br>On each incident, the follow-ups we share: in hand with a due date, or done. Who owns them and our notes stay with us.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-invoices.jpg"><img src="docs/screenshots/portal-invoices.jpg" alt="Invoices"></a><br><b>Invoices</b><br>Their own invoices, never pay rates or margin.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-invoice-question.jpg"><img src="docs/screenshots/portal-invoice-question.jpg" alt="Asking about an invoice in the portal"></a><br><b>Ask about an invoice</b><br>About the whole invoice or one line; the answer arrives here and by email.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-requests.jpg"><img src="docs/screenshots/portal-requests.jpg" alt="Coverage requests"></a><br><b>Requests</b><br>Ask for extra officers and see the answer.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-orders.jpg"><img src="docs/screenshots/portal-orders.jpg" alt="Post orders in the client portal"></a><br><b>Post orders</b><br>The orders our officers work to at each post, and a way to ask for a change.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-monthly.jpg"><img src="docs/screenshots/portal-monthly.jpg" alt="Monthly service report"></a><br><b>Monthly report</b><br>One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-emails.jpg"><img src="docs/screenshots/portal-emails.jpg" alt="Email settings in the client portal"></a><br><b>Email me</b><br>Serious incident alerts as they happen, and a daily report each morning, if they want it.</td>
+    <td width="50%"></td>
+  </tr>
+</table>
+
+On the phone:
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/portal-agreement-hours.jpg"><img src="docs/screenshots/portal-agreement-hours.jpg" alt="Client portal hours against the agreement"></a><br><b>Hours against the agreement</b><br>Clients see the hours worked each week against what they pay for, and what is rostered next.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/portal-confirmed.jpg"><img src="docs/screenshots/portal-confirmed.jpg" alt="Client portal showing confirmed shifts"></a><br><b>Confirmed, for the client</b><br>Clients see which of the coming shifts the officer has confirmed.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/holiday-rates-phone.jpg"><img src="docs/screenshots/holiday-rates-phone.jpg" alt="The client portal listing upcoming holidays and their bill rate"></a><br><b>Holiday rates for clients</b><br>Clients see the holidays ahead and what each bills at, never what officers are paid. Holiday hours are invoiced on their own line naming the holiday.</td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ---
 
