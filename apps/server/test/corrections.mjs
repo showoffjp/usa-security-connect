@@ -47,7 +47,13 @@ log(mine.windowDays === 14 && [shiftA.id, shiftB.id].every((id) => mine.entries.
 const first = mine.entries.find((e) => e.id === shiftA.id);
 const second = mine.entries.find((e) => e.id === shiftB.id);
 
-const inEarlier = iso(new Date(first.clock_in_at).getTime() - 30 * MIN);
+// Half an hour earlier - but never back into last week, which the payroll suite has already
+// closed: just after midnight on a Monday the shift was worked minutes into the new week.
+const weekStart = new Date(first.clock_in_at);
+weekStart.setHours(0, 0, 0, 0);
+weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+const earlier = Math.max(1, Math.min(30, Math.floor((new Date(first.clock_in_at) - weekStart) / MIN) - 1));
+const inEarlier = iso(new Date(first.clock_in_at).getTime() - earlier * MIN);
 log((await ask({ entryId: first.id, reason })).status === 422, 'a request has to say what the time should be');
 log((await ask({ entryId: first.id, clockInAt: inEarlier, reason: 'Late.' })).status === 422, 'and why, in a sentence');
 log((await ask({ entryId: first.id, clockOutAt: iso(Date.now() + 3600000), reason })).status === 422, 'not a time in the future');
@@ -74,8 +80,8 @@ if (running) {
 
 const asked = await ask({ entryId: first.id, clockInAt: inEarlier, reason });
 const firstId = asked.data.correction?.id;
-log(asked.status === 201 && asked.data.correction.status === 'pending' && asked.data.correction.proposed_minutes === asked.data.correction.recorded_minutes + 30,
-  'Alexis asks for her clock-in 30 minutes earlier', `#${firstId}`);
+log(asked.status === 201 && asked.data.correction.status === 'pending' && asked.data.correction.proposed_minutes === asked.data.correction.recorded_minutes + earlier,
+  `Alexis asks for her clock-in ${earlier} minutes earlier`, `#${firstId}`);
 log((await ask({ entryId: first.id, clockInAt: inEarlier, reason })).status === 409, 'one request at a time per shift');
 mine = await mineOf();
 log(mine.entries.find((e) => e.id === first.id)?.correction?.status === 'pending', 'and sees it waiting');
@@ -118,7 +124,7 @@ log((await call(`/time-corrections/${firstId}/decline`, { token: admin, method: 
 const approved = await call(`/time-corrections/${firstId}/approve`, { token: admin, method: 'POST', body: { note: 'Matches the relief officer\'s arrival in the post log.' } });
 log(approved.status === 200 && approved.data.correction.status === 'approved' && approved.data.correction.decided_by_name, 'an administrator approves it');
 const after = (await mineOf()).entries.find((e) => e.id === first.id);
-log(after.clock_in_at === inEarlier && after.original_clock_in_at === first.clock_in_at && after.adjusted && after.minutes_worked >= 30,
+log(after.clock_in_at === inEarlier && after.original_clock_in_at === first.clock_in_at && after.adjusted && after.minutes_worked >= earlier,
   'the shift now starts when she said, the recorded time is kept, and the minutes follow');
 log((await call(`/time-corrections/${firstId}/approve`, { token: admin, method: 'POST', body: {} })).status === 409, 'a request is decided once');
 log(waiting(await review()) === waiting(before) - 1, 'and the pay period is no longer held up by it');

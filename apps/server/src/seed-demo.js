@@ -417,12 +417,20 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   // Marcus is mid-shift right now, so the dashboard and officer home have live data.
   const liveShift = shiftRows.find((s) => s.user === users.marcus && s.status === 'scheduled' && s.start <= new Date() && s.end >= new Date());
 
-  // Three hours ago, but never earlier than today's midnight - otherwise seeding
-  // in the small hours puts the "currently on duty" officer on yesterday's date
-  // and the daily activity report opens empty.
+  // Three hours ago, but not before a quarter past midnight today when that
+  // still leaves him an hour on duty - otherwise seeding in the small hours puts
+  // the "currently on duty" officer on yesterday's date and the daily activity
+  // report opens empty. In the first hour or so of a day that would leave him
+  // barely clocked in (or not yet: a quarter past midnight is still to come), so
+  // then he started up to three hours ago - though never before the Monday of
+  // this payroll week, since a shift still running holds its pay period open.
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, midnight.getTime() + 15 * 60000));
+  const weekStart = new Date(midnight);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  const todayStart = midnight.getTime() + 15 * 60000;
+  const floor = Date.now() - todayStart >= 3600000 ? todayStart : weekStart.getTime();
+  const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, floor));
   const liveShiftId = liveShift?.id ?? Number(
     (await insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(new Date(Date.now() + 5 * 3600000)), 'in_progress', users.admin)).lastInsertRowid
   );
@@ -436,15 +444,20 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     )).lastInsertRowid
   );
 
-  // Two answered check-ins and one that was missed an hour ago.
+  // An answered check-in an hour in and a missed one at two hours, as far as
+  // the shift has got (it can be younger than that just after midnight).
   const insertCheck = db.prepare(
     `INSERT INTO status_checks (time_entry_id, user_id, due_at, window_minutes, responded_at, status, latitude, longitude)
      VALUES (?,?,?,?,?,?,?,?)`
   );
-  (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 3600000)), 10,
-    toSql(new Date(liveStart.getTime() + 3660000)), 'ok', 30.3196, -81.6795));
-  (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 7200000)), 10,
-    null, 'missed', null, null));
+  if (liveStart.getTime() + 3660000 <= Date.now()) {
+    (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 3600000)), 10,
+      toSql(new Date(liveStart.getTime() + 3660000)), 'ok', 30.3196, -81.6795));
+  }
+  if (liveStart.getTime() + 7800000 <= Date.now()) {
+    (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 7200000)), 10,
+      null, 'missed', null, null));
+  }
 
   /* ------------------------------------------------------------- incidents -- */
 
