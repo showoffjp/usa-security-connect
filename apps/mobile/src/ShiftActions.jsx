@@ -66,8 +66,11 @@ export function OpenShifts({ notify, onChanged }) {
           </Empty>
         ) : (
           shifts.map((s, i) => {
-            const blocking = s.eligibility.filter((r) => !r.advisory);
-            const advisory = s.eligibility.filter((r) => r.advisory);
+            // Site training is only advisory for a supervisor rostering
+            // someone; an officer cannot take the shift themselves.
+            const blocking = s.eligibility.filter((r) => !r.advisory || r.supervisorOnly);
+            const advisory = s.eligibility.filter((r) => r.advisory && !r.supervisorOnly);
+            const needsTraining = blocking.length > 0 && blocking.every((r) => r.supervisorOnly);
             return (
               <View
                 key={s.id}
@@ -90,7 +93,7 @@ export function OpenShifts({ notify, onChanged }) {
 
                   {blocking.map((r, idx) => (
                     <Text key={idx} style={[S.tiny, { color: C.danger, marginTop: 2 }]}>
-                      {r.message}
+                      {r.officerMessage || r.message}
                     </Text>
                   ))}
                   {advisory.map((r, idx) => (
@@ -110,7 +113,7 @@ export function OpenShifts({ notify, onChanged }) {
                     style={{ paddingVertical: 9, paddingHorizontal: 14 }}
                   />
                 ) : (
-                  <Chip tone="plain">Not eligible</Chip>
+                  <Chip tone="plain">{needsTraining ? 'Needs training' : 'Not eligible'}</Chip>
                 )}
               </View>
             );

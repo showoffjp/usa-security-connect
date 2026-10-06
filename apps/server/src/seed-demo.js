@@ -31,6 +31,7 @@ import { seedExpenses } from './seed-expenses.js';
 import { seedPto } from './seed-pto.js';
 import { seedCommendations } from './seed-commendations.js';
 import { seedSignoffs } from './seed-signoffs.js';
+import { seedTraining } from './seed-training.js';
 import { seedHolidays } from './seed-holidays.js';
 
 /**
@@ -63,7 +64,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       'checkpoints', 'tours', 'supervisor_visits', 'incident_photos', 'incidents',
       'panic_alerts', 'breaks', 'status_checks', 'time_entries', 'shifts',
       'time_off_requests', 'availability', 'certifications', 'device_tokens',
-      'shift_requests', 'hours_signoffs', 'invoice_queries', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
+      'shift_requests', 'hours_signoffs', 'post_qualifications', 'invoice_queries', 'invoice_lines', 'invoices', 'client_sites', 'client_users',
       'location_pings', 'pay_rate_history', 'pay_period_lines', 'pay_periods',
       'post_pay_rates', 'holidays', 'commendations', 'pto_ledger', 'expense_claims', 'vehicle_defects', 'vehicle_inspections', 'equipment_assignments', 'equipment', 'coverage_requests',
       'passdown_acks', 'passdown_notes', 'visitor_log', 'watchlist', 'vehicle_violations', 'activity_entries', 'site_issues', 'lost_found', 'site_contacts', 'client_feedback', 'incident_actions', 'client_digests', 'client_notice_reads', 'client_notice_sites', 'client_notices', 'applicant_notes', 'applicant_checks', 'applicants', 'service_call_events', 'service_calls', 'time_corrections', 'site_agreements', 'post_order_requests', 'post_order_acks', 'post_orders', 'alert_reads',
@@ -1258,6 +1259,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const commendationSeed = await seedCommendations({ db });
   // Clients signing off - or disputing - the weeks' hours at their properties.
   const signoffSeed = await seedSignoffs({ db });
+  // Who is signed off to work the posts that need site training.
+  const trainingSeed = await seedTraining({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1272,7 +1275,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since)
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

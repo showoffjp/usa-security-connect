@@ -44,6 +44,7 @@ import { confirmationOf, confirmShift, unconfirmedSoon } from '../services/confi
 import { overtimeWatch } from '../services/overtime.js';
 import { fleet } from '../services/vehicles.js';
 import { holidaysForSpan, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services/holidays.js';
+import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -245,6 +246,8 @@ adminRouter.get(
     // Officers' requests to fix a punch, waiting on an administrator.
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
     const signoffDisputes = Number((await db.prepare(`SELECT COUNT(*) AS n FROM hours_signoffs WHERE status = 'disputed' AND response IS NULL`).get()).n);
+    // Officers rostered in the coming week at a post they are not trained at.
+    const untrainedRostered = (await trainingAlerts()).length;
     // Expense claims waiting for an administrator.
     const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
     const overtimeRisk = (await overtimeWatch()).totals.avoidable;
@@ -299,6 +302,7 @@ adminRouter.get(
         waitingCalls,
         pendingCorrections,
         signoffDisputes,
+        untrainedRostered,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
         unconfirmedShifts: unconfirmed.length,
@@ -861,6 +865,8 @@ adminRouter.get(
       ).map((r) => [r.user_id, Number(r.n)])
     );
 
+    const trainingOf = post.training_required ? await trainingStatesForPost(post.id) : null;
+
     const shiftMinutes = Math.round((endsAt - startsAt) / 60000);
     const threshold = RULES.overtimeWeeklyHours * 60;
 
@@ -872,6 +878,7 @@ adminRouter.get(
         conflicts: overlaps.get(u.id) || [],
         timeOff: leave.get(u.id) || [],
         availability: availability.get(u.id) || null,
+        training: trainingOf ? trainingOf(u.id) : null,
       });
       const before = rostered.get(u.id) || 0;
       const after = before + shiftMinutes;
@@ -903,6 +910,7 @@ adminRouter.get(
         week_hours_after: toHours(after),
         overtime_hours: toHours(overtimeMinutes),
         times_at_post: familiarity.get(u.id) || 0,
+        training: trainingOf ? trainingOf(u.id) : null,
         cost: costCents != null ? costCents / 100 : null,
         margin_percent: billCents && costCents != null ? Math.round(((billCents - costCents) / billCents) * 1000) / 10 : null,
       };
@@ -920,7 +928,7 @@ adminRouter.get(
     );
 
     res.json({
-      post: { id: post.id, name: post.name, armed: Boolean(post.armed), bill_rate: post.bill_rate_cents != null ? post.bill_rate_cents / 100 : null },
+      post: { id: post.id, name: post.name, armed: Boolean(post.armed), training_required: Boolean(post.training_required), bill_rate: post.bill_rate_cents != null ? post.bill_rate_cents / 100 : null },
       shift_hours: toHours(shiftMinutes),
       candidates,
     });
@@ -1629,6 +1637,7 @@ const postSchema = z.object({
   checkInIntervalMin: z.number().int().min(0).max(480).default(60),
   requiresGps: z.boolean().default(true),
   armed: z.boolean().default(false),
+  trainingRequired: z.boolean().default(false),
   active: z.boolean().default(true),
 });
 
@@ -1640,12 +1649,12 @@ adminRouter.post(
     const info = (await db
       .prepare(
         `INSERT INTO posts (site_id, name, post_code, instructions, address, latitude, longitude,
-                            geofence_radius_m, check_in_interval_min, requires_gps, armed, active)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+                            geofence_radius_m, check_in_interval_min, requires_gps, armed, training_required, active)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(b.siteId, b.name, b.postCode ?? null, b.instructions ?? null, b.address ?? null,
            b.latitude ?? null, b.longitude ?? null,
-           b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.active ? 1 : 0));
+           b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.trainingRequired ? 1 : 0, b.active ? 1 : 0));
     res.status(201).json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(info.lastInsertRowid)) });
   })
 );
@@ -1668,7 +1677,7 @@ adminRouter.patch(
     for (const [k, col] of Object.entries(map)) {
       if (b[k] !== undefined) { sets.push(`${col} = ?`); params.push(b[k]); }
     }
-    for (const [k, col] of Object.entries({ requiresGps: 'requires_gps', armed: 'armed', active: 'active' })) {
+    for (const [k, col] of Object.entries({ requiresGps: 'requires_gps', armed: 'armed', trainingRequired: 'training_required', active: 'active' })) {
       if (b[k] !== undefined) { sets.push(`${col} = ?`); params.push(b[k] ? 1 : 0); }
     }
     // A change to the instructions is a new version of the post orders,
@@ -2419,6 +2428,17 @@ async function buildAlerts(userId) {
           ? `${Math.abs(v.service.milesLeft).toLocaleString('en-US')} miles past the ${v.service_due_miles.toLocaleString('en-US')}-mile service`
           : `${v.service.milesLeft.toLocaleString('en-US')} miles to go` });
     }
+  }
+
+  // An officer on the roster at a post that needs site training, without it.
+  // Usually a training shift: it wants a trained officer alongside, and a
+  // sign-off afterwards.
+  for (const t of await trainingAlerts()) {
+    const lapsed = t.state === 'lapsed';
+    push({ key: `training:${t.shift_id}:${t.user_id}`, kind: 'training', severity: t.hours_away <= 48 ? 'warning' : 'info',
+      at: t.starts_at, link: '/admin/site-training',
+      title: lapsed ? `${t.officer} needs a refresher at ${t.post_name}` : `${t.officer} is not trained at ${t.post_name}`,
+      detail: `${t.site_name} · rostered ${new Date(t.starts_at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
   }
 
   // Money an officer spent and has claimed back.

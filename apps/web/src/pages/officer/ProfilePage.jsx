@@ -7,6 +7,7 @@ import { LoadingPage, Icon, Chip, StatusChip, Empty, useToast, Banner } from '..
 import { ROLE_LABEL, FLAG_LABEL, toHours } from '@shared/domain.js';
 import MyExpenses from './MyExpenses.jsx';
 import MyTimeOff from './MyTimeOff.jsx';
+import { MySiteTraining } from './SiteTraining.jsx';
 import { MyCommendations } from './Commendations.jsx';
 
 export default function ProfilePage() {
@@ -186,6 +187,8 @@ export default function ProfilePage() {
       {pay && <MyPay pay={pay} />}
 
       <MyCommendations />
+
+      <MySiteTraining />
 
       <MyTimeOff />
 

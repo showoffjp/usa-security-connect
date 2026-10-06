@@ -1534,6 +1534,66 @@ for (const u of STAFF) {
   await client.context.close();
 }
 
+/* ---------------------------------------------- round 28: site training --- */
+{
+  console.log('\n--- Site training: a supervisor signs an officer off at a post, withdraws one and signs it back ---');
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/site-training');
+  await sup.page.waitForSelector('h1:has-text("Site training")', { timeout: 10000 });
+  await settle(sup.page);
+  const garage = sup.page.locator('section.card', { hasText: 'Garage & Loading Dock - Armed' });
+  const waiting = garage.locator('button[aria-label^="Sign off "]');
+  log(await waiting.count() === 1, 'the garage shows an officer who has worked it and is waiting to be signed off');
+  log(await garage.locator('text=On the roster here without training').count() === 1, 'with their shifts there flagged meanwhile');
+  await checkScreen('supervisor: site training', sup.page, sup.problems);
+  const who = ((await waiting.getAttribute('aria-label')) || '').replace(/^Sign off (.*) at .*$/, '$1');
+  await waiting.click();
+  await sup.page.waitForSelector('[role="dialog"]');
+  await sup.page.getByLabel('Who they shadowed, and when').fill('E2E: four nights at the garage with Raymond Hayes.');
+  await checkScreen('supervisor: sign an officer off', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button:has-text("Sign off")');
+  await sup.page.waitForTimeout(1500);
+  log(await garage.locator('button[aria-label^="Sign off "]').count() === 0 && await garage.locator('text=On the roster here without training').count() === 0,
+    `${who} is signed off, and the garage's roster flags clear`);
+  log(await garage.locator(`button[aria-label="Withdraw ${who}'s training at Garage & Loading Dock - Armed"]`).count() === 1, 'and is listed as trained');
+
+  const lab = sup.page.locator('section.card', { hasText: 'Lab Building Access Control' });
+  const withdraw = lab.locator('button[aria-label^="Withdraw "]').first();
+  const officer = ((await withdraw.getAttribute('aria-label')) || '').replace(/^Withdraw (.*)'s training.*$/, '$1');
+  await withdraw.click();
+  await sup.page.waitForSelector('[role="dialog"]');
+  await sup.page.getByLabel('Why').fill('E2E: let a contractor into the lab without a badge check.');
+  await checkScreen('supervisor: withdraw training', sup.page, sup.problems);
+  await sup.page.click('[role="dialog"] button:has-text("Withdraw")');
+  await sup.page.waitForTimeout(1500);
+  const again = lab.locator(`button[aria-label="Sign ${officer} off again at Lab Building Access Control"]`);
+  log(await again.count() === 1 && await lab.locator('text=E2E: let a contractor').count() === 1, `${officer}'s training is withdrawn, with the reason`);
+  await again.click();
+  await sup.page.waitForSelector('[role="dialog"]');
+  await sup.page.click('[role="dialog"] button:has-text("Sign off")');
+  await sup.page.waitForTimeout(1500);
+  log(await lab.locator(`button[aria-label="Withdraw ${officer}'s training at Lab Building Access Control"]`).count() === 1, 'and signed back on after a walkthrough');
+
+  await sup.page.goto(WEB + '/admin/sites');
+  await settle(sup.page);
+  log(await sup.page.locator('.chip:has-text("Site training")').count() >= 5, 'Sites & posts marks the posts that need it');
+  await sup.context.close();
+
+  const client = await watchedPage({ width: 1440, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'carla.mendez@harborviewhealth.org');
+  await client.page.fill('input[type="password"]', 'harborview-portal-04');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal/orders', { waitUntil: 'networkidle' });
+  await settle(client.page);
+  log(await client.page.locator('li', { hasText: 'Emergency Department Entrance' }).locator('text=are trained now').count() === 1,
+    'the client sees the ED needs site training, and how many officers have it');
+  await checkScreen('client: post orders with site training', client.page, client.problems);
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

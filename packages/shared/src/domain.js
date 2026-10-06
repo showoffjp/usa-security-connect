@@ -121,7 +121,7 @@ export const SHIFT_REQUEST_STATUS = [
  * Returned as a list so the UI can show every reason at once rather than
  * making someone fix them one at a time. An empty list means eligible.
  */
-export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null }) {
+export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null, training = null }) {
   const reasons = [];
 
   if (officer?.status !== 'active') {
@@ -165,11 +165,67 @@ export function shiftEligibility({ post, officer, certifications = [], conflicts
     });
   }
 
+  // Site training: a post that needs it is worked alone only by an officer a
+  // supervisor has signed off there. A supervisor may still roster someone
+  // new - that is how a training shift gets on the schedule - so it warns
+  // them; an officer cannot claim or swap into it themselves.
+  if (post?.training_required && training && training !== 'trained') {
+    reasons.push(
+      training === 'lapsed'
+        ? { code: 'training_lapsed', message: `Not worked here in over ${QUALIFICATION_LAPSE_DAYS} days: needs a refresher before working it alone.`, advisory: true, supervisorOnly: true,
+            officerMessage: `You have not worked this post in over ${QUALIFICATION_LAPSE_DAYS} days: ask a supervisor for a refresher shift.` }
+        : { code: 'not_trained', message: 'Not trained at this post yet: roster it as a training shift, then sign them off.', advisory: true, supervisorOnly: true,
+            officerMessage: 'You need site training at this post first: ask a supervisor to put you on a training shift.' }
+    );
+  }
+
   return reasons;
 }
 
 /** Only non-advisory reasons actually prevent an assignment. */
 export const blocksAssignment = (reasons = []) => reasons.some((r) => !r.advisory);
+
+/**
+ * What stops an officer taking a shift themselves - claiming it or having it
+ * swapped to them - as against a supervisor rostering them: also anything only
+ * a supervisor may decide, such as working a post before being trained there.
+ */
+export const blocksSelfService = (reasons = []) => reasons.some((r) => !r.advisory || r.supervisorOnly);
+
+/* ----------------------------------------------------------- site training -- */
+
+/** A post's site training lapses after this long without working it. */
+export const QUALIFICATION_LAPSE_DAYS = 180;
+
+/** How an officer learned a post. */
+export const TRAINING_METHODS = ['shadow_shift', 'walkthrough', 'prior_experience'];
+export const TRAINING_METHOD_LABEL = {
+  shadow_shift: 'Shadow shift with a trained officer',
+  walkthrough: 'Walkthrough with a supervisor',
+  prior_experience: 'Worked the post before',
+};
+
+export const TRAINING_STATE_LABEL = {
+  trained: 'Trained',
+  lapsed: 'Needs a refresher',
+  untrained: 'Not trained',
+  revoked: 'Withdrawn',
+};
+
+/**
+ * Where an officer stands at a post: trained; lapsed, when they were trained
+ * but have not worked it (or been signed off again) in QUALIFICATION_LAPSE_DAYS;
+ * revoked, when a supervisor withdrew it; otherwise untrained.
+ */
+export function trainingState(qualification, lastWorkedAt = null, now = new Date()) {
+  if (!qualification) return 'untrained';
+  if (qualification.status === 'revoked') return 'revoked';
+  const latest = Math.max(
+    new Date(qualification.trained_at).getTime() || 0,
+    lastWorkedAt ? new Date(lastWorkedAt).getTime() || 0 : 0
+  );
+  return now.getTime() - latest > QUALIFICATION_LAPSE_DAYS * 86400000 ? 'lapsed' : 'trained';
+}
 
 export const PANIC_STATUS = ['active', 'acknowledged', 'resolved', 'false_alarm'];
 
