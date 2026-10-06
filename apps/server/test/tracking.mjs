@@ -123,7 +123,11 @@ const statusTotal = ['duress', 'off_post', 'no_show', 'late', 'on_break', 'on_po
 log(statusTotal === board.officers.length, 'status counts add up to the people listed', `${statusTotal}/${board.officers.length}`);
 log(board.counts.on_duty === board.officers.filter((o) => o.entry).length, 'on-duty count matches open time entries');
 log(board.counts.on_break >= 1, 'the seeded officer on a meal break is on the board');
-log(board.counts.gps_stale >= 1, 'an officer whose phone went quiet is flagged as GPS stale');
+// The demo has an officer whose phone stopped reporting, but nobody can have gone quiet for longer
+// than they have been on duty: in the first minutes of a payroll week every shift is that young.
+const quietLongEnough = board.officers.some((o) => o.entry && o.entry.minutes_on_post > board.rules.gpsStaleMinutes);
+log(quietLongEnough ? board.counts.gps_stale >= 1 : board.counts.gps_stale === 0,
+  'an officer whose phone went quiet is flagged as GPS stale', quietLongEnough ? `${board.counts.gps_stale}` : 'nobody on duty long enough yet');
 log(board.counts.no_show + board.counts.late >= 2, 'officers who have not turned up are listed', `${board.counts.late} late, ${board.counts.no_show} no-show`);
 log(board.counts.uncovered >= 1 && board.uncovered.length === board.counts.uncovered, 'a running shift with nobody on it is reported');
 
