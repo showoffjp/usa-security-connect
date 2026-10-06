@@ -415,7 +415,9 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   /* ---------------------------------------------------- an officer on duty -- */
 
   // Marcus is mid-shift right now, so the dashboard and officer home have live data.
-  const liveShift = shiftRows.find((s) => s.user === users.marcus && s.status === 'scheduled' && s.start <= new Date() && s.end >= new Date());
+  const now = new Date();
+  const marcusShifts = shiftRows.filter((s) => s.user === users.marcus);
+  const liveShift = marcusShifts.find((s) => s.status === 'scheduled' && s.start <= now && s.end >= now);
 
   // Three hours ago, but not before a quarter past midnight today when that
   // still leaves him an hour on duty - otherwise seeding in the small hours puts
@@ -431,10 +433,31 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const todayStart = midnight.getTime() + 15 * 60000;
   const floor = Date.now() - todayStart >= 3600000 ? todayStart : weekStart.getTime();
   const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, floor));
-  const liveShiftId = liveShift?.id ?? Number(
-    (await insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(new Date(Date.now() + 5 * 3600000)), 'in_progress', users.admin)).lastInsertRowid
-  );
-  if (liveShift) (await db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(liveShift.id));
+
+  // Off his roster right now, he works a shift of his own: from then until five
+  // hours from now, but over before his next rostered shift begins - seeded at
+  // 1 a.m. it would otherwise run into his 6-to-2 and the schedule would show
+  // him booked twice at the same post. Seeded mid-afternoon, the three hours
+  // behind him reach back into that day's 6-to-2, which ended with nobody
+  // clocked in; that is the shift he is on, moved, rather than a second one
+  // laid over it beside a no-show.
+  let liveShiftId = liveShift?.id;
+  if (liveShift) {
+    (await db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(liveShift.id));
+  } else {
+    const nextStart = Math.min(...marcusShifts.filter((s) => s.start > now).map((s) => s.start.getTime()));
+    const liveEnd = new Date(Math.min(now.getTime() + 5 * 3600000, nextStart));
+    const unworked = marcusShifts.find((s) => s.status === 'scheduled' && s.end > liveStart && s.end <= now);
+    if (unworked) {
+      (await db.prepare(`UPDATE shifts SET starts_at = ?, ends_at = ?, status = 'in_progress' WHERE id = ?`)
+        .run(toSql(liveStart), toSql(liveEnd), unworked.id));
+      liveShiftId = unworked.id;
+    } else {
+      liveShiftId = Number(
+        (await insertShift.run(users.marcus, postIds.riverfrontLobby, toSql(liveStart), toSql(liveEnd), 'in_progress', users.admin)).lastInsertRowid
+      );
+    }
+  }
 
   const liveEntryId = Number(
     (await insertEntry.run(
