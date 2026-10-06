@@ -329,8 +329,10 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
 
   // Two shifts nobody ever clocked into. Left as 'scheduled' in the past so the
   // compliance sweep raises real no-show flags regardless of the hour the seed
-  // runs - otherwise the demo board is empty first thing in the morning.
-  shifts.push({ user: users.alicia, post: postIds.coralRetail, start: at(-2, 10), end: at(-2, 18), status: 'scheduled' });
+  // runs - otherwise the demo board is empty first thing in the morning. Both
+  // fall on a day the roster above leaves them off: two days back Alicia already
+  // has this shift, and worked it.
+  shifts.push({ user: users.alicia, post: postIds.coralRetail, start: at(-1, 10), end: at(-1, 18), status: 'scheduled' });
   shifts.push({ user: users.contractor, post: postIds.palmettoGate, start: at(-1, 14), end: at(-1, 22), status: 'scheduled' });
 
   // Inserted one at a time rather than with map(): an async callback passed to
