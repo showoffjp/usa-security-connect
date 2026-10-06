@@ -327,12 +327,12 @@ Invoices built from the hours payroll pays, and what clients think of the servic
     <td width="50%" valign="top"><a href="docs/screenshots/invoice-questions.jpg"><img src="docs/screenshots/invoice-questions.jpg" alt="Client questions about invoices"></a><br><b>Invoice questions</b><br>What clients ask about their invoices, waiting ones first, answered in place and emailed back.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/signoff-board.jpg"><img src="docs/screenshots/signoff-board.jpg" alt="Client sign-off of each property's weekly hours, with a dispute to answer"></a><br><b>Client sign-off</b><br>Every property's last four weeks: signed off by the client, waiting, disputed, or changed since it was signed. A dispute waits in the alerts inbox until an administrator replies.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/feedback.jpg"><img src="docs/screenshots/feedback.jpg" alt="Client feedback"></a><br><b>Client feedback</b><br>Monthly ratings per property, the lowest first, with replies that go back to the client.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/client-notices.jpg"><img src="docs/screenshots/client-notices.jpg" alt="Notices to clients"></a><br><b>Notices to clients</b><br>A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/client-notices.jpg"><img src="docs/screenshots/client-notices.jpg" alt="Notices to clients"></a><br><b>Notices to clients</b><br>A hurricane plan or holiday coverage, to every property or chosen ones, scheduled or now, optionally emailed, with who has read it.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/clients.jpg"><img src="docs/screenshots/clients.jpg" alt="Client portal logins"></a><br><b>Client portal logins</b><br>Contacts, the properties they can see, invitations and resets.</td>
-    <td width="50%"></td>
   </tr>
 </table>
 
@@ -411,6 +411,10 @@ What a client sees for their own property, and nothing else: no pay, no staff re
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/portal-followups.jpg"><img src="docs/screenshots/portal-followups.jpg" alt="What we are doing about it"></a><br><b>What we are doing about it</b><br>On each incident, the follow-ups we share: in hand with a due date, or done. Who owns them and our notes stay with us.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-signoff.jpg"><img src="docs/screenshots/portal-signoff.jpg" alt="A client signing off the week of hours at their property"></a><br><b>Sign off the hours</b><br>Each finished week, post by post: the same clocked hours the invoice is built from, without a rate. Sign it off, or say what looks wrong.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-signoff-query.jpg"><img src="docs/screenshots/portal-signoff-query.jpg" alt="A client querying a week's hours"></a><br><b>Something looks wrong</b><br>A client queries a week with a reason; our reply comes back in the portal and by email, and the week is signed off once it looks right.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/portal-invoices.jpg"><img src="docs/screenshots/portal-invoices.jpg" alt="Invoices"></a><br><b>Invoices</b><br>Their own invoices, never pay rates or margin.</td>
   </tr>
   <tr>
@@ -1598,7 +1602,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 347
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 357
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1629,17 +1633,17 @@ The suites, in the order they run:
     holiday rates show it, a supervisor sees how it is staffed, and it is removed again;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 119
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 121
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 130 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 132 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens
   shipped that way before the check existed.
 - **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
   screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
-  light and night mode (303 screens). On each one it measures the layout for faults a
+  light and night mode (315 screens). On each one it measures the layout for faults a
   phone shows and a desktop hides:
   - text squeezed to a few letters a line;
   - a word wider than its box;

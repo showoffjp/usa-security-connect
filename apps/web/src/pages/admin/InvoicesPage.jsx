@@ -217,10 +217,10 @@ function SignoffTab() {
             <tbody>
               {data.sites.map((site) => (
                 <tr key={site.id}>
-                  <th scope="row">
+                  <td>
                     <div className="strong">{site.name}</div>
                     <div className="tiny muted">{site.contacts ? `${site.contacts} portal contact${site.contacts === 1 ? '' : 's'}` : 'No portal contact'}</div>
-                  </th>
+                  </td>
                   {weekKeys.map((k) => {
                     const w = site.weeks.find((x) => x.week_of === k);
                     if (!w) return <td key={k} className="muted">--</td>;
