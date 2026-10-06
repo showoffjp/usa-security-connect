@@ -385,3 +385,34 @@ export async function notifyCallCleared(call) {
   });
   return 1;
 }
+
+/** Our reply to a client who disputed a week's hours. */
+export async function notifySignoffReply(signoff) {
+  if (!signoff?.client_email || signoff.client_status !== 'active') return 0;
+  const weekOf = new Date(`${String(signoff.week_start).slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+  await send({
+    to: signoff.client_email,
+    name: signoff.client_name,
+    kind: 'signoff_reply',
+    entity: 'site',
+    entityId: signoff.site_id,
+    subject: `The hours for the week of ${weekOf} at ${signoff.site_name}`,
+    body: [
+      `Dear ${signoff.client_name},`,
+      '',
+      `You queried the hours for the week of ${weekOf} at ${signoff.site_name}:`,
+      '',
+      `  ${signoff.note}`,
+      '',
+      'Our reply:',
+      '',
+      `  ${signoff.response}`,
+      '',
+      'The week is in your portal under Coverage, Sign off. Once the hours look right to you, sign them off there.',
+      signOff(),
+    ].join('\n'),
+  });
+  return 1;
+}

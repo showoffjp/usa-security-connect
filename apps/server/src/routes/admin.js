@@ -244,6 +244,7 @@ adminRouter.get(
     const waitingCalls = Number(callRows.find((r) => r.status === 'open')?.n || 0);
     // Officers' requests to fix a punch, waiting on an administrator.
     const pendingCorrections = Number((await db.prepare(`SELECT COUNT(*) AS n FROM time_corrections WHERE status = 'pending'`).get()).n);
+    const signoffDisputes = Number((await db.prepare(`SELECT COUNT(*) AS n FROM hours_signoffs WHERE status = 'disputed' AND response IS NULL`).get()).n);
     // Expense claims waiting for an administrator.
     const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
     const overtimeRisk = (await overtimeWatch()).totals.avoidable;
@@ -297,6 +298,7 @@ adminRouter.get(
         activeCalls,
         waitingCalls,
         pendingCorrections,
+        signoffDisputes,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
         unconfirmedShifts: unconfirmed.length,
@@ -2490,6 +2492,20 @@ async function buildAlerts(userId) {
     push({ key: `invoice-query:${q.id}`, kind: 'invoice_query', severity: 'warning', at: q.created_at, link: '/admin/invoices?tab=questions',
       title: `Invoice question: ${q.number}`,
       detail: `${q.asked_by || 'Client'}, ${q.site_name} - ${q.question.length > 80 ? `${q.question.slice(0, 77)}...` : q.question}` });
+  }
+
+  // A client disputed a week's hours and has not had a reply.
+  for (const d of await db
+    .prepare(
+      `SELECT h.id, h.week_start, h.note, h.decided_at, s.name AS site_name, c.name AS client_name
+       FROM hours_signoffs h JOIN sites s ON s.id = h.site_id LEFT JOIN client_users c ON c.id = h.client_user_id
+       WHERE h.status = 'disputed' AND h.response IS NULL ORDER BY h.decided_at LIMIT 25`
+    )
+    .all()) {
+    const weekOf = String(d.week_start).slice(0, 10);
+    push({ key: `signoff:${d.id}:${sqlToIso(d.decided_at)}`, kind: 'signoff', severity: 'warning', at: d.decided_at, link: '/admin/invoices?tab=signoff',
+      title: `Hours disputed: ${d.site_name}, week of ${weekOf}`,
+      detail: `${d.client_name || 'Client'} - ${d.note && d.note.length > 80 ? `${d.note.slice(0, 77)}...` : d.note || ''}` });
   }
 
   // A supervisor visit that found something wrong at the post.

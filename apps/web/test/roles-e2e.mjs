@@ -1477,6 +1477,63 @@ for (const u of STAFF) {
   await adm.context.close();
 }
 
+/* ------------------------------------- round 27: client sign-off of hours --- */
+{
+  console.log('\n--- Sign-off: the client checks a week of hours, queries it, hears back and signs it off ---');
+  const client = await watchedPage({ width: 1440, height: 900 });
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await client.page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');
+  await client.page.fill('input[type="password"]', 'riverfront-portal-01');
+  await client.page.click('button[type="submit"]');
+  await client.page.waitForTimeout(2000);
+  await client.page.goto(WEB + '/portal', { waitUntil: 'networkidle' });
+  await settle(client.page);
+  const nudge = client.page.locator('a:has-text("Sign off the hours")');
+  log(await nudge.count() === 1, 'the overview says a week of hours is waiting for the client');
+  await nudge.click();
+  await client.page.waitForSelector('h1:has-text("Sign off the hours")', { timeout: 10000 });
+  await settle(client.page);
+  const week = client.page.locator('article.signoff-week', { hasText: 'Waiting for you' }).first();
+  log(await week.count() === 1 && await week.locator('table.data tbody tr').count() >= 1, 'last week is there, post by post');
+  await checkScreen('client: sign off the hours', client.page, client.problems);
+  const title = (await week.locator('h3').innerText()).trim();
+  await week.locator('button:has-text("Something looks wrong")').click();
+  await client.page.waitForSelector('[role="dialog"]');
+  await client.page.getByLabel('What looks wrong?').fill('E2E: the Saturday shift on the lobby console looks two hours too long.');
+  await checkScreen('client: query a week', client.page, client.problems);
+  await client.page.click('[role="dialog"] button:has-text("Send to our office")');
+  await client.page.waitForTimeout(1500);
+  const queried = client.page.locator('article.signoff-week', { hasText: title });
+  log(await queried.locator('text=Disputed').count() === 1 && await queried.locator('text=E2E: the Saturday shift').count() === 1,
+    'the client queries it, and the week reads as disputed');
+
+  const adm = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(adm.page, '1001', '2468');
+  await adm.page.goto(WEB + '/admin/invoices?tab=signoff');
+  await settle(adm.page);
+  const dispute = adm.page.locator('.list-item', { hasText: 'E2E: the Saturday shift' });
+  log(await dispute.count() === 1, 'the office sees the dispute on the sign-off board');
+  await checkScreen('admin: client sign-off', adm.page, adm.problems);
+  await dispute.locator('button:has-text("Reply")').click();
+  await adm.page.waitForSelector('[role="dialog"]');
+  await adm.page.getByLabel('Your reply').fill('E2E: the officer stayed two hours past the end of the shift at your request - the gate was not locked until 8 PM.');
+  await checkScreen('admin: reply to a dispute', adm.page, adm.problems);
+  await adm.page.click('[role="dialog"] button:has-text("Send reply")');
+  await adm.page.waitForTimeout(1500);
+  log(await adm.page.locator('.list-item', { hasText: 'E2E: the Saturday shift' }).locator('text=Replied').count() === 1, 'an administrator replies');
+  await adm.context.close();
+
+  await client.page.reload({ waitUntil: 'networkidle' });
+  await settle(client.page);
+  const answered = client.page.locator('article.signoff-week', { hasText: title });
+  log(await answered.locator('text=E2E: the officer stayed').count() === 1, 'the client reads the reply');
+  await answered.locator('button:has-text("Sign off these hours")').click();
+  await client.page.waitForTimeout(1500);
+  log(await client.page.locator('article.signoff-week', { hasText: title }).locator('text=Signed off').count() >= 1, 'and signs the week off');
+  await checkScreen('client: week signed off', client.page, client.problems);
+  await client.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

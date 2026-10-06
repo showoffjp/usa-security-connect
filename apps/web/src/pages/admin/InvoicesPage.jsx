@@ -55,6 +55,198 @@ function AnswerDialog({ query, onClose, onAnswered }) {
   );
 }
 
+const WEEK_STATE = {
+  approved: ['ok', 'Signed off'],
+  waiting: ['warn', 'Waiting on the client'],
+  changed: ['warn', 'Changed since signed off'],
+  disputed: ['danger', 'Disputed'],
+  not_ready: ['', 'Shift still running'],
+  no_hours: ['', 'No hours'],
+  in_progress: ['', 'Week not over'],
+  no_contact: ['', 'No portal contact'],
+};
+const weekOf = (d) => fmtDate(`${d}T12:00:00`);
+
+/** In the raise dialog: has the client signed off the weeks being billed? */
+function SignoffNote({ signoff }) {
+  const weeks = signoff.weeks.filter((w) => w.status !== 'no_hours');
+  if (!weeks.length) return null;
+  if (signoff.allApproved) {
+    return (
+      <Banner kind="ok" title="Signed off by the client">
+        {weeks.length === 1 ? 'The client has signed off the hours for this week.' : `The client has signed off the hours for all ${weeks.length} weeks.`}
+      </Banner>
+    );
+  }
+  return (
+    <Banner kind="warn" title="Not every week is signed off by the client">
+      <ul className="tight-list">
+        {weeks.map((w) => (
+          <li key={w.week_of}>
+            Week of {weekOf(w.week_of)}: {(WEEK_STATE[w.status] || ['', w.status])[1].toLowerCase()}
+            {w.note ? ` - "${w.note}"` : ''}
+          </li>
+        ))}
+      </ul>
+    </Banner>
+  );
+}
+
+/** Reply to a client who disputed a week's hours. */
+function ReplyDialog({ site, week, onClose, onReplied }) {
+  const toast = useToast();
+  const [response, setResponse] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/admin/signoffs/${week.signoff.id}/reply`, { response });
+      toast.success('Reply sent to the client.');
+      onReplied();
+    } catch (err) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`${site.name}: week of ${weekOf(week.week_of)}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || response.trim().length < 5}>
+            {busy ? 'Sending...' : 'Send reply'}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="small">
+          <strong>{week.signoff.client_name || 'The client'}</strong> disputed {fmtHours(week.hours)}:
+          <p style={{ margin: '4px 0 0' }}>{week.signoff.note}</p>
+        </div>
+        <Field label="Your reply" required hint="The client reads this in the portal and by email. Once the hours look right to them, they sign the week off.">
+          <textarea rows={4} value={response} onChange={(e) => setResponse(e.target.value)} maxLength={2000} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Every property's recent weeks and whether the client has signed off the
+ * hours, with disputes to answer. These are the hours the invoices bill.
+ */
+function SignoffTab() {
+  const { isAdmin } = useAuth();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [replying, setReplying] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get('/admin/signoffs?weeks=4'));
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (error) return <Banner kind="danger">{error}</Banner>;
+  if (!data) return <LoadingPage label="Loading sign-offs" />;
+  const weekKeys = [...new Set(data.sites.flatMap((s) => s.weeks.map((w) => w.week_of)))].sort().reverse();
+  const disputes = data.sites.flatMap((site) => site.weeks.filter((w) => w.status === 'disputed').map((w) => ({ site, week: w })));
+
+  return (
+    <div className="stack">
+      <div className="grid grid-4">
+        <Stat label="Signed off" value={data.counts.approved} foot={`weeks, last ${data.weeks}`} />
+        <Stat label="Waiting on clients" value={data.counts.waiting} foot="weeks not answered yet" />
+        <Stat label="Disputed" value={data.counts.disputed} foot="clients query the hours" alert={data.counts.disputed > 0} />
+        <Stat label="Changed since" value={data.counts.changed} foot="hours corrected after sign-off" alert={data.counts.changed > 0} />
+      </div>
+
+      {disputes.length > 0 && (
+        <section className="card">
+          <div className="card-head"><h3>Disputed hours</h3></div>
+          <ul className="list">
+            {disputes.map(({ site, week }) => (
+              <li key={`${site.id}:${week.week_of}`} className="list-item" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                <div className="grow">
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    <strong>{site.name}</strong>
+                    <span className="small muted">week of {weekOf(week.week_of)} &middot; {fmtHours(week.hours)}</span>
+                    {week.signoff.response ? <Chip kind="ok">Replied</Chip> : <Chip kind="danger">Waiting for our reply</Chip>}
+                  </div>
+                  <div className="small" style={{ marginTop: 4 }}>{week.signoff.note}</div>
+                  <div className="tiny muted">{week.signoff.client_name || 'Client'}, {fmtDateTime(week.signoff.decided_at)}</div>
+                  {week.signoff.response && (
+                    <div className="invoice-answer small">
+                      <strong>Our reply:</strong> {week.signoff.response}
+                      <div className="tiny muted">{week.signoff.responded_by_name}, {fmtDateTime(week.signoff.responded_at)}</div>
+                    </div>
+                  )}
+                </div>
+                {isAdmin && !week.signoff.response && (
+                  <button className="btn btn-sm btn-primary" onClick={() => setReplying({ site, week })}
+                    aria-label={`Reply to ${site.name} about the week of ${weekOf(week.week_of)}`}>
+                    Reply
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="card">
+        <div className="card-head">
+          <h3>Weeks by property</h3>
+          <span className="small muted">The hours each client has signed off, week by week</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th scope="col">Property</th>
+                {weekKeys.map((k) => <th key={k} scope="col">Week of {weekOf(k)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {data.sites.map((site) => (
+                <tr key={site.id}>
+                  <td>
+                    <div className="strong">{site.name}</div>
+                    <div className="tiny muted">{site.contacts ? `${site.contacts} portal contact${site.contacts === 1 ? '' : 's'}` : 'No portal contact'}</div>
+                  </td>
+                  {weekKeys.map((k) => {
+                    const w = site.weeks.find((x) => x.week_of === k);
+                    if (!w) return <td key={k} className="muted">--</td>;
+                    const [kind, label] = WEEK_STATE[w.status] || ['', w.status];
+                    return (
+                      <td key={k}>
+                        <div className="small">{fmtHours(w.hours)}</div>
+                        <Chip kind={kind}>{label}</Chip>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {replying && (
+        <ReplyDialog site={replying.site} week={replying.week} onClose={() => setReplying(null)}
+          onReplied={() => { setReplying(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
 /** Clients' questions, with the answer or a button to give one. */
 function QueryList({ queries, onChanged, showInvoice = false, onOpenInvoice }) {
   const [answering, setAnswering] = useState(null);
@@ -268,6 +460,8 @@ function RaiseDialog({ sites, onClose, onCreated }) {
             {preview.overlapping.map((o) => `${o.number} covers ${o.period_start} to ${o.period_end}`).join('; ')}.
           </Banner>
         )}
+
+        {preview?.signoff && preview.lines?.length > 0 && <SignoffNote signoff={preview.signoff} />}
 
         {preview?.unpriced?.length > 0 && (
           <Banner kind="danger" title="Some hours have no bill rate">
@@ -525,7 +719,7 @@ export default function InvoicesPage() {
   const [raising, setRaising] = useState(false);
   const [open, setOpen] = useState(null);
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'questions' ? 'questions' : 'invoices';
+  const tab = ['questions', 'signoff'].includes(params.get('tab')) ? params.get('tab') : 'invoices';
 
   const load = useCallback(async () => {
     try {
@@ -575,11 +769,14 @@ export default function InvoicesPage() {
           options={[
             { value: 'invoices', label: 'Invoices' },
             { value: 'questions', label: `Client questions${openQueries ? ` (${openQueries})` : ''}` },
+            { value: 'signoff', label: 'Client sign-off' },
           ]}
         />
       </div>
 
-      {tab === 'questions' ? (
+      {tab === 'signoff' ? (
+        <SignoffTab />
+      ) : tab === 'questions' ? (
         <QuestionsTab onOpenInvoice={setOpen} />
       ) : (
       <>
