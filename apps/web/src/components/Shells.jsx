@@ -319,6 +319,7 @@ export function AdminShell() {
         { to: '/admin/holidays', icon: 'calendar', label: 'Holidays', count: counts.holidayGaps, urgent: counts.holidayGaps > 0 },
         { to: '/admin/time-off', icon: 'calendar', label: 'Time off', count: counts.pendingTimeOff },
         { to: '/admin/compliance', icon: 'shield', label: 'Licensing', count: counts.expiringCredentials },
+        { to: '/admin/site-training', icon: 'check', label: 'Site training', count: counts.untrainedRostered, urgent: counts.untrainedRostered > 0 },
       ],
     },
     {

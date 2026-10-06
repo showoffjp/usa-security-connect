@@ -7,6 +7,9 @@ import {
 } from '../../components/ui.jsx';
 import { toHours } from '@shared/domain.js';
 
+/** Site training reasons are long; the candidate list says them in a word. */
+const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here' };
+
 const WEEKDAYS = [
   { value: 1, label: 'Mon' },
   { value: 2, label: 'Tue' },
@@ -255,8 +258,9 @@ function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick
                   <div className="row wrap" style={{ gap: 4, marginTop: 3 }}>
                     {c.eligible ? <Chip kind="ok">Eligible</Chip> : <Chip kind="danger">Blocked</Chip>}
                     {c.reasons.map((r) => (
-                      <Chip key={r.code} kind={r.advisory ? 'warn' : 'danger'}>{r.message}</Chip>
+                      <Chip key={r.code} kind={r.advisory ? 'warn' : 'danger'}>{SHORT_REASON[r.code] || r.message}</Chip>
                     ))}
+                    {c.training === 'trained' && <Chip kind="ok">Trained here</Chip>}
                     {c.times_at_post > 0 && <Chip kind="navy">Worked here {c.times_at_post}x</Chip>}
                     {c.home_site_match && <Chip kind="navy">Home site</Chip>}
                     {c.overtime_hours > 0 && <Chip kind="warn">+{c.overtime_hours}h OT</Chip>}

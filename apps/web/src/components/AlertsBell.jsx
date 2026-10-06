@@ -6,7 +6,7 @@ import { Chip, Empty, Icon, LoadingPage, Modal, Segmented, useToast } from './ui
 
 const SEVERITY = { critical: ['danger', 'Critical'], warning: ['warn', 'Warning'], info: ['', 'Info'] };
 const KIND_ICON = {
-  duress: 'shield', flag: 'flag', watchlist: 'eye', issue: 'building', feedback: 'message', coverage: 'plus', licence: 'book', tour: 'route', orders: 'clipboard', followup: 'check', visit: 'shield', visit_due: 'pin', invoice_query: 'dollar', applicant: 'user', call: 'phone', correction: 'clock', agreement: 'clipboard', confirm: 'calendar', vehicle: 'car', expense: 'dollar', commendation: 'check', overtime: 'clock', holiday: 'calendar', signoff: 'check',
+  duress: 'shield', flag: 'flag', watchlist: 'eye', issue: 'building', feedback: 'message', coverage: 'plus', licence: 'book', tour: 'route', orders: 'clipboard', followup: 'check', visit: 'shield', visit_due: 'pin', invoice_query: 'dollar', applicant: 'user', call: 'phone', correction: 'clock', agreement: 'clipboard', confirm: 'calendar', vehicle: 'car', expense: 'dollar', commendation: 'check', overtime: 'clock', holiday: 'calendar', signoff: 'check', training: 'shield',
 };
 
 /**

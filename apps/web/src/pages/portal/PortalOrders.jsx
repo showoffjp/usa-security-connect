@@ -73,6 +73,14 @@ function PostOrders({ post, onChange }) {
           </button>
         )}
       </div>
+      {post.training && (
+        <div className="small" style={{ marginTop: 6 }}>
+          <Chip kind="info">Site training</Chip>{' '}
+          Only officers trained at this post work it alone: {post.training.trained} {post.training.trained === 1 ? 'is' : 'are'} trained now.
+          {post.training.training_shifts > 0 &&
+            ` ${post.training.training_shifts} shift${post.training.training_shifts === 1 ? '' : 's'} in the coming week ${post.training.training_shifts === 1 ? 'is a training shift' : 'are training shifts'} for an officer learning the post.`}
+        </div>
+      )}
       {post.order?.change_note && post.order.version > 1 && (
         <div className="small" style={{ marginTop: 6 }}>
           <strong>Latest change:</strong> {post.order.change_note}

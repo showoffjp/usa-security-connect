@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
 import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { ROLES, atLeast, shiftEligibility, blocksAssignment, SHIFT_REQUEST_LABEL } from '../shared.js';
+import { ROLES, atLeast, shiftEligibility, blocksAssignment, blocksSelfService, SHIFT_REQUEST_LABEL } from '../shared.js';
+import { trainingStateFor } from '../services/training.js';
 import { pushAsync, supervisorIds } from '../services/push.js';
 
 export const shiftRequestsRouter = Router();
@@ -51,8 +52,16 @@ export async function checkEligibility(userId, shift) {
     .prepare(`SELECT * FROM availability WHERE user_id = ? AND weekday = ?`)
     .get(userId, weekday);
 
-  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability });
+  const training = post?.training_required ? await trainingStateFor(userId, post.id) : null;
+
+  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability, training });
 }
+
+/** The first reason an officer cannot take a shift themselves, worded for them. */
+const selfServiceRefusal = (reasons) => {
+  const r = reasons.find((x) => !x.advisory) || reasons.find((x) => x.supervisorOnly);
+  return r.officerMessage || r.message;
+};
 
 /** Exposed so the scheduling screen can warn before an assignment is made. */
 shiftRequestsRouter.get(
@@ -101,7 +110,7 @@ shiftRequestsRouter.get(
       withEligibility.push({
         ...isoFields(shift, SHIFT_TIMES),
         eligibility: reasons,
-        canClaim: !blocksAssignment(reasons) && !shift.already_requested,
+        canClaim: !blocksSelfService(reasons) && !shift.already_requested,
       });
     }
 
@@ -122,8 +131,8 @@ shiftRequestsRouter.post(
     if (new Date(shift.starts_at) < new Date()) throw new HttpError(409, 'That shift has already started.');
 
     const reasons = await checkEligibility(req.user.id, shift);
-    if (blocksAssignment(reasons)) {
-      throw new HttpError(409, reasons.find((r) => !r.advisory).message, { reasons });
+    if (blocksSelfService(reasons)) {
+      throw new HttpError(409, selfServiceRefusal(reasons), { reasons });
     }
 
     const existing = await db
@@ -177,8 +186,9 @@ shiftRequestsRouter.post(
 
     // The other officer has to be able to work it, or the swap is pointless.
     const reasons = await checkEligibility(body.targetUserId, shift);
-    if (blocksAssignment(reasons)) {
-      throw new HttpError(409, `They cannot take this shift: ${reasons.find((r) => !r.advisory).message}`, { reasons });
+    if (blocksSelfService(reasons)) {
+      const r = reasons.find((x) => !x.advisory) || reasons.find((x) => x.supervisorOnly);
+      throw new HttpError(409, `They cannot take this shift: ${r.code === 'not_trained' || r.code === 'training_lapsed' ? 'they are not trained at this post.' : r.message}`, { reasons });
     }
 
     if (body.offeredShiftId) {
@@ -188,8 +198,8 @@ shiftRequestsRouter.post(
       }
       // A straight swap only works if you can work theirs too.
       const mine = await checkEligibility(req.user.id, offered);
-      if (blocksAssignment(mine)) {
-        throw new HttpError(409, `You cannot take their shift: ${mine.find((r) => !r.advisory).message}`, { reasons: mine });
+      if (blocksSelfService(mine)) {
+        throw new HttpError(409, `You cannot take their shift: ${selfServiceRefusal(mine)}`, { reasons: mine });
       }
     }
 

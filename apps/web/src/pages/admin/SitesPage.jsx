@@ -103,6 +103,7 @@ function PostDialog({ post, sites, onClose, onSaved }) {
     checkInIntervalMin: post?.check_in_interval_min ?? RULES.defaultCheckInIntervalMinutes,
     requiresGps: post ? Boolean(post.requires_gps) : true,
     armed: post ? Boolean(post.armed) : false,
+    trainingRequired: post ? Boolean(post.training_required) : false,
     active: post ? Boolean(post.active) : true,
   });
 
@@ -124,6 +125,7 @@ function PostDialog({ post, sites, onClose, onSaved }) {
         checkInIntervalMin: Number(form.checkInIntervalMin),
         requiresGps: form.requiresGps,
         armed: form.armed,
+        trainingRequired: form.trainingRequired,
         active: form.active,
       };
       if (editing) await api.patch(`/admin/posts/${post.id}`, payload);
@@ -226,6 +228,15 @@ function PostDialog({ post, sites, onClose, onSaved }) {
             <label className="check">
               <input type="checkbox" checked={form.armed} onChange={set('armed')} />
               <span>Armed post (Class G licence required)</span>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={form.trainingRequired} onChange={set('trainingRequired')} />
+              <span>
+                Needs site training
+                <div className="tiny muted">
+                  Only officers a supervisor has signed off here can claim or swap into its shifts. Manage it under Site training.
+                </div>
+              </span>
             </label>
             <label className="check">
               <input type="checkbox" checked={form.active} onChange={set('active')} />
@@ -350,6 +361,7 @@ export default function SitesPage() {
                             <td>
                               <div className="row wrap" style={{ gap: 4 }}>
                                 {Boolean(p.armed) && <Chip kind="danger">Armed</Chip>}
+                                {Boolean(p.training_required) && <Chip kind="info">Site training</Chip>}
                                 {Boolean(p.requires_gps) && <Chip kind="info">GPS</Chip>}
                                 {!p.active && <Chip kind="warn">Inactive</Chip>}
                               </div>

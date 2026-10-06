@@ -27,7 +27,8 @@ import {
   readPasswordToken,
   consumePasswordToken,
 } from '../lib/clientAuth.js';
-import { toHours, daysOverdue, CALL_TYPES } from '../shared.js';
+import { toHours, daysOverdue, CALL_TYPES, trainingState } from '../shared.js';
+import { untrainedOnRoster, TRAINING_ALERT_DAYS } from '../services/training.js';
 import { callSelect, loadCall, logEvent, presentCallForClient, pushToSupervisors, OPEN_SQL } from '../services/dispatch.js';
 import { pushAsync } from '../services/push.js';
 import { agreementBoard, deliveredByWeek } from '../services/agreements.js';
@@ -1567,9 +1568,27 @@ async function clientPostOrders(req) {
     const site = await db.prepare(`SELECT id, name FROM sites WHERE id = ?`).get(siteId);
     if (!site) continue;
     const posts = await db
-      .prepare(`SELECT id, name, post_code FROM posts WHERE site_id = ? AND active = 1 ORDER BY name`)
+      .prepare(`SELECT id, name, post_code, training_required FROM posts WHERE site_id = ? AND active = 1 ORDER BY name`)
       .all(siteId);
+    const trainingShifts = await untrainedOnRoster(TRAINING_ALERT_DAYS);
     for (const post of posts) {
+      // Whether the post needs site training, and how many of our officers
+      // are cleared to work it alone - a count, never who is not.
+      if (post.training_required) {
+        const quals = await db
+          .prepare(
+            `SELECT q.*, (SELECT MAX(te.clock_in_at) FROM time_entries te WHERE te.post_id = q.post_id AND te.user_id = q.user_id AND te.clock_out_at IS NOT NULL) AS last_worked_at
+             FROM post_qualifications q JOIN users u ON u.id = q.user_id WHERE q.post_id = ? AND u.status = 'active'`
+          )
+          .all(post.id);
+        post.training = {
+          trained: quals.filter((q) => trainingState(q, q.last_worked_at) === 'trained').length,
+          training_shifts: trainingShifts.filter((t) => t.post_id === post.id).length,
+        };
+      } else {
+        post.training = null;
+      }
+      delete post.training_required;
       const order = await currentOrders(post.id);
       post.order = order?.body.trim()
         ? { version: order.version, body: order.body, change_note: order.change_note, ...isoFields({ created_at: order.created_at }, ['created_at']) }

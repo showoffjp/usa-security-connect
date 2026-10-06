@@ -85,6 +85,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 6. Answer the waiting request under **Client requests**.
 7. Under **Post logs → Post orders**, apply Dana Whitfield's requested change as a new version.
 8. Reply to the two-star rating under **Client feedback**.
+9. Under **Site training**, sign Darnell Hughes off at the armed garage post he has been working.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -230,6 +231,10 @@ Build rosters, answer requests, keep licences current.
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/compliance.jpg"><img src="docs/screenshots/compliance.jpg" alt="Licensing"></a><br><b>Licensing</b><br>Class D and G licences and certificates, sorted by what expires first.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/site-training.jpg"><img src="docs/screenshots/site-training.jpg" alt="Site training: who is signed off to work each post that needs it"></a><br><b>Site training</b><br>Each post that needs it: who is trained, who has worked it and is waiting to be signed off, and who is on the roster there without training. Officers cannot claim or swap into those shifts.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/site-training-signoff.jpg"><img src="docs/screenshots/site-training-signoff.jpg" alt="A supervisor signing an officer off at an armed post"></a><br><b>Sign an officer off</b><br>After a shadow shift, a walkthrough or past experience at the post. The officer's roster flags clear, and training lapses after 180 days away.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
   </tr>
   <tr>
@@ -244,7 +249,7 @@ On the phone:
   <tr>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-punches.jpg"><img src="docs/screenshots/officer-punches.jpg" alt="An officer's recent punches with a correction waiting"></a><br><b>Fix a time</b><br>An officer's punches from the last two weeks. A wrong one goes to the office with the right time and what happened; the answer shows here.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-licence.jpg"><img src="docs/screenshots/officer-licence.jpg" alt="Licence renewal reminder"></a><br><b>Licence reminders</b><br>A licence or certificate lapsing within 30 days shows on the home screen.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-site-training.jpg"><img src="docs/screenshots/officer-site-training.jpg" alt="The posts an officer is cleared to work, on their profile"></a><br><b>Cleared for a post</b><br>Each post the officer is signed off at, by whom and how, and any training shift coming up.</td>
     <td width="25%"></td>
   </tr>
 </table>
@@ -423,11 +428,11 @@ What a client sees for their own property, and nothing else: no pay, no staff re
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/portal-orders.jpg"><img src="docs/screenshots/portal-orders.jpg" alt="Post orders in the client portal"></a><br><b>Post orders</b><br>The orders our officers work to at each post, and a way to ask for a change.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/portal-monthly.jpg"><img src="docs/screenshots/portal-monthly.jpg" alt="Monthly service report"></a><br><b>Monthly report</b><br>One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-orders-training.jpg"><img src="docs/screenshots/portal-orders-training.jpg" alt="Post orders in the client portal, with the post's site training"></a><br><b>Trained officers only</b><br>A post that needs site training says how many of our officers are trained there, and when a shift that week is a training shift.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/portal-monthly.jpg"><img src="docs/screenshots/portal-monthly.jpg" alt="Monthly service report"></a><br><b>Monthly report</b><br>One property's month on a page: coverage by post, patrols, incidents, visitors and issues. Ready to print.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/portal-emails.jpg"><img src="docs/screenshots/portal-emails.jpg" alt="Email settings in the client portal"></a><br><b>Email me</b><br>Serious incident alerts as they happen, and a daily report each morning, if they want it.</td>
-    <td width="50%"></td>
   </tr>
 </table>
 
@@ -616,6 +621,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Licence reminders** — the home screen (web and mobile) warns when the officer's
   licence or any certification lapses within 30 days, or already has, listing each
   with its date.
+- **Site training** — the profile (web) and Schedule tab (phone) list the posts the
+  officer is cleared to work alone, who signed them off and how, any that need a
+  refresher or were withdrawn (with the reason), and any **training shift** coming up.
+  An open shift at a post they are not trained at says so and cannot be claimed.
 - **Before you go** — sliding to clock out (web and mobile) first shows what the shift
   did: time on post, check-ins answered and missed, patrols and checkpoints, visitors
   in and out, activity entries and incident reports. If the officer has not left a
@@ -877,14 +886,17 @@ and a supervisor can only read is noted where it matters.
   Picking someone who should not take it shows why before you save, and the API
   refuses the assignment unless the supervisor overrides it with a written reason,
   which goes on the audit log. Recurring rosters skip days the officer cannot work,
-  and copying a week leaves those shifts open.
+  and copying a week leaves those shifts open. At a post that needs site training,
+  officers trained there are marked **Trained here** and come first; anyone else is
+  marked **Not trained here** and can still be rostered, as a training shift.
 - **Officers are told** — adding, moving, reassigning or removing an upcoming shift
   sends the officer a push notification, and a recurring roster or copied week sends
   one summary instead of dozens.
 - **Shift requests** — open shifts officers can claim, swaps they can offer each other,
   and drop requests, all landing in one supervisor queue. Eligibility is checked at
   every step, so an officer without a current Class G licence cannot end up on an armed
-  post; approving a claim automatically declines the officers who lost out.
+  post, nor one who is not trained at a post that needs it; approving a claim
+  automatically declines the officers who lost out.
 - **Client requests** — extra coverage clients have asked for from the portal. A
   supervisor schedules a request (which puts that many open shifts on one of the site's
   posts, armed posts only for an armed request) or declines it with a reason the
@@ -926,6 +938,22 @@ and a supervisor can only read is noted where it matters.
 - **Licensing & certifications** — one board for state licences, certifications and
   contractor insurance, showing what has expired and what lapses in the next 30/60/90
   days.
+- **Site training** (Workforce → Site training) — the posts an administrator has marked
+  **Needs site training** under Sites & posts (the armed posts, a hospital's emergency
+  entrance, a lab's access desk). Only an officer a supervisor has signed off at the
+  post can claim or swap into its shifts. For each post:
+  - who is trained, how (a shadow shift with a trained officer, a walkthrough, or
+    past experience), when and by whom, with **Withdraw** and a reason for their record;
+  - who has worked it in the last 30 days without being signed off, ready to **Sign off**;
+  - who needs signing off again: training lapses after 180 days without working the
+    post, and withdrawn training can be given back;
+  - who is on the roster there in the next two weeks without training. Those in the
+    coming week are in the alerts inbox and on the sidebar count until they are signed
+    off or the shift goes to someone trained.
+
+  A post with fewer than two trained officers is called out. Nobody signs off their own
+  training, the officer gets a push notification either way, and every sign-off and
+  withdrawal is audited. The officer's record shows the same list.
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
   ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
   25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
@@ -1141,7 +1169,9 @@ a PIN — and sees, for their own properties only:
   version in force and when it took effect (not which of our staff wrote it). A client
   can **ask for a change**, up to three waiting per post; a supervisor applies it as a
   new version or declines it with a reason, and the client sees the answer in the
-  portal and by email. A request nobody has answered can be withdrawn.
+  portal and by email. A request nobody has answered can be withdrawn. A post that
+  needs site training says so, how many of our officers are trained there, and how
+  many shifts that week are training shifts - never who is not trained.
 - **Monthly service report** (Report → Monthly report) — one property's month on a page:
   shifts covered and hours on site, per post; patrols and the share of checkpoints
   scanned; every incident by severity; visitors, parking violations, activity entries,
@@ -1366,7 +1396,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 35 steps and stops it:
+One command reseeds the database, starts the API, runs all 36 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1590,6 +1620,23 @@ The suites, in the order they run:
     by email; the alert then goes, and once signed off there is nothing to reply to.
   - Capital Plaza's week, seeded as signed off before a punch was corrected, reads as
     changed with both figures, and is signed again at the hours as they stand.
+- **`test/site-training.mjs`** — the board lists the five posts that need site
+  training: who is trained and by whom, the garage officer waiting to be signed off and
+  flagged on the roster, the ED training shift, the lab officer due a refresher, and the
+  warehouse officer whose training was withdrawn, with the reason. Officers cannot see
+  it.
+  - Marcus cannot claim an open shift at the ED, and is told to ask for a training
+    shift; a post that needs no training is still open to him.
+  - A supervisor can roster him there anyway: he is offered with a warning, after the
+    officers trained there, and the shift lands in the alerts inbox, on the sidebar
+    count and on his profile as a training shift.
+  - Signing off needs a note for a shadow shift, is never done by oneself or by an
+    officer, and happens once. It clears the alert and opens the post's shifts to him.
+    The waiting, lapsed and withdrawn officers are signed off too.
+  - Withdrawing needs a reason, happens once, lists his shifts there it affects, shuts
+    the post to him again and shows him why.
+  - Only an administrator turns a post's training requirement off and on, and one
+    post's page lists everyone, those who know it best first. All of it is audited.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1602,7 +1649,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 357
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 373
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1631,19 +1678,25 @@ The suites, in the order they run:
     officer over;
   - an administrator adds a holiday that bills double; the schedule and the client's
     holiday rates show it, a supervisor sees how it is staffed, and it is removed again;
+  - a client queries a week of hours from the portal, an administrator replies, and
+    the client signs the week off;
+  - a supervisor signs an officer off at the armed garage post he has been working,
+    which clears his roster flags, then withdraws and restores another officer's
+    training at the lab desk; the client sees how many officers are trained at the
+    emergency entrance;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 121
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 122
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 132 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 133 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens
   shipped that way before the check existed.
 - **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
   screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
-  light and night mode (315 screens). On each one it measures the layout for faults a
+  light and night mode (324 screens). On each one it measures the layout for faults a
   phone shows and a desktop hides:
   - text squeezed to a few letters a line;
   - a word wider than its box;
