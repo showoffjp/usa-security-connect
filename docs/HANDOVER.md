@@ -191,7 +191,9 @@ Honest list. None of it blocks going live, but you will want to know.
   and iOS in CI, which catches import and syntax errors across every screen,
   but no `eas build` has produced a binary. NFC and push both need a
   development build — they degrade gracefully in Expo Go, which is what CI
-  exercises. See `apps/mobile/BUILDING.md`.
+  exercises. It is on Expo SDK 57 (React Native 0.86, New Architecture only); the NFC
+  library is not yet listed as tested on the New Architecture, so scan a real tag on
+  the first development build. See `apps/mobile/BUILDING.md`.
 - **Email is built but not switched on.** `services/email.js` composes and
   records every message; delivery needs `USC_EMAIL_API_KEY` (Resend) and
   `USC_EMAIL_FROM` with a verified sending domain. Until then everything lands
