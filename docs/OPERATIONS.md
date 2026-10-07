@@ -126,6 +126,35 @@ Working straight on into another shift is not short rest; it counts towards the
 hours in a day. The board lists each problem once, on the shift that tips it, and
 the alerts inbox raises those starting in the next 24 hours.
 
+## Late and no-shows
+
+A shift that has started is checked against its officer's clock-ins on every
+compliance sweep, and on every visit to the board:
+
+| Stage | When | Sent to whoever asked for |
+|-------|------|---------------------------|
+| Late | No clock-in `lateGraceMinutes` (7) after the start | Late starts |
+| No-show | None `noShowMinutes` (30) after the start | No-shows |
+| Arrived late | The officer clocks in after either | Updates, if told of the problem |
+| Covered | The shift is given to another officer | Updates, if told of the problem |
+
+Each stage is recorded once per shift and officer. Only the latest new stage is
+sent, and one first seen more than 20 minutes after it happened is recorded, not
+sent, so an outage does not end in a burst of stale texts. The officer covering a
+shift is not counted late from its original start.
+
+Who hears what is each supervisor's and administrator's own setting, under
+**Text alerts** on the board. With nothing saved: no-shows and their updates, by
+app notification, no texts. Texts need a mobile number confirmed with a six-digit
+code (ten minutes, five tries, three codes an hour). Without Twilio configured,
+texts are recorded as not sent and the code is shown on screen. The outbox keeps
+every text, never a code, and lists numbers by their last four digits.
+
+**Texts are only as prompt as the sweep.** A long-running server sweeps every
+minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
+point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set
+`* * * * *`; see DEPLOYMENT.md. Opening the dashboard or the board also sweeps.
+
 ## Pay rates
 
 Rates live on the employee record, where timesheets, invoices and reports read them.

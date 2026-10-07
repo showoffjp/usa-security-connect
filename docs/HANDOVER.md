@@ -201,6 +201,12 @@ Honest list. None of it blocks going live, but you will want to know.
   two moments send anything today: an invoice being issued, and a portal
   account being created or reset. Broadcasts and flag alerts are still
   in-app only.
+- **Late and no-show texts are built but not switched on.** `services/sms.js` sends
+  through Twilio once `USC_SMS_TWILIO_SID`, `USC_SMS_TWILIO_TOKEN` and `USC_SMS_FROM`
+  are set; until then texts are recorded as not sent and a phone's confirmation code is
+  shown on screen. They go out from the compliance sweep, which on Vercel's Hobby plan
+  runs once a day: an external scheduler calling `/api/cron/sweep` every minute is
+  needed for texts to be timely (see DEPLOYMENT.md).
 - **Nothing is emailed automatically until a provider is configured.** Portal
   invitations and invoice notices land in the outbox as 'skipped' and an admin
   sends them by hand from there.

@@ -96,6 +96,7 @@ const STAFF_PAGES = [
   ['Coaching & discipline', '/admin/conduct'],
   ['Handovers', '/admin/handovers'],
   ['Rest & fatigue', '/admin/fatigue'],
+  ['Late & no-shows', '/admin/attendance'],
   ['Holidays', '/admin/holidays'],
   ['Report: patrol vehicle mileage', '/admin/reports?report=vehicle-mileage'],
 ];
@@ -245,6 +246,13 @@ await page.keyboard.press('Control+k');
 await page.fill('[role="combobox"]', 'bell');
 await page.waitForTimeout(800);
 await audit(page, 'Quick search, with results', null);
+await page.keyboard.press('Escape');
+
+// Late and no-show alerts: what to be told of, and the confirmed number for texts.
+await page.goto(`${WEB}/admin/attendance`, { waitUntil: 'networkidle' });
+await page.click('button:has-text("Text alerts")');
+await page.waitForSelector('[role="dialog"]:has-text("Text messages")');
+await audit(page, 'Late & no-shows: text alerts', null);
 await page.keyboard.press('Escape');
 
 // An applicant, with the pre-hire checklist and notes.

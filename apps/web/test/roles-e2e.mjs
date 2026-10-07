@@ -1745,6 +1745,74 @@ for (const u of STAFF) {
   }
 }
 
+/* ------------------------------------------- round 32: late and no-shows --- */
+{
+  console.log('\n--- Late & no-shows: a supervisor confirms a phone for texts, and the board updates itself ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const login = async (code, pin) => (await api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: code, pin }) })).token;
+  const adminToken = await login('1001', '2468');
+  const board = await api('/attendance', adminToken);
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/attendance');
+  await sup.page.waitForSelector('h1:has-text("Late & no-shows")', { timeout: 10000 });
+  await settle(sup.page);
+  const rows = await sup.page.locator('#attendance-now ~ * li.handover, section[aria-labelledby="attendance-now"] li.handover').count();
+  log(rows === board.open.length, 'the board lists every shift started without its officer', `${rows}`);
+  const noShow = board.open.find((o) => o.state === 'no_show');
+  if (noShow) {
+    const row = sup.page.locator(`#attendance-${noShow.shift_id}`);
+    log(await row.locator('.chip:has-text("No-show")').count() === 1 && await row.locator('a:has-text("Find cover")').count() === 1,
+      `${noShow.officer} is a no-show, with a button to find cover`);
+  }
+  await checkScreen('supervisor: late and no-shows', sup.page, sup.problems);
+
+  // A number, a code back, and texts are on.
+  await sup.page.click('button:has-text("Text alerts")');
+  await sup.page.fill('input[type="tel"]', '904 555 0177');
+  await sup.page.click('button:has-text("Text me a code")');
+  const banner = sup.page.locator('[role="dialog"]').getByText(/Your code is \d{6}/);
+  await banner.waitFor({ timeout: 10000 });
+  const code = (await banner.textContent()).match(/\d{6}/)[0];
+  log(Boolean(code), 'with no text provider, the code is shown on screen');
+  await sup.page.fill('input[autocomplete="one-time-code"]', code);
+  await sup.page.click('button:has-text("Confirm number")');
+  await sup.page.waitForSelector('[role="dialog"] :text("Confirmed")', { timeout: 10000 });
+  log(await sup.page.locator('[role="dialog"] input[type="checkbox"]').first().isChecked(), 'the number is confirmed, and texts turn on');
+  await checkScreen('supervisor: text alert settings', sup.page, sup.problems);
+  await sup.page.locator('[role="dialog"] label:has-text("Officers running late") input').check();
+  await sup.page.click('[role="dialog"] button:text-is("Save")');
+  await sup.page.waitForSelector('[role="dialog"]', { state: 'detached', timeout: 10000 });
+  log(await sup.page.locator('section[aria-labelledby="alerts-me"]:has-text("Texts to (904) 555-0177")').count() === 1, 'and the page says where the texts go');
+
+  // Somebody due ten minutes ago, not clocked in: the open board picks it up
+  // on its own, and both texts are in the outbox.
+  const start = new Date(Math.floor((Date.now() - 10 * 60000) / 60000) * 60000);
+  const end = new Date(start.getTime() + 4 * 3600000);
+  const posts = (await api('/reference', adminToken)).posts;
+  let made = null;
+  for (const p of posts.slice(0, 40)) {
+    const c = await api(`/admin/shifts/candidates?postId=${p.id}&startsAt=${encodeURIComponent(start.toISOString())}&endsAt=${encodeURIComponent(end.toISOString())}`, adminToken);
+    const who = (c.candidates || []).find((x) => x.eligible && !x.reasons.length && x.role === 'officer' && !/^100[1-8]$/.test(x.employee_code));
+    if (!who) continue;
+    const r = await api('/admin/shifts', adminToken, { method: 'POST', body: JSON.stringify({ postId: p.id, userId: who.user_id, startsAt: start.toISOString(), endsAt: end.toISOString(), notes: 'Browser suite: late start.' }) });
+    if (r.shift) { made = { id: r.shift.id, name: who.name }; break; }
+  }
+  log(Boolean(made), 'an officer is put on a shift that started ten minutes ago', made?.name);
+  if (made) {
+    const row = sup.page.locator(`#attendance-${made.id}`);
+    await row.waitFor({ timeout: 30000 });
+    log(await row.locator('.chip:has-text("Late")').count() === 1, `${made.name} appears as late without reloading the page`);
+    log(await sup.page.locator(`.toast:has-text("${made.name}")`).count() >= 1, 'with a pop-up saying so');
+    const texts = sup.page.locator('section[aria-labelledby="attendance-texts"] li', { hasText: `USC late: ${made.name}` });
+    log(await texts.count() === 2, 'and a text each to Vince and the supervisor', `${await texts.count()}`);
+    await api(`/admin/shifts/${made.id}`, adminToken, { method: 'DELETE' });
+  }
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

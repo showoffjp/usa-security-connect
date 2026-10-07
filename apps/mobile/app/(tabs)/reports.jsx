@@ -60,7 +60,10 @@ export default function ReportsScreen() {
         <Button title="Report an incident" variant="primary" onPress={() => router.push('/incident-new')} />
 
         {isSupervisor && (
-          <Button title="Log a supervisor visit" variant="navy" onPress={() => router.push('/supervisor-visit')} />
+          <>
+            <Button title="Log a supervisor visit" variant="navy" onPress={() => router.push('/supervisor-visit')} />
+            <Button title="Late & no-shows" variant="ghost" onPress={() => router.push('/late')} />
+          </>
         )}
 
         <Card>

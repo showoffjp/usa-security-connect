@@ -35,6 +35,7 @@ import { seedTraining } from './seed-training.js';
 import { seedConduct } from './seed-conduct.js';
 import { seedHandovers } from './seed-handovers.js';
 import { seedFatigue } from './seed-fatigue.js';
+import { seedAttendance } from './seed-attendance.js';
 import { seedHolidays } from './seed-holidays.js';
 
 /**
@@ -1279,6 +1280,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const handoverSeed = await seedHandovers({ db });
   // A short rest and a seventh day in a row on the week ahead.
   const fatigueSeed = await seedFatigue({ db });
+  // Last: it reads every clock-in the seeds above made.
+  const attendanceSeed = await seedAttendance({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1293,7 +1296,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}${fatigueSeed.shortRest ? `, ${fatigueSeed.shortRest} short of rest` : ''}${fatigueSeed.sevenDays ? `, ${fatigueSeed.sevenDays} on seven days in a row` : ''}
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}${fatigueSeed.shortRest ? `, ${fatigueSeed.shortRest} short of rest` : ''}${fatigueSeed.sevenDays ? `, ${fatigueSeed.sevenDays} on seven days in a row` : ''}, ${attendanceSeed.events} late and no-show updates (${attendanceSeed.texts} texts to Vince${attendanceSeed.covered ? `; ${attendanceSeed.covered} covered` : ''})
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

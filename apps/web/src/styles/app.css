@@ -1164,3 +1164,8 @@ select { min-width: 0; }
   .handover-pair > svg { display: none; }
   .handover-actions { justify-content: flex-start !important; }
 }
+
+/* Late and no-shows: an update that arrived since the last refresh. */
+.list-item.is-new { animation: arrive 4s ease-out; }
+@keyframes arrive { from { background: var(--warn-bg); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .list-item.is-new { animation: none; box-shadow: inset 3px 0 0 var(--warn); } }

@@ -97,6 +97,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
+13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -121,7 +122,7 @@ Where everyone is right now, against where they are scheduled to be. *Admin and 
 <table>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/dashboard.jpg"><img src="docs/screenshots/dashboard.jpg" alt="Admin dashboard"></a><br><b>Dashboard</b><br>On post now, open flags and incidents, unfilled shifts, late or off-post officers, and what is waiting on you.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/alerts.jpg"><img src="docs/screenshots/alerts.jpg" alt="Alerts inbox"></a><br><b>Alerts inbox</b><br>A bell with the unread count: duress, no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/alerts.jpg"><img src="docs/screenshots/alerts.jpg" alt="Alerts inbox"></a><br><b>Alerts inbox</b><br>A bell with the unread count: duress, late starts and no-shows, missed check-ins, watchlist overrides, urgent issues, unhappy clients, skipped patrol checkpoints, client requests and lapsing licences, each one a click from where it is handled.</td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/live.jpg"><img src="docs/screenshots/live.jpg" alt="Live tracking map"></a><br><b>Live tracking</b><br>Every officer on duty on a map of Florida: off post, late, on break, GPS gone quiet, and posts with nobody assigned.</td>
@@ -146,6 +147,10 @@ Where everyone is right now, against where they are scheduled to be. *Admin and 
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/handovers.jpg"><img src="docs/screenshots/handovers.jpg" alt="Handovers: every post changing hands soon, and where each relief stands"></a><br><b>Handovers</b><br>Every officer whose shift ends in the next two hours and the officer due to relieve them: on post, confirmed, not confirmed, late, or nobody assigned. Officers held over come first.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/handover-chase.jpg"><img src="docs/screenshots/handover-chase.jpg" alt="Chasing a late relief"></a><br><b>Chase the relief</b><br>A push to the late relief and one asking the officer on post to stay; or straight to the schedule to find cover when nobody is assigned.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/attendance.jpg"><img src="docs/screenshots/attendance.jpg" alt="Late and no-shows: shifts started without their officer, updating live"></a><br><b>Late &amp; no-shows</b><br>Every shift that has started without its officer clocked in: late after 7 minutes, a no-show after 30, then whether they turned up or someone covered. The page updates itself, with a pop-up for each new one.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/attendance-texts.jpg"><img src="docs/screenshots/attendance-texts.jpg" alt="Text alert settings: a confirmed mobile number and what to be told of"></a><br><b>Text alerts</b><br>Each supervisor and administrator picks what they hear of, by text and app notification. Texts go only to a number confirmed with a code, and every one is kept in the outbox.</td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/incidents.jpg"><img src="docs/screenshots/incidents.jpg" alt="Incident reports"></a><br><b>Incidents</b><br>Reports from the field with photos, severity, police numbers and review status.</td>
@@ -795,8 +800,9 @@ and a supervisor can only read is noted where it matters.
   post or has not clocked in for a shift that has started.
 - **Alerts inbox** — the bell in the header, with the unread count, lists everything
   waiting on a supervisor, most serious first:
-  - **On post:** open duress alerts; no-shows, missed check-ins, walk-offs and other
-    open flags from the last three days; watchlist overrides; patrols finished with
+  - **On post:** open duress alerts; officers not clocked in past the 7-minute grace;
+    no-shows (opening on **Late & no-shows** for the last twelve hours), missed
+    check-ins, walk-offs and other open flags from the last three days; watchlist overrides; patrols finished with
     required checkpoints skipped, or never finished; calls for service nobody has been
     sent to, or not acknowledged within three minutes; shifts starting within 12 hours
     that nobody has confirmed; officers held over because their relief is late, and
@@ -832,6 +838,32 @@ and a supervisor can only read is noted where it matters.
   - A late relief and an uncovered post are in the alerts inbox as critical, and the
     sidebar counts every handover at risk, an unconfirmed relief inside the hour
     included. The board refreshes every minute.
+- **Late & no-shows** (Operations → Late & no-shows) — every shift that has started in the
+  last twelve hours without its officer clocked in, as it happens: **late** once the
+  7-minute grace has passed, a **no-show** at 30 minutes, then **arrived late** when they
+  clock in after all, or **covered** when the shift is given to someone else (whose
+  lateness is not counted from the original start).
+  - Each stage is recorded once and sent to every supervisor and administrator who asked
+    for it: a **text** to their phone, an **app notification**, or both. Each person
+    chooses late starts, no-shows and updates on those; with nothing saved they get
+    no-shows and their updates in the app, no texts. The demo has Vince Ortega texted for
+    all three.
+  - A phone number receives texts only once its owner types back the six-digit code sent
+    to it, so nobody can sign a stranger up. Codes expire in ten minutes, allow five
+    tries, and at most three are sent an hour. **Send a test text** checks the number.
+  - Only the latest new stage is sent, so a sweep that has not run for half an hour sends
+    "no-show", not "late" and then "no-show"; a stage first seen more than 20 minutes after
+    it happened is recorded but not sent. Texts carry the officer's number to call and,
+    with `USC_PUBLIC_URL` set, a link to the board.
+  - The page refreshes every 15 seconds with a pop-up for each new update, and can raise
+    a desktop notification when it is in a background tab. **Find cover** opens the shift
+    on the schedule; **Call** dials the officer. The texts sent are listed underneath,
+    numbers masked; a verification code is never kept.
+  - Supervisors have the same live list in the phone app (**My reports → Late &
+    no-shows**), with a call button; tapping a late or no-show notification opens it.
+  - Texts go through Twilio (`USC_SMS_TWILIO_SID`, `USC_SMS_TWILIO_TOKEN`,
+    `USC_SMS_FROM`). Without them every text is still written to the outbox, marked not
+    sent, and the confirmation code is shown on screen instead.
 - **Live tracking** — every officer's actual position against their assigned post, on a
   map and in a table: status (on post, off post, on break, late, no-show, starting
   soon), the job and its address, the shift window, clock-in time and lateness, distance
@@ -1434,6 +1466,9 @@ icons.
 | `USC_EMAIL_API_KEY` | server | unset | A [Resend](https://resend.com) API key. Without it nothing is sent; messages are still composed and recorded in the outbox. |
 | `USC_EMAIL_FROM` | server | Resend's test sender | e.g. `USA Security Connect <billing@usasecuritygroup.com>`. The domain must be verified with your provider. |
 | `USC_EMAIL_DISABLED` | server | unset | Set to `1` to switch email off even when a key is present (used by the test suite). |
+| `USC_SMS_TWILIO_SID` / `USC_SMS_TWILIO_TOKEN` | server | unset | A [Twilio](https://www.twilio.com) account SID and auth token, for late and no-show texts. Without them nothing is texted; texts are still recorded, and phone confirmation codes are shown on screen. |
+| `USC_SMS_FROM` | server | unset | The Twilio number texts come from (`+1...`), or a messaging service SID (`MG...`). |
+| `USC_SMS_DISABLED` | server | unset | Set to `1` to switch texts off even when Twilio is configured. |
 | `USC_PUBLIC_URL` | server | unset | Your deployed URL, used for the portal link inside messages. |
 | `VITE_API_URL` | web | `/api` (proxied) | |
 | `EXPO_PUBLIC_API_URL` | mobile | `10.0.2.2` / `localhost` | Point at your real API for device builds. |
@@ -1493,7 +1528,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 42 steps and stops it:
+One command reseeds the database, starts the API, runs all 44 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1789,6 +1824,26 @@ The suites, in the order they run:
   why; a supervisor is warned, not stopped, sees it against his name among the
   candidates, and gives it to him anyway; Marcus then sees the short rest on his
   schedule, and the board shows it after the shift before.
+- **`test/attendance-rules.mjs`** (on a throwaway database, before the API starts) —
+  phone numbers: ten digits are a US number, anything else needs its country code. The
+  stages: nothing within the 7-minute grace, late after it, a no-show after 30 minutes,
+  arrived (and how late) when they clock in. What is sent: a late text to the one who
+  asked for late starts, with the officer's number, and nothing more on the next sweep;
+  a no-show text; covered when the shift is given to someone else, whose lateness is not
+  counted; a sweep that missed the late start sends only the no-show, then that they
+  arrived; a no-show from hours ago is recorded but not sent; nobody without a confirmed
+  number and texts on is texted.
+- **`test/attendance.mjs`** — supervisors see the board, officers and clients do not. The
+  demo's no-show, the no-show covered this morning and the officers who arrived late are
+  on it, no-shows first, and Vince's texts are in the outbox with his number masked. A
+  supervisor cannot turn texts on without a confirmed number, a bad number is refused,
+  the wrong code is refused, the right one confirms the number once, the outbox never
+  holds the code, and a test text says why it was not sent. A shift that started 35
+  minutes ago with nobody there is a no-show: one text each to Vince and the supervisor,
+  no "late" text before it, and nothing more when the board is opened again. Given to
+  another officer, it is covered, and both hear so; the cover is not counted late. A
+  second officer ten minutes late is texted only to Vince, who asked for late starts,
+  and is in the alerts inbox, opening on the board.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1843,6 +1898,10 @@ The suites, in the order they run:
     fatigue** and opens the shift on the schedule; the officer sees the short rest on theirs;
   - a supervisor chases the demo's late relief from **Handovers**, an alert opens the board
     at that handover, and the held-over officer's home screen tells them to stay on post;
+  - a supervisor opens **Late & no-shows**, confirms a phone number with the code shown on
+    screen and asks for late starts too; an officer put on a shift that started ten
+    minutes ago appears as late without the page being reloaded, with a pop-up, and a
+    text each to Vince and the supervisor;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
 - **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 125

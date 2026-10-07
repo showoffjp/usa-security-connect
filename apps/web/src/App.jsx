@@ -37,6 +37,7 @@ import SiteTrainingPage from './pages/admin/SiteTrainingPage.jsx';
 import ConductPage from './pages/admin/ConductPage.jsx';
 import HandoversPage from './pages/admin/HandoversPage.jsx';
 import FatiguePage from './pages/admin/FatiguePage.jsx';
+import AttendancePage from './pages/admin/AttendancePage.jsx';
 import HolidaysPage from './pages/admin/HolidaysPage.jsx';
 import HiringPage from './pages/admin/HiringPage.jsx';
 import BroadcastsPage from './pages/admin/BroadcastsPage.jsx';
@@ -146,6 +147,7 @@ export default function App() {
         <Route path="conduct" element={<ConductPage />} />
         <Route path="handovers" element={<HandoversPage />} />
         <Route path="fatigue" element={<FatiguePage />} />
+        <Route path="attendance" element={<AttendancePage />} />
         <Route path="holidays" element={<HolidaysPage />} />
         <Route path="hiring" element={<HiringPage />} />
         <Route path="site-health/:id" element={<SiteMonthPage />} />
