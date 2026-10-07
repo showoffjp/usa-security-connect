@@ -102,7 +102,7 @@ export default function FatiguePage() {
                       ))}
                       {f.previous && (
                         <div className="tiny muted">
-                          Last shift ended {fmtDay(f.previous.ends_at)} {fmtTime(f.previous.ends_at)}
+                          Last shift {new Date(f.previous.ends_at) > new Date() ? 'ends' : 'ended'} {fmtDay(f.previous.ends_at)}, {fmtTime(f.previous.ends_at)}
                           {f.previous.held_over ? ', held over past its scheduled end' : ''}.
                         </div>
                       )}
