@@ -1448,6 +1448,9 @@ npx eas build --platform ios        # needs an Apple Developer account
 ```
 
 - **iOS** builds require macOS or EAS's hosted macOS builders.
+- The app is on **Expo SDK 57** (React Native 0.86, New Architecture). The NFC library
+  is not yet listed as tested on the New Architecture, so check a tag scan on the first
+  development build.
 - **NFC tag scanning** is built and wired to the tour screen, but the native module only
   exists in a development or production build — it will not work in Expo Go. The app
   detects this and falls back to typing the tag ID or marking the checkpoint visited;

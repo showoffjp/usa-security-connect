@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Shield } from '../../src/ui.jsx';
 import { C } from '../../src/theme.js';
 
@@ -37,6 +38,10 @@ function Header() {
 }
 
 export default function TabsLayout() {
+  // The app draws under the system bars (always, on Android since SDK 54), so
+  // the tab bar adds the bottom inset to its own size rather than sitting
+  // under the gesture bar or the buttons.
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -46,9 +51,9 @@ export default function TabsLayout() {
         headerTitleAlign: 'left',
         tabBarActiveTintColor: C.brand600,
         tabBarInactiveTintColor: C.muted,
-        tabBarStyle: { borderTopColor: C.line, height: 62, paddingBottom: 8, paddingTop: 6 },
+        tabBarStyle: { borderTopColor: C.line, height: 62 + insets.bottom, paddingBottom: 8 + insets.bottom, paddingTop: 6 },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        sceneContainerStyle: { backgroundColor: C.surface2 },
+        sceneStyle: { backgroundColor: C.surface2 },
       }}
     >
       <Tabs.Screen

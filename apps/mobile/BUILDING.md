@@ -3,6 +3,13 @@
 The app runs in Expo Go for everyday development, but **NFC scanning and push
 notifications need a real build** — those native modules do not exist in Expo Go.
 
+The app is on **Expo SDK 57** (React Native 0.86, React 19), which runs only on
+React Native's New Architecture. `npx expo-doctor` passes all of its checks, with one
+exception set in `package.json`: `react-native-nfc-manager` is not yet listed as tested
+on the New Architecture. It loads through React Native's interop layer for older
+native modules, so **scan a real tag on the first development build** before relying
+on it; if it fails, the tour screen still falls back to typing the tag ID.
+
 ## 1. Development build (once per device)
 
 ```bash

@@ -72,7 +72,8 @@ function Gate() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor={C.navy800} />
+      {/* Light icons over the navy headers, which run up under the status bar. */}
+      <StatusBar style="light" />
       <AuthProvider>
         <Gate />
       </AuthProvider>
