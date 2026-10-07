@@ -11,9 +11,9 @@ import './styles/app.css';
 import './lib/theme.js';
 
 /**
- * The product tour is a static page (public/tour/index.html). A link that
- * reaches the app instead - /tour without the slash, or the dev server's
- * fallback - is sent on to it, signed in or not.
+ * The product tour is a static page (public/tour/index.html), also served at
+ * /demo/. A link that reaches the app instead - either without the slash, or
+ * the dev server's fallback - is sent on to it, signed in or not.
  */
 function TourRedirect() {
   window.location.replace('/tour/index.html');
@@ -36,6 +36,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/portal/*" element={<PortalApp />} />
           <Route path="/apply" element={<ApplyPage />} />
           <Route path="/tour/*" element={<TourRedirect />} />
+          <Route path="/demo/*" element={<TourRedirect />} />
           <Route
             path="*"
             element={

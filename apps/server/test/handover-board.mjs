@@ -15,6 +15,7 @@ const { db, migrate } = await import('../src/lib/db.js');
 const { toSql } = await import('../src/services/compliance.js');
 const { confirmKey } = await import('../src/services/confirmations.js');
 const { handovers, myHandovers } = await import('../src/services/handovers.js');
+const { seedHandovers } = await import('../src/seed-handovers.js');
 
 let failed = 0;
 const log = (ok, label, extra = '') => {
@@ -25,8 +26,12 @@ const log = (ok, label, extra = '') => {
 await migrate();
 
 const MIN = 60000;
-// On the minute, so times read back from the database compare exactly.
-const now = new Date(Math.floor(Date.now() / MIN) * MIN);
+// The most recent Wednesday at noon: mid-week, so the stand-in below always
+// has room (no shift may start before the payroll week does), and on the
+// minute, so times read back from the database compare exactly.
+const now = new Date();
+now.setDate(now.getDate() - ((now.getDay() + 4) % 7));
+now.setHours(12, 0, 0, 0);
 const at = (minutes) => new Date(now.getTime() + minutes * MIN);
 const id = async (sql, ...args) => Number((await db.prepare(sql).run(...args)).lastInsertRowid);
 
@@ -105,6 +110,27 @@ const mineIn = await myHandovers(late.rel, now);
 log(mineIn.incoming?.shift_id === late.outShift && mineIn.outgoing === null, 'the late relief sees whose post they are taking over');
 const mineOn = await myHandovers(relieved.rel, now);
 log(mineOn.incoming === null, 'and once on post, it drops off their list');
+
+/*
+ * The demo's own holdovers, made with a stand-in when nobody on the roster
+ * fits: a quiet post with a position, and officers with nothing on.
+ */
+const quiet = await id(`INSERT INTO posts (site_id, name, requires_gps, latitude, longitude) VALUES (?, 'Quiet Post', true, 27.95, -82.46)`, siteId);
+for (const name of ['Idle-1', 'Idle-2']) {
+  await id(`INSERT INTO users (employee_code, first_name, last_name, role, must_change_pin) VALUES (?, ?, 'Officer', 'officer', false)`, String(code++), name);
+}
+const seeded = await seedHandovers({ db, now, roster: false });
+const after = await handovers({ now });
+const atQuiet = after.handovers.filter((h) => h.post_id === quiet);
+const demoLate = after.handovers.find((h) => h.state === 'late' && h.post_id === quiet);
+log(seeded.late === 1 && demoLate && demoLate.held_over_minutes === 25 && demoLate.relief.confirmed,
+  'with nobody on the roster to use, a stand-in is held over 25 minutes for a relief who confirmed and has not come',
+  JSON.stringify(seeded));
+const standIn = demoLate && (await db.prepare(`SELECT * FROM time_entries WHERE user_id = ? AND clock_out_at IS NULL`).get(demoLate.user_id));
+const pings = standIn ? Number((await db.prepare(`SELECT COUNT(*) AS n FROM location_pings WHERE time_entry_id = ?`).get(standIn.id)).n) : 0;
+log(Boolean(standIn) && pings >= 12, 'clocked in at the post, with a trail of positions like anyone else on duty', `${pings} points`);
+log(atQuiet.length === 1, 'and the post is used once: there is no second quiet post here for the uncovered one',
+  `${seeded.uncovered} uncovered`);
 
 console.log(`\nHandover board: ${failed ? `${failed} CHECK(S) FAILED.` : 'all checks passed.'}`);
 process.exit(failed ? 1 : 0);

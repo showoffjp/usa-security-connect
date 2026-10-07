@@ -47,8 +47,9 @@ produces their timesheet, the client's coverage report and the invoice line.
 
 **[Take the product tour](https://usa-security-connect.vercel.app/tour/)**: every screen of
 the admin console, the officer app and the client portal, with the demo sign-ins and
-three five-minute walk-throughs, on one page. It is part of the site (`/tour/`), linked
-from the sign-in screens, the demo banner and the account menu.
+three five-minute walk-throughs, on one page. It is part of the site, at
+[`/demo/`](https://usa-security-connect.vercel.app/demo/) and `/tour/` (the same page),
+linked from the sign-in screens, the demo banner and the account menu.
 
 ### Demo sign-ins
 
@@ -1739,7 +1740,9 @@ The suites, in the order they run:
   starting a little after the handover is still the relief; with no shift after it the
   post closes; working straight on is no handover; a shift ending past the window is
   not on the board until it is widened; the worst come first, counted. Each officer sees
-  their own side, without phone numbers, and a relief on post drops off their list.
+  their own side, without phone numbers, and a relief on post drops off their list. And
+  with nobody on the roster to use, the demo seed holds a stand-in over on a quiet post,
+  clocked in with a GPS trail, so the demo shows a holdover at any hour.
 - **`test/handovers.mjs`** — supervisors see the board, officers and clients do not, and
   the window has to be at least half an hour. The demo's held-over officer and its
   uncovered post are on the board, in the alerts inbox and in the sidebar count, and the
@@ -1857,6 +1860,6 @@ that should not have it.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — GitHub, Neon and Vercel, step by step.
 - [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) — store builds, NFC and push.
 - [apps/web/public/tour/index.html](apps/web/public/tour/index.html) — the product tour at
-  `/tour/`. Its pictures are `docs/screenshots`, the same files as the feature tour
+  `/tour/`, also served at `/demo/` (a rewrite in `vercel.json`). Its pictures are `docs/screenshots`, the same files as the feature tour
   above: the dev server serves them at `/tour/img/` and the web build copies them in
   (`vite.config.js`), so they are kept once. Add a new screen to both.
