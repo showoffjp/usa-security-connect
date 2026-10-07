@@ -216,10 +216,18 @@ log(Math.abs(hourSum - byOfficer.totals.hours) < 0.1, 'report totals are the sum
 const contractors = byOfficer.rows.filter((r) => r.classification === '1099');
 log(contractors.length > 0 && contractors.every((r) => r.overtime_hours === 0), '1099 contractors never show overtime');
 
-// Recompute one W-2 officer's pay from raw time entries, week by week.
-const janelle = byOfficer.rows.find((r) => r.employee_code === '1004');
+// Recompute one W-2 officer's pay from raw time entries, week by week: the
+// hourly officer with the most overtime in the period whose rate has not
+// changed during it, so one rate prices every punch.
 const rates = (await call('/admin/pay-rates', { token: supervisor })).data.people;
-const janelleRate = rates.find((p) => p.employee_code === '1004');
+const steadyRate = (r) => {
+  const p = rates.find((x) => x.employee_code === r.employee_code);
+  return p && p.pay_type === 'hourly' && !p.exempt && (!p.last_change || p.last_change.effective_on < from);
+};
+const janelle = byOfficer.rows.filter((r) => r.classification === 'W-2' && r.overtime_hours > 0 && steadyRate(r))
+  .sort((a, b) => b.overtime_hours - a.overtime_hours)[0];
+log(Boolean(janelle), 'a W-2 officer worked overtime in the period', janelle && `${janelle.employee_code}, ${janelle.overtime_hours} h`);
+const janelleRate = rates.find((p) => p.employee_code === janelle.employee_code);
 const fromDate = new Date(`${from}T00:00:00`);
 const toDate = addDays(new Date(`${to}T00:00:00`), 1);
 const raw = await call(
@@ -242,9 +250,9 @@ for (const minutes of weeks.values()) {
 }
 log(expectedOt > 0, 'the W-2 officer checked worked overtime in the period', `${(expectedOt / 60).toFixed(2)} h`);
 log(Math.abs(Math.round(janelle.gross_pay * 100) - expectedCents) <= 2,
-  'her gross pay matches a week-by-week recalculation from the raw punches',
+  'their gross pay matches a week-by-week recalculation from the raw punches',
   `${janelle.gross_pay} vs ${(expectedCents / 100).toFixed(2)}`);
-log(Math.abs(janelle.overtime_hours - Math.round((expectedOt / 60) * 100) / 100) < 0.02, 'and so do her overtime hours');
+log(Math.abs(janelle.overtime_hours - Math.round((expectedOt / 60) * 100) / 100) < 0.02, 'and so do their overtime hours');
 
 const payroll = (await call(`/admin/reports/payroll?from=${from}&to=${to}`, { token: supervisor })).data;
 const payrollGross = payroll.rows.reduce((n, r) => n + (r.gross_pay || 0), 0);

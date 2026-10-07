@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast, shiftEligibility, blocksAssignment, blocksSelfService, SHIFT_REQUEST_LABEL } from '../shared.js';
 import { trainingStateFor } from '../services/training.js';
 import { suspendedOn } from '../services/conduct.js';
+import { fatigueFor } from '../services/fatigue.js';
 import { pushAsync, supervisorIds } from '../services/push.js';
 
 export const shiftRequestsRouter = Router();
@@ -57,7 +58,10 @@ export async function checkEligibility(userId, shift) {
 
   const suspended = await suspendedOn(userId, new Date(sqlToIso(shift.starts_at)));
 
-  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability, training, suspended });
+  // Rest and fatigue against their other shifts as worked.
+  const fatigue = await fatigueFor(userId, { startsAt: sqlToIso(shift.starts_at), endsAt: sqlToIso(shift.ends_at), excludeShiftId: shift.id });
+
+  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability, training, suspended, fatigue });
 }
 
 /** The first reason an officer cannot take a shift themselves, worded for them. */
