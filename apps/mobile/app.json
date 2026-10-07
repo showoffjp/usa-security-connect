@@ -6,12 +6,6 @@
     "orientation": "portrait",
     "scheme": "usasecurityconnect",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/shield.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#001F3F"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.usasecuritygroup.connect",
@@ -46,6 +40,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/shield.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#001F3F",
+          "imageWidth": 200
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "USA Security Connect verifies you are at your assigned post when you clock in or check in."
@@ -70,13 +73,12 @@
         {
           "nfcPermission": "Scan the NFC tag at each patrol checkpoint."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-status-bar"
     ],
     "extra": {
       "apiUrl": "http://10.0.2.2:4000/api"
-    },
-    "notification": {
-      "iosDisplayInForeground": true
     },
     "icon": "./assets/icon.png"
   }

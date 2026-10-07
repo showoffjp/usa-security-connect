@@ -1,19 +1,6 @@
-// Metro configured for the monorepo: the app lives in apps/mobile but imports
-// the shared domain rules from packages/shared, and resolves dependencies from
-// the hoisted root node_modules.
+// Expo's defaults: it detects the npm workspace, watches the monorepo root
+// (the app imports the shared domain rules from packages/shared) and resolves
+// dependencies from the root node_modules, where they are hoisted.
 const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
 
-const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, '../..');
-
-const config = getDefaultConfig(projectRoot);
-
-config.watchFolders = [workspaceRoot];
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-  path.resolve(workspaceRoot, 'node_modules'),
-];
-config.resolver.disableHierarchicalLookup = true;
-
-module.exports = config;
+module.exports = getDefaultConfig(__dirname);

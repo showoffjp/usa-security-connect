@@ -8,7 +8,9 @@ import { C } from './theme.js';
 /** Alerts an officer on post must actually see, so they surface in-app too. */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // Shown while the app is open too: a call or a chase needs seeing on post.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
