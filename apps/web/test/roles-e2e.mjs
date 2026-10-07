@@ -1659,6 +1659,53 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* ---------------------------------------------------- round 30: handovers --- */
+{
+  console.log('\n--- Handovers: a supervisor chases a late relief; the held-over officer sees why they are still on ---');
+  // The board, read through the API first: the demo's holdovers are set up
+  // from whoever is on duty when it was seeded.
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const supToken = (await api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: '1002', pin: '3571' }) })).token;
+  const board = await api('/handovers', supToken);
+  const late = board.handovers?.find((h) => h.state === 'late' && !h.relief.chased_at);
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/handovers');
+  await sup.page.waitForSelector('h1:has-text("Handovers")', { timeout: 10000 });
+  await settle(sup.page);
+  log(await sup.page.locator('li.handover').count() === board.handovers.length, 'the board lists every handover in the next two hours', `${board.handovers.length}`);
+  await checkScreen('supervisor: handovers', sup.page, sup.problems);
+  if (!late) {
+    console.log('SKIP  no late relief in the demo at this hour');
+  } else {
+    const row = sup.page.locator(`#handover-${late.shift_id}`);
+    log(await row.locator('text=Relief late').count() === 1 && await row.locator(`text=${late.relief.officer}`).count() >= 1,
+      `${late.officer} is held over at ${late.post_name}, waiting for ${late.relief.officer}`);
+    await row.locator(`button[aria-label="Chase ${late.relief.officer}"]`).click();
+    await sup.page.waitForSelector('[role="dialog"]');
+    await checkScreen('supervisor: chase a late relief', sup.page, sup.problems);
+    await sup.page.click('[role="dialog"] button:has-text("Send")');
+    await sup.page.waitForTimeout(1500);
+    log(await row.locator('text=chased').count() === 1, 'the relief is chased, and the board says when');
+    await sup.page.goto(WEB + `/admin/handovers?shift=${late.shift_id}`);
+    await settle(sup.page);
+    log(await sup.page.locator(`#handover-${late.shift_id}.is-focused`).count() === 1, 'an alert opens the board at that handover');
+
+    const pin = String(((Number(late.employee_code) * 7919) % 9000) + 1000);
+    const officer = await watchedPage({ width: 390, height: 844 });
+    await staffSignIn(officer.page, late.employee_code, pin);
+    await settle(officer.page);
+    const card = officer.page.locator('#handover');
+    log(await card.locator('text=Your relief is late').count() === 1 && await card.locator(`text=${late.relief.officer}`).count() === 1,
+      'the held-over officer is told their relief is late, and to stay on post');
+    await checkScreen('officer: held over', officer.page, officer.problems);
+    await officer.context.close();
+  }
+  await sup.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

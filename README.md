@@ -94,6 +94,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 8. Reply to the two-star rating under **Client feedback**.
 9. Under **Site training**, sign Darnell Hughes off at the armed garage post he has been working.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
+11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -139,6 +140,10 @@ Where everyone is right now, against where they are scheduled to be. *Admin and 
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/fleet.jpg"><img src="docs/screenshots/fleet.jpg" alt="The fleet of patrol vehicles"></a><br><b>Fleet</b><br>Every patrol vehicle: who has it and whether they checked it, the odometer, the miles, and the next service by mileage. A failed brake check takes one off the road.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/fleet-vehicle.jpg"><img src="docs/screenshots/fleet-vehicle.jpg" alt="One vehicle's defects, service form and checks"></a><br><b>A vehicle's record</b><br>Open defects with a sign-off for the repair, a service form, and every check with its odometer, fuel and anything that failed.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/handovers.jpg"><img src="docs/screenshots/handovers.jpg" alt="Handovers: every post changing hands soon, and where each relief stands"></a><br><b>Handovers</b><br>Every officer whose shift ends in the next two hours and the officer due to relieve them: on post, confirmed, not confirmed, late, or nobody assigned. Officers held over come first.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/handover-chase.jpg"><img src="docs/screenshots/handover-chase.jpg" alt="Chasing a late relief"></a><br><b>Chase the relief</b><br>A push to the late relief and one asking the officer on post to stay; or straight to the schedule to find cover when nobody is assigned.</td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/incidents.jpg"><img src="docs/screenshots/incidents.jpg" alt="Incident reports"></a><br><b>Incidents</b><br>Reports from the field with photos, severity, police numbers and review status.</td>
@@ -404,8 +409,8 @@ What Marcus Bell sees on his phone at the Riverfront lobby console. *Officer.*
   <tr>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-updates.jpg"><img src="docs/screenshots/officer-updates.jpg" alt="Updates"></a><br><b>Updates</b><br>Broadcasts, training and messages.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-profile.jpg"><img src="docs/screenshots/officer-profile.jpg" alt="Profile and pay"></a><br><b>Profile &amp; pay</b><br>Hours, this week's estimate, closed pay stubs, paid time off and expenses.</td>
-    <td width="25%"></td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-held-over.jpg"><img src="docs/screenshots/officer-held-over.jpg" alt="An officer told their relief is late and to stay on post"></a><br><b>Held over</b><br>Past the end of the shift with the relief not here: who is coming, how late, and to stay on post, paid.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-relief.jpg"><img src="docs/screenshots/officer-relief.jpg" alt="The late relief told whose post they are taking over"></a><br><b>Your relief duty</b><br>The relief sees whose post they take over, and when they are late, that someone is waiting.</td>
   </tr>
 </table>
 
@@ -637,6 +642,12 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Licence reminders** — the home screen (web and mobile) warns when the officer's
   licence or any certification lapses within 30 days, or already has, listing each
   with its date.
+- **Handover** — near the end of a shift the home screen (web and phone) says who
+  relieves the officer and whether they have confirmed; once their relief is on post,
+  to hand over and clock out. If the relief is late, or nobody is booked, it tells them
+  to stay on post and that the time is paid. The officer due to relieve someone sees
+  whose post they take over, and when they are late, that someone is waiting. Nobody's
+  phone number is shown.
 - **To read and sign** — a coaching or warning from a supervisor appears on the home
   screen (web and phone) until the officer reads it and signs by typing their name,
   with their side of it if they want. Signing says they have read it, not that they
@@ -779,7 +790,8 @@ and a supervisor can only read is noted where it matters.
     open flags from the last three days; watchlist overrides; patrols finished with
     required checkpoints skipped, or never finished; calls for service nobody has been
     sent to, or not acknowledged within three minutes; shifts starting within 12 hours
-    that nobody has confirmed.
+    that nobody has confirmed; officers held over because their relief is late, and
+    posts about to change hands with nobody assigned to take them.
   - **Fleet:** vehicles off the road, signed out without a start check, or due for a
     service.
   - **Clients:** urgent building issues, unanswered low ratings, coverage requests,
@@ -793,6 +805,23 @@ and a supervisor can only read is noted where it matters.
   Opening one goes to the screen that deals with it and marks it read. Alerts are
   worked out from the records, so they clear themselves when the problem is resolved;
   only who has read what is stored, per person.
+- **Handovers** (Operations → Handovers) — every officer on duty whose shift ends in the
+  next two hours (or four, or eight), and the shift that follows at the same post: the
+  relief on post, confirmed, not confirmed, late (past the start and its grace period
+  without clocking in), or nobody assigned at all. A post with no shift after it closes;
+  an officer working straight on into their own next shift is no handover.
+  - An officer whose relief has not come stays on the clock, held over and paid, and is
+    listed first with how long they have been held over. The compliance sweep does not
+    close their entry while the relief is due, up to eight hours past the shift.
+  - **Chase** pushes the relief that they are expected (with a line of the supervisor's
+    own if wanted) and, when they are late, asks the officer on post to stay. The board
+    shows when they were chased; chasing again within ten minutes is refused, so two
+    supervisors do not send two pushes. Every chase is audited.
+  - **Find cover** opens the uncovered shift on the schedule. Call buttons dial the
+    relief or the officer on post.
+  - A late relief and an uncovered post are in the alerts inbox as critical, and the
+    sidebar counts every handover at risk, an unconfirmed relief inside the hour
+    included. The board refreshes every minute.
 - **Live tracking** — every officer's actual position against their assigned post, on a
   map and in a table: status (on post, off post, on break, late, no-show, starting
   soon), the job and its address, the shift window, clock-in time and lateness, distance
@@ -1436,7 +1465,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 38 steps and stops it:
+One command reseeds the database, starts the API, runs all 40 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1699,6 +1728,22 @@ The suites, in the order they run:
   scheduled end; one who forgot to clock out after the relief arrived is closed at
   the handover and paid for the time held over; with nobody following at the post the
   old rule still applies; and a relief who never came holds nobody past eight hours.
+- **`test/handover-board.mjs`** (on a throwaway database, at a moment it picks) — a
+  relief past their start and its grace is late, with the minutes held over and late;
+  one on post means the officer can go; a following shift with nobody on it inside the
+  hour is critical; an unconfirmed relief is a warning inside the hour and worth knowing
+  beyond it; a confirmation for times the shift no longer has does not count; a relief
+  starting a little after the handover is still the relief; with no shift after it the
+  post closes; working straight on is no handover; a shift ending past the window is
+  not on the board until it is widened; the worst come first, counted. Each officer sees
+  their own side, without phone numbers, and a relief on post drops off their list.
+- **`test/handovers.mjs`** — supervisors see the board, officers and clients do not, and
+  the window has to be at least half an hour. The demo's held-over officer and its
+  uncovered post are on the board, in the alerts inbox and in the sidebar count, and the
+  uncovered shift is not offered to claim. Officers cannot chase; a post with nobody
+  assigned has nobody to chase; the late relief is chased once, and not again for ten
+  minutes, and it is audited. The held-over officer sees who is coming and that they
+  are late, the relief sees whose post they take over, and neither sees a phone number.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1711,7 +1756,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 388
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 398
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1749,6 +1794,8 @@ The suites, in the order they run:
     which clears his roster flags, then withdraws and restores another officer's
     training at the lab desk; the client sees how many officers are trained at the
     emergency entrance;
+  - a supervisor chases the demo's late relief from **Handovers**, an alert opens the board
+    at that handover, and the held-over officer's home screen tells them to stay on post;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
 - **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 123

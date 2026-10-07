@@ -94,6 +94,7 @@ const STAFF_PAGES = [
   ['Overtime watch', '/admin/overtime'],
   ['Site training', '/admin/site-training'],
   ['Coaching & discipline', '/admin/conduct'],
+  ['Handovers', '/admin/handovers'],
   ['Holidays', '/admin/holidays'],
   ['Report: patrol vehicle mileage', '/admin/reports?report=vehicle-mileage'],
 ];
