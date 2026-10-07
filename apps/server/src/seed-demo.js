@@ -33,6 +33,7 @@ import { seedCommendations } from './seed-commendations.js';
 import { seedSignoffs } from './seed-signoffs.js';
 import { seedTraining } from './seed-training.js';
 import { seedConduct } from './seed-conduct.js';
+import { seedHandovers } from './seed-handovers.js';
 import { seedHolidays } from './seed-holidays.js';
 
 /**
@@ -1264,6 +1265,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const trainingSeed = await seedTraining({ db });
   // Coaching and warnings on officers' records.
   const conductSeed = await seedConduct({ db });
+  // Officers held over at the end of their shift: one relief late, one post uncovered.
+  const handoverSeed = await seedHandovers({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1278,7 +1281,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

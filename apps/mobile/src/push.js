@@ -95,6 +95,7 @@ export function pathForNotification(data) {
     case 'check_in':
     case 'call':
     case 'vehicle':
+    case 'handover':
       // A call sent to the officer sits at the top of the home screen.
       return '/';
     case 'broadcast':

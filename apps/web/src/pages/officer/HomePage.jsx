@@ -14,6 +14,7 @@ import ConfirmShift from './ConfirmShift.jsx';
 import HeldEquipment from './HeldEquipment.jsx';
 import { NewCommendations } from './Commendations.jsx';
 import { ConductToSign } from './Conduct.jsx';
+import { HandoverCard } from './Handover.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
 
@@ -744,6 +745,7 @@ export default function HomePage() {
 
       {checkIn?.is_open && <CheckInPrompt checkIn={checkIn} onAnswered={load} />}
       <CallsCard onDuty={onDuty} />
+      <HandoverCard />
 
       {/* Changed orders come before anything else on post. */}
       <PostOrdersCard onDuty={onDuty} />

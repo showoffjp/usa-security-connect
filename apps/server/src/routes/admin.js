@@ -46,6 +46,7 @@ import { fleet } from '../services/vehicles.js';
 import { holidaysForSpan, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services/holidays.js';
 import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
+import { handovers } from '../services/handovers.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -249,6 +250,8 @@ adminRouter.get(
     const signoffDisputes = Number((await db.prepare(`SELECT COUNT(*) AS n FROM hours_signoffs WHERE status = 'disputed' AND response IS NULL`).get()).n);
     // Officers rostered in the coming week at a post they are not trained at.
     const untrainedRostered = (await trainingAlerts()).length;
+    // Posts changing hands soon with no relief assigned, or a relief who has not come.
+    const handoversAtRisk = (await handovers()).counts.at_risk;
     // Coaching and warnings an officer has left unsigned for days.
     const conductUnsigned = (await unsignedOverdue()).filter((r) => r.officer_role === 'officer' || req.user.role === ROLES.ADMIN).length;
     // Expense claims waiting for an administrator.
@@ -306,6 +309,7 @@ adminRouter.get(
         pendingCorrections,
         signoffDisputes,
         untrainedRostered,
+        handoversAtRisk,
         conductUnsigned,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
@@ -2445,6 +2449,17 @@ async function buildAlerts(userId) {
       at: t.starts_at, link: '/admin/site-training',
       title: lapsed ? `${t.officer} needs a refresher at ${t.post_name}` : `${t.officer} is not trained at ${t.post_name}`,
       detail: `${t.site_name} · rostered ${new Date(t.starts_at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
+  }
+
+  // A post about to change hands with nobody to take it, or an officer held
+  // over because their relief has not come. The key carries the state, so the
+  // alert comes back unread when an open post turns into a late one.
+  for (const h of (await handovers()).handovers.filter((x) => x.state === 'late' || x.state === 'open')) {
+    const late = h.state === 'late';
+    push({ key: `handover:${h.shift_id}:${h.state}`, kind: 'handover', severity: h.severity === 'critical' ? 'critical' : 'warning',
+      at: h.ends_at, link: `/admin/handovers?shift=${h.shift_id}`,
+      title: late ? `${h.relief.officer} has not arrived to relieve ${h.officer}` : `Nobody is assigned to relieve ${h.officer}`,
+      detail: `${h.post_name} · ${h.site_name}${h.held_over_minutes ? ` · held over ${h.held_over_minutes} min` : ''}` });
   }
 
   // A coaching or warning the officer has not signed after a few days.

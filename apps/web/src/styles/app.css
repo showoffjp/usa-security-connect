@@ -1153,3 +1153,14 @@ select { min-width: 0; }
 .signoff-dispute { padding: 8px 10px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--surface-2, transparent); }
 .signoff-week .card-head { flex-wrap: wrap; gap: 8px; }
 .tight-list { margin: 4px 0 0; padding-left: 18px; }
+
+/* Handovers: the officer on post and their relief, side by side. */
+.handover-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.handover-pair > svg { color: var(--muted); }
+.handover.is-focused { box-shadow: inset 3px 0 0 var(--brand-500); }
+@media (max-width: 620px) {
+  .list-item.handover { flex-direction: column; }
+  .handover-pair { grid-template-columns: 1fr; gap: 6px; }
+  .handover-pair > svg { display: none; }
+  .handover-actions { justify-content: flex-start !important; }
+}

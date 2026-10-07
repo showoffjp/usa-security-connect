@@ -20,6 +20,7 @@ import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { HeldEquipment } from '../../src/HeldEquipment.jsx';
 import { NewCommendations } from '../../src/Commendations.jsx';
 import { ConductToSign } from '../../src/Conduct.jsx';
+import { HandoverCard } from '../../src/Handover.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -187,6 +188,7 @@ export default function HomeScreen() {
 
         {checkIn?.is_open && <CheckInCard checkIn={checkIn} onAnswered={load} notify={notify} />}
         <CallsCard onDuty={onDuty} notify={notify} refreshKey={pulls} />
+        <HandoverCard refreshKey={pulls} />
 
         {/* Changed orders and unread pass-down come before anything else on post. */}
         <PostLogCards postLog={postLog} notify={notify} />

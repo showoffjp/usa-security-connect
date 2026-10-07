@@ -12,6 +12,7 @@
 import { db } from '../lib/db.js';
 import { isoFields } from '../lib/http.js';
 import { toSql } from './compliance.js';
+import { isConfirmed } from './confirmations.js';
 import { HANDOVER_WINDOW_MINUTES, HANDOVER_STATES, HANDOVER_STATE_LABEL, handoverState, handoverSeverity } from '../shared.js';
 
 const MIN = 60000;
@@ -22,7 +23,7 @@ const MATCH_MINUTES = 60;
 async function reliefFor(shift) {
   const row = await db
     .prepare(
-      `SELECT n.id, n.user_id, n.starts_at, n.ends_at, n.status, n.confirmed_at, n.relief_chased_at,
+      `SELECT n.id, n.user_id, n.post_id, n.starts_at, n.ends_at, n.status, n.confirmed_at, n.confirmed_key, n.relief_chased_at,
               u.first_name || ' ' || u.last_name AS officer, u.phone, u.employee_code,
               (SELECT te.clock_in_at FROM time_entries te
                 WHERE te.user_id = n.user_id AND te.post_id = n.post_id AND te.clock_out_at IS NULL
@@ -34,8 +35,10 @@ async function reliefFor(shift) {
     )
     .get(shift.post_id, shift.id, shift.ends_at, shift.ends_at, shift.ends_at);
   if (!row) return null;
+  // A confirmation counts only while the shift is still the one confirmed.
+  const confirmed = isConfirmed(row);
   const r = isoFields(row, ['starts_at', 'ends_at', 'confirmed_at', 'relief_chased_at', 'clocked_in_at']);
-  return { ...r, clocked_in: Boolean(r.clocked_in_at), confirmed: Boolean(r.confirmed_at) };
+  return { ...r, clocked_in: Boolean(r.clocked_in_at), confirmed };
 }
 
 /** Every handover in the window, worst first. */
