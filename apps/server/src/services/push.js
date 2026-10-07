@@ -183,6 +183,9 @@ export async function notifyNewFlags() {
 
   for (const flag of flags) {
     (await db.prepare(`UPDATE flags SET notified_at = datetime('now') WHERE id = ?`).run(flag.id));
+    // No-shows are told by attendance.js, with the post, to the people who
+    // asked to hear of them, as a push or a text.
+    if (flag.type === 'no_show') continue;
     const labels = {
       missed_check_in: 'missed a status check-in',
       geofence_violation: 'clocked in away from the post',

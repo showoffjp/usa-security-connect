@@ -373,6 +373,15 @@ export async function sweep(now = new Date()) {
     console.error('[usc] notification pass failed', err.message);
   }
 
+  // Late arrivals and no-shows, to the supervisors who asked by text and push.
+  // Imported lazily: attendance.js imports this module for toSql.
+  try {
+    const { sweepAttendance } = await import('./attendance.js');
+    result.attendance = await sweepAttendance(now);
+  } catch (err) {
+    console.error('[usc] late and no-show alerts failed', err.message);
+  }
+
   // Imported lazily: confirmations.js imports this module for toSql.
   try {
     const { sendConfirmReminders } = await import('./confirmations.js');

@@ -87,6 +87,9 @@ repeatedly and safe to redeploy over.
    | `USC_PUBLIC_URL` | Your deployed URL, e.g. `https://connect.usasecuritygroup.com` | for email links |
    | `USC_EMAIL_API_KEY` | A [Resend](https://resend.com) API key | for email |
    | `USC_EMAIL_FROM` | `USA Security Connect <billing@yourdomain.com>` | for email |
+   | `USC_SMS_TWILIO_SID` | Your Twilio account SID (`AC...`) | for texts |
+   | `USC_SMS_TWILIO_TOKEN` | Its auth token | for texts |
+   | `USC_SMS_FROM` | The Twilio number to text from (`+1...`), or a messaging service SID (`MG...`) | for texts |
 
    Generate the two secrets:
 
@@ -119,6 +122,23 @@ then never arrive. Check the outbox after the first invoice: a row reading
 Passwords are never emailed, by design. A portal contact gets their password
 from whoever set the account up.
 
+### Text messages
+
+Late and no-show alerts are texted through [Twilio](https://www.twilio.com).
+Create an account, buy a number that can send SMS (a US number sending to US
+phones needs its A2P 10DLC registration approved first, or use a toll-free
+number once it is verified), and set `USC_SMS_TWILIO_SID`, `USC_SMS_TWILIO_TOKEN`
+and `USC_SMS_FROM`, then redeploy. Set `USC_PUBLIC_URL` too, so each text links
+to the board.
+
+Then each supervisor or administrator who wants texts opens **Late & no-shows →
+Text alerts**, enters their mobile number and types back the code texted to it.
+Without Twilio nothing is texted: every text is recorded in the list on that page
+as not sent, and the code is shown on screen instead.
+
+Texts go out from the compliance sweep, so they are only as prompt as it is:
+see the next section, and run it every minute.
+
 ### The cron job
 
 `vercel.json` registers `/api/cron/sweep`. That is what raises late, missed-check-in and
@@ -130,9 +150,10 @@ secret as a bearer token; the endpoint also accepts POST for triggering a sweep 
 refuses any cron that runs more often, and the deployment is rejected outright, not
 merely throttled.** A daily sweep catches no-shows and abandoned shifts the next morning.
 It does not give you missed-check-in alerts while an officer is still on post, which is
-the point of the feature. Two ways to get the five-minute sweep back:
+the point of the feature, nor late and no-show texts while there is still time to find
+cover. Two ways to get a frequent sweep back (every minute, for texts):
 
-- **Upgrade to Pro**, then set the schedule to `*/5 * * * *` in `vercel.json`.
+- **Upgrade to Pro**, then set the schedule to `* * * * *` in `vercel.json`.
 - **Point any external scheduler at it** (cron-job.org, UptimeRobot, a box you own):
 
   ```

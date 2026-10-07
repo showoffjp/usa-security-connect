@@ -294,6 +294,7 @@ export function AdminShell() {
       items: [
         { to: '/admin', icon: 'chart', label: 'Dashboard', end: true },
         { to: '/admin/live', icon: 'gps', label: 'Live tracking', count: counts.lateOrOff, urgent: true },
+        { to: '/admin/attendance', icon: 'clock', label: 'Late & no-shows', count: counts.lateNow, urgent: counts.lateNow > 0 },
         { to: '/admin/safety', icon: 'shield', label: 'Safety & map', count: counts.activeAlerts, urgent: true },
         { to: '/admin/handovers', icon: 'route', label: 'Handovers', count: counts.handoversAtRisk, urgent: counts.handoversAtRisk > 0 },
         { to: '/admin/dispatch', icon: 'phone', label: 'Dispatch', count: counts.activeCalls, urgent: counts.waitingCalls > 0 },

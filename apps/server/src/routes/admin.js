@@ -48,6 +48,7 @@ import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
 import { handovers } from '../services/handovers.js';
 import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
+import { attendanceBoard } from '../services/attendance.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -2279,13 +2280,17 @@ async function buildAlerts(userId) {
 
   for (const f of await db
     .prepare(
-      `SELECT f.id, f.type, f.severity, f.occurred_at, u.first_name || ' ' || u.last_name AS officer
+      `SELECT f.id, f.type, f.severity, f.occurred_at, f.ref_type, f.ref_id, u.first_name || ' ' || u.last_name AS officer
        FROM flags f JOIN users u ON u.id = f.user_id
        WHERE f.resolved_at IS NULL AND f.occurred_at >= ? AND (f.severity = 'critical' OR f.type IN ('no_show', 'off_post', 'missed_check_in'))
        ORDER BY f.occurred_at DESC LIMIT 25`
     )
     .all(since)) {
-    push({ key: `flag:${f.id}`, kind: 'flag', severity: f.severity === 'critical' ? 'critical' : 'warning', at: f.occurred_at, link: '/admin/flags',
+    // A no-show from the last twelve hours opens on the late and no-show
+    // board, where cover is found.
+    const recent = new Date(sqlToIso(f.occurred_at)) > new Date(Date.now() - 12 * 3600000);
+    const link = f.type === 'no_show' && f.ref_type === 'shift' && recent ? `/admin/attendance?shift=${f.ref_id}` : '/admin/flags';
+    push({ key: `flag:${f.id}`, kind: 'flag', severity: f.severity === 'critical' ? 'critical' : 'warning', at: f.occurred_at, link,
       title: `${FLAG_LABEL[f.type] || f.type}: ${f.officer}`, detail: 'Open compliance flag, not yet resolved' });
   }
 
@@ -2480,6 +2485,14 @@ async function buildAlerts(userId) {
       at: h.ends_at, link: `/admin/handovers?shift=${h.shift_id}`,
       title: late ? `${h.relief.officer} has not arrived to relieve ${h.officer}` : `Nobody is assigned to relieve ${h.officer}`,
       detail: `${h.post_name} · ${h.site_name}${h.held_over_minutes ? ` · held over ${h.held_over_minutes} min` : ''}` });
+  }
+
+  // An officer not yet clocked in after the grace period. Once it is a
+  // no-show the flag carries it; the key keeps one alert per shift.
+  for (const l of (await attendanceBoard()).open.filter((x) => x.state === 'late')) {
+    push({ key: `late:${l.shift_id}:${l.user_id}`, kind: 'late', severity: 'warning', at: l.starts_at,
+      link: `/admin/attendance?shift=${l.shift_id}`, title: `${l.officer} has not clocked in at ${l.post_name}`,
+      detail: `${l.site_name} · ${l.minutes_late} min after the start` });
   }
 
   // A shift in the next day that leaves its officer short of rest, over the
