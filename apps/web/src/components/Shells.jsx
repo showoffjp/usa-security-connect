@@ -44,6 +44,9 @@ function AccountMenu({ open, onClose }) {
           <Link className="btn btn-ghost btn-block" to="/change-pin" onClick={onClose}>
             <Icon name="shield" size={16} /> Change PIN
           </Link>
+          <a className="btn btn-ghost btn-block" href="/tour/">
+            <Icon name="book" size={16} /> Product tour
+          </a>
           {isSupervisor && (
             <Link className="btn btn-navy btn-block" to="/admin" onClick={onClose}>
               <Icon name="chart" size={16} /> Open admin console

@@ -15,6 +15,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/tour/",
+      "destination": "/tour/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
@@ -94,6 +98,13 @@
           "value": "public, max-age=3600"
         }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/tour",
+      "destination": "/tour/",
+      "permanent": false
     }
   ]
 }
