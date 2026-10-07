@@ -11,6 +11,16 @@ import './styles/app.css';
 import './lib/theme.js';
 
 /**
+ * The product tour is a static page (public/tour/index.html). A link that
+ * reaches the app instead - /tour without the slash, or the dev server's
+ * fallback - is sent on to it, signed in or not.
+ */
+function TourRedirect() {
+  window.location.replace('/tour/index.html');
+  return null;
+}
+
+/**
  * Two applications in one bundle.
  *
  * The split is made here rather than inside App so that a client contact never
@@ -25,6 +35,7 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/portal/*" element={<PortalApp />} />
           <Route path="/apply" element={<ApplyPage />} />
+          <Route path="/tour/*" element={<TourRedirect />} />
           <Route
             path="*"
             element={

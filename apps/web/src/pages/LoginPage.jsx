@@ -248,6 +248,8 @@ export default function LoginPage() {
           <br />
           Looking for work? <a href="/apply">Apply to join us</a>
           <br />
+          New here? <a href="/tour/">Take the product tour</a>, every screen with the demo sign-ins.
+          <br />
           Licensed Florida security agency &middot; B 3400341
         </p>
       </div>

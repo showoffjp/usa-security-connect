@@ -17,6 +17,7 @@ produces their timesheet, the client's coverage report and the invoice line.
 
 **[Open the live demo](https://usa-security-connect.vercel.app/)** ·
 **[Open the client portal](https://usa-security-connect.vercel.app/portal)** ·
+**[Take the product tour](https://usa-security-connect.vercel.app/tour/)** ·
 [Run it locally](#run-it-locally)
 
 ![The live operations dashboard: who is on post, open flags and incidents, unfilled shifts, and what needs attention](docs/screenshots/dashboard.jpg)
@@ -43,6 +44,11 @@ produces their timesheet, the client's coverage report and the invoice line.
 ---
 
 ## Try the live demo
+
+**[Take the product tour](https://usa-security-connect.vercel.app/tour/)**: every screen of
+the admin console, the officer app and the client portal, with the demo sign-ins and
+three five-minute walk-throughs, on one page. It is part of the site (`/tour/`), linked
+from the sign-in screens, the demo banner and the account menu.
 
 ### Demo sign-ins
 
@@ -1795,3 +1801,7 @@ that should not have it.
   roles, the PIN lifecycle and the pay calculation.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — GitHub, Neon and Vercel, step by step.
 - [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) — store builds, NFC and push.
+- [apps/web/public/tour/index.html](apps/web/public/tour/index.html) — the product tour at
+  `/tour/`. Its pictures are `docs/screenshots`, the same files as the feature tour
+  above: the dev server serves them at `/tour/img/` and the web build copies them in
+  (`vite.config.js`), so they are kept once. Add a new screen to both.

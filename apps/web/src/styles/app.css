@@ -833,6 +833,7 @@ table.report-table td { white-space: nowrap; padding: 8px 12px; }
   padding: 6px 16px; text-align: center; font-size: 0.8rem; line-height: 1.4;
   background: var(--warn-bg); color: var(--banner-warn-fg); border-bottom: 1px solid var(--banner-warn-line);
 }
+.demo-strip a { color: inherit; font-weight: 700; white-space: nowrap; }
 body:has(.demo-strip) .auth-screen { min-height: calc(100vh - 32px); }
 
 /* ------------------------------------------------------- quick search -- */

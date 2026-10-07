@@ -9,7 +9,7 @@ export default function DemoStrip() {
   if (!demo) return null;
   return (
     <div className="demo-strip" role="note">
-      <strong>Demo site</strong> · sample company and people. Changes you make here are not kept.
+      <strong>Demo site</strong> · sample company and people. Changes you make here are not kept. <a href="/tour/">Take the product tour</a>
     </div>
   );
 }

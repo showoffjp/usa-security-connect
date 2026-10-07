@@ -86,6 +86,8 @@ export default function PortalLogin() {
           </a>
           .
           <br />
+          See every screen in the <a href="/tour/" style={{ color: 'inherit' }}>product tour</a>.
+          <br />
           Licensed Florida security agency &middot; B 3400341
         </p>
       </div>
