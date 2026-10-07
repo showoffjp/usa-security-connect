@@ -1473,4 +1473,7 @@ CREATE TABLE IF NOT EXISTS conduct_records (
   rescind_reason       text
 );
 CREATE INDEX IF NOT EXISTS idx_conduct_user ON conduct_records(user_id, occurred_on DESC);
+-- Handovers: when a supervisor last chased a late or unconfirmed relief.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS relief_chased_at timestamptz;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS relief_chased_by integer REFERENCES users(id) ON DELETE SET NULL;
 `;
