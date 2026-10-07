@@ -14,7 +14,7 @@ and the API, web app and mobile app all follow.
 | `noShowMinutes` | 30 | No clock-in this long after start ⇒ the shift is a no-show. |
 | `defaultCheckInIntervalMinutes` | 60 | Status check-in cadence (overridable per post). |
 | `checkInWindowMinutes` | 10 | How long the officer has to answer before it is missed. |
-| `autoClockOutAfterMinutes` | 120 | Shift left open this long past its end is auto-closed and flagged. |
+| `autoClockOutAfterMinutes` | 120 | Shift left open this long past its end is auto-closed and flagged. An officer whose relief has not clocked in is held over instead, for up to 8 hours; once the relief clocks in, a forgotten clock-out closes at the handover, so the held-over time is paid. |
 | `defaultGeofenceRadiusM` | 150 | Accepted distance from the post (overridable per post). |
 | `maxTrustedAccuracyM` | 100 | Worse GPS accuracy than this is reported as *unverified*, not a violation. |
 | `maxPinAttempts` / `lockoutMinutes` | 5 / 15 | Failed PIN attempts before lockout, and for how long. |
@@ -35,7 +35,7 @@ which is kept on the officer's record.
 | `late_clock_in` | warning | Clock-in past the grace period on a scheduled shift. |
 | `missed_check_in` | critical | A status check-in window elapsed unanswered. Answering late raises it as a warning instead. |
 | `geofence_violation` | critical | Clock-in from outside the post's radius, or with no fix, using an override reason. |
-| `missed_clock_out` | warning | Shift auto-closed at its scheduled end because nobody clocked out. |
+| `missed_clock_out` | warning | Shift auto-closed because nobody clocked out: at its scheduled end, or at the handover when the officer was held over for a late relief. |
 | `early_departure` | warning | Clocked out more than 10 minutes early. |
 | `no_show` | critical | Scheduled shift with no clock-in 30 minutes after start. |
 | `unscheduled_shift` | info | Clocked in at a post with no matching shift. Not a fault — it tells dispatch coverage happened off-roster. |

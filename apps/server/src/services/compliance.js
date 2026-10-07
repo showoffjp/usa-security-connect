@@ -207,11 +207,47 @@ async function sweepNoShows(now) {
   return missed.length;
 }
 
-/** Shifts still open long after they should have ended. */
+/** An officer waiting for a late relief is held over for at most this long. */
+const HOLDOVER_MAX_MINUTES = 8 * 60;
+
+/**
+ * The relief for a time entry's shift: the shift by another officer at the
+ * same post starting around when this one ends, and when that officer
+ * clocked in there, if they have.
+ */
+async function reliefFor(entry) {
+  const end = toSql(new Date(fromSql(entry.ends_at)));
+  const relief = await db
+    .prepare(
+      `SELECT n.id, n.user_id FROM shifts n
+       WHERE n.post_id = ? AND n.id != ? AND n.status != 'cancelled'
+         AND n.user_id IS NOT NULL AND n.user_id != ?
+         AND n.starts_at BETWEEN ?::timestamptz - interval '60 minutes' AND ?::timestamptz + interval '60 minutes'
+       ORDER BY abs(EXTRACT(EPOCH FROM (n.starts_at - ?::timestamptz))) LIMIT 1`
+    )
+    .get(entry.post_id, entry.shift_id, entry.user_id, end, end, end);
+  if (!relief) return null;
+  const arrived = await db
+    .prepare(
+      `SELECT MIN(clock_in_at) AS at FROM time_entries
+       WHERE user_id = ? AND post_id = ? AND clock_in_at >= ?::timestamptz - interval '60 minutes'`
+    )
+    .get(relief.user_id, entry.post_id, end);
+  return { arrivedAt: arrived?.at ? new Date(fromSql(arrived.at)) : null };
+}
+
+/**
+ * Shifts still open long after they should have ended.
+ *
+ * An officer whose relief has not turned up is not abandoning the post: they
+ * are held over, and keep being paid, for up to HOLDOVER_MAX_MINUTES. Once
+ * the relief clocks in, an officer who forgot to clock out is closed at the
+ * handover, not at the scheduled end, so the time they stood is paid.
+ */
 async function sweepAbandonedShifts(now) {
   const open = (await db
     .prepare(
-      `SELECT te.*, s.ends_at
+      `SELECT te.*, s.ends_at, s.post_id AS shift_post_id
        FROM time_entries te
        LEFT JOIN shifts s ON s.id = te.shift_id
        WHERE te.clock_out_at IS NULL`
@@ -220,11 +256,25 @@ async function sweepAbandonedShifts(now) {
 
   let closed = 0;
   for (const entry of open) {
-    const reference = entry.ends_at
+    let reference = entry.ends_at
       ? new Date(fromSql(entry.ends_at))
       : new Date(new Date(fromSql(entry.clock_in_at)).getTime() + 16 * 60 * 60000);
-    const deadline = new Date(reference.getTime() + RULES.autoClockOutAfterMinutes * 60000);
+    let deadline = new Date(reference.getTime() + RULES.autoClockOutAfterMinutes * 60000);
     if (now <= deadline) continue;
+
+    // Held over for a relief: wait for them, then close at the handover.
+    let note = 'Officer did not clock out; entry auto-closed at the scheduled shift end.';
+    if (entry.ends_at && entry.shift_id) {
+      const relief = await reliefFor({ ...entry, post_id: entry.post_id || entry.shift_post_id });
+      const latest = new Date(reference.getTime() + HOLDOVER_MAX_MINUTES * 60000);
+      if (relief && !relief.arrivedAt && now <= latest) continue;
+      if (relief?.arrivedAt && relief.arrivedAt > reference) {
+        reference = relief.arrivedAt < latest ? relief.arrivedAt : latest;
+        deadline = new Date(reference.getTime() + RULES.autoClockOutAfterMinutes * 60000);
+        if (now <= deadline) continue;
+        note = 'Officer did not clock out after a holdover; entry auto-closed when their relief clocked in.';
+      }
+    }
 
     const minutes = minutesBetween(fromSql(entry.clock_in_at), reference.toISOString());
     (await db.prepare(
@@ -245,7 +295,7 @@ async function sweepAbandonedShifts(now) {
       refId: entry.id,
       detail: {
         auto_closed_at: reference.toISOString(),
-        note: 'Officer did not clock out; entry auto-closed at the scheduled shift end.',
+        note,
       },
     });
     closed += 1;

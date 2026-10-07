@@ -284,6 +284,47 @@ export function suggestedConductLevel(records = [], category, now = new Date()) 
   return CONDUCT_LEVELS[Math.min(top + 1, CONDUCT_LEVELS.indexOf('final_warning'))];
 }
 
+/* --------------------------------------------------------------- handovers -- */
+
+/** How far ahead the handover board looks at shifts ending. */
+export const HANDOVER_WINDOW_MINUTES = 120;
+
+/**
+ * Where an on-duty officer's relief stands, worst first. `relieved` means the
+ * relief is on post and the officer can hand over and go; `closes` means no
+ * shift follows at the post, so there is nobody to hand over to.
+ */
+export const HANDOVER_STATES = ['late', 'open', 'unconfirmed', 'confirmed', 'relieved', 'closes'];
+export const HANDOVER_STATE_LABEL = {
+  late: 'Relief late',
+  open: 'No relief assigned',
+  unconfirmed: 'Relief not confirmed',
+  confirmed: 'Relief confirmed',
+  relieved: 'Relief on post',
+  closes: 'Post closes',
+};
+
+/**
+ * The state of one handover. `outgoing` is the officer's shift (ends_at),
+ * `relief` the shift that follows at the same post (or null), with whether its
+ * officer has clocked in and confirmed.
+ */
+export function handoverState({ outgoing, relief, now = new Date() }) {
+  if (!relief) return 'closes';
+  if (relief.clocked_in) return 'relieved';
+  if (!relief.user_id) return 'open';
+  if (now.getTime() > new Date(relief.starts_at).getTime() + RULES.lateGraceMinutes * 60000) return 'late';
+  return relief.confirmed ? 'confirmed' : 'unconfirmed';
+}
+
+/** How serious a handover is, for sorting and alerts. */
+export function handoverSeverity(state, minutesToEnd) {
+  if (state === 'late') return 'critical';
+  if (state === 'open') return minutesToEnd <= 60 ? 'critical' : 'warning';
+  if (state === 'unconfirmed') return minutesToEnd <= 60 ? 'warning' : 'info';
+  return 'ok';
+}
+
 export const PANIC_STATUS = ['active', 'acknowledged', 'resolved', 'false_alarm'];
 
 export const INCIDENT_CATEGORIES = [
