@@ -1856,7 +1856,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 407
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 420
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1904,17 +1904,17 @@ The suites, in the order they run:
     text each to Vince and the supervisor;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 125
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 127
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 136 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 138 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens
   shipped that way before the check existed.
 - **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
   screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
-  light and night mode (345 screens). On each one it measures the layout for faults a
+  light and night mode (351 screens). On each one it measures the layout for faults a
   phone shows and a desktop hides:
   - text squeezed to a few letters a line;
   - a word wider than its box;
