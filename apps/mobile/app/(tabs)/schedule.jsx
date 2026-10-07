@@ -157,6 +157,12 @@ export default function ScheduleScreen() {
                             )} scheduled`}
                         {changeable ? '  ·  tap for options' : ''}
                       </Text>
+                      {s.fatigue?.length > 0 && (
+                        <Text style={[S.tiny, { marginTop: 4, color: C.warn }]}>
+                          <Text style={S.strong}>{`${s.fatigue.map((f) => f.label).join(', ')}: `}</Text>
+                          {`${s.fatigue.map((f) => f.note).join(' ')} If you will not get the rest you need, tell your supervisor.`}
+                        </Text>
+                      )}
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
                       <Text style={[S.small, S.strong]}>{fmtRange(s.starts_at, s.ends_at)}</Text>
