@@ -45,6 +45,7 @@ import { overtimeWatch } from '../services/overtime.js';
 import { fleet } from '../services/vehicles.js';
 import { holidaysForSpan, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services/holidays.js';
 import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
+import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -248,6 +249,8 @@ adminRouter.get(
     const signoffDisputes = Number((await db.prepare(`SELECT COUNT(*) AS n FROM hours_signoffs WHERE status = 'disputed' AND response IS NULL`).get()).n);
     // Officers rostered in the coming week at a post they are not trained at.
     const untrainedRostered = (await trainingAlerts()).length;
+    // Coaching and warnings an officer has left unsigned for days.
+    const conductUnsigned = (await unsignedOverdue()).filter((r) => r.officer_role === 'officer' || req.user.role === ROLES.ADMIN).length;
     // Expense claims waiting for an administrator.
     const pendingExpenses = Number((await db.prepare(`SELECT COUNT(*) AS n FROM expense_claims WHERE status = 'pending'`).get()).n);
     const overtimeRisk = (await overtimeWatch()).totals.avoidable;
@@ -303,6 +306,7 @@ adminRouter.get(
         pendingCorrections,
         signoffDisputes,
         untrainedRostered,
+        conductUnsigned,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
         unconfirmedShifts: unconfirmed.length,
@@ -866,6 +870,7 @@ adminRouter.get(
     );
 
     const trainingOf = post.training_required ? await trainingStatesForPost(post.id) : null;
+    const suspended = await suspendedIds(startsAt);
 
     const shiftMinutes = Math.round((endsAt - startsAt) / 60000);
     const threshold = RULES.overtimeWeeklyHours * 60;
@@ -879,6 +884,7 @@ adminRouter.get(
         timeOff: leave.get(u.id) || [],
         availability: availability.get(u.id) || null,
         training: trainingOf ? trainingOf(u.id) : null,
+        suspended: suspended.has(u.id),
       });
       const before = rostered.get(u.id) || 0;
       const after = before + shiftMinutes;
@@ -2439,6 +2445,15 @@ async function buildAlerts(userId) {
       at: t.starts_at, link: '/admin/site-training',
       title: lapsed ? `${t.officer} needs a refresher at ${t.post_name}` : `${t.officer} is not trained at ${t.post_name}`,
       detail: `${t.site_name} · rostered ${new Date(t.starts_at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
+  }
+
+  // A coaching or warning the officer has not signed after a few days.
+  // Supervisors' own records are for administrators only.
+  const viewer = await db.prepare(`SELECT role FROM users WHERE id = ?`).get(userId);
+  for (const r of (await unsignedOverdue()).filter((x) => x.officer_role === 'officer' || viewer?.role === ROLES.ADMIN)) {
+    push({ key: `conduct:${r.id}`, kind: 'conduct', severity: 'info', at: r.created_at, link: `/admin/conduct?record=${r.id}`,
+      title: `${r.officer} has not signed a ${r.level_label.toLowerCase()}`,
+      detail: `${r.category_label} · issued ${r.occurred_on}. Go through it with them, or record that they refused.` });
   }
 
   // Money an officer spent and has claimed back.

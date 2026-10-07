@@ -19,6 +19,7 @@ import { CallsCard } from '../../src/CallsCard.jsx';
 import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { HeldEquipment } from '../../src/HeldEquipment.jsx';
 import { NewCommendations } from '../../src/Commendations.jsx';
+import { ConductToSign } from '../../src/Conduct.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -191,6 +192,7 @@ export default function HomeScreen() {
         <PostLogCards postLog={postLog} notify={notify} />
         <ExpiryReminder user={user} />
         <NewCommendations notify={notify} refreshKey={pulls} />
+        <ConductToSign user={user} notify={notify} refreshKey={pulls} />
         <HeldEquipment notify={notify} refreshKey={pulls} />
 
         {/* Breaks only make sense while the clock is running. */}

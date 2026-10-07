@@ -74,6 +74,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 5. Log a patrol under **Activity**.
 6. Under **Schedule**, tap **Confirm I'll be there** on tomorrow's shift.
 7. Under **Signed out to you**, check the garage patrol truck before driving.
+8. Read the coaching under **To read and sign**, add your side, and sign it.
 
 **Running the operation** (`1002` / `3571`)
 
@@ -86,6 +87,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 7. Under **Post logs → Post orders**, apply Dana Whitfield's requested change as a new version.
 8. Reply to the two-star rating under **Client feedback**.
 9. Under **Site training**, sign Darnell Hughes off at the armed garage post he has been working.
+10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -235,11 +237,19 @@ Build rosters, answer requests, keep licences current.
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/site-training-signoff.jpg"><img src="docs/screenshots/site-training-signoff.jpg" alt="A supervisor signing an officer off at an armed post"></a><br><b>Sign an officer off</b><br>After a shadow shift, a walkthrough or past experience at the post. The officer's roster flags clear, and training lapses after 180 days away.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/conduct.jpg"><img src="docs/screenshots/conduct.jpg" alt="Coaching and discipline: where each officer stands, what is waiting for a signature, and every record"></a><br><b>Coaching &amp; discipline</b><br>Each step on an officer's record, from coaching to suspension: who stands where, what the officer has not signed yet, and the next step each would usually be.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/conduct-issue.jpg"><img src="docs/screenshots/conduct-issue.jpg" alt="A supervisor recording a step on an officer's record, with the next step suggested"></a><br><b>Record a step</b><br>What happened and what is expected from now on. The step is suggested from their record this year; final warnings and suspensions are an administrator's.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-conduct.jpg"><img src="docs/screenshots/employee-conduct.jpg" alt="An officer's coaching and warnings on their employee record"></a><br><b>On their record</b><br>Coached, a verbal warning signed with their side of it, a written warning they refused to sign, with the witness. Each counts for a year.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/scorecards.jpg"><img src="docs/screenshots/scorecards.jpg" alt="Officer scorecards"></a><br><b>Scorecards</b><br>Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.</td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
+    <td width="50%"></td>
   </tr>
 </table>
 
@@ -250,7 +260,7 @@ On the phone:
     <td width="25%" valign="top"><a href="docs/screenshots/officer-punches.jpg"><img src="docs/screenshots/officer-punches.jpg" alt="An officer's recent punches with a correction waiting"></a><br><b>Fix a time</b><br>An officer's punches from the last two weeks. A wrong one goes to the office with the right time and what happened; the answer shows here.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-licence.jpg"><img src="docs/screenshots/officer-licence.jpg" alt="Licence renewal reminder"></a><br><b>Licence reminders</b><br>A licence or certificate lapsing within 30 days shows on the home screen.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-site-training.jpg"><img src="docs/screenshots/officer-site-training.jpg" alt="The posts an officer is cleared to work, on their profile"></a><br><b>Cleared for a post</b><br>Each post the officer is signed off at, by whom and how, and any training shift coming up.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-sign.jpg"><img src="docs/screenshots/officer-sign.jpg" alt="An officer reading and signing a coaching on their phone"></a><br><b>Read and sign</b><br>The officer reads what happened, adds their side if they want, and signs by typing their name. Signing says they read it, not that they agree.</td>
   </tr>
 </table>
 
@@ -621,6 +631,10 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Licence reminders** — the home screen (web and mobile) warns when the officer's
   licence or any certification lapses within 30 days, or already has, listing each
   with its date.
+- **To read and sign** — a coaching or warning from a supervisor appears on the home
+  screen (web and phone) until the officer reads it and signs by typing their name,
+  with their side of it if they want. Signing says they have read it, not that they
+  agree. The profile keeps the whole record, and says when one no longer counts.
 - **Site training** — the profile (web) and Schedule tab (phone) list the posts the
   officer is cleared to work alone, who signed them off and how, any that need a
   refresher or were withdrawn (with the reason), and any **training shift** coming up.
@@ -938,6 +952,26 @@ and a supervisor can only read is noted where it matters.
 - **Licensing & certifications** — one board for state licences, certifications and
   contractor insurance, showing what has expired and what lapses in the next 30/60/90
   days.
+- **Coaching & discipline** (Workforce → Coaching & discipline) — each documented step
+  on an officer's record: coaching, then a verbal, written and final warning, then a
+  suspension. Each says what happened and what is expected from now on, and counts
+  towards the next step for 12 months.
+  - Recording one suggests the usual next step from the officer's record this year
+    for the same kind of problem (a third late start after coaching and a verbal
+    warning suggests a written warning). Supervisors record the first three steps for
+    officers; final warnings, suspensions and anything for a supervisor are an
+    administrator's. Nobody records a step on their own record.
+  - The officer is notified and signs it in the app. If they will not, a supervisor
+    records the refusal with a witness. One left unsigned for three days is in the
+    alerts inbox and on the sidebar count.
+  - A suspension keeps the officer off the roster for its days (at most 30): they
+    cannot claim shifts on them, are not offered for them, and the supervisor is told
+    which of their rostered shifts need someone else.
+  - Only an administrator rescinds a record. It stays on file, marked, with the reason,
+    and stops counting.
+  - The board shows where each officer stands, what is waiting for a signature, and
+    every record from the last year. Each officer's employee record shows their own.
+    Supervisors' records are for administrators only, and clients never see any of it.
 - **Site training** (Workforce → Site training) — the posts an administrator has marked
   **Needs site training** under Sites & posts (the armed posts, a hospital's emergency
   entrance, a lab's access desk). Only an officer a supervisor has signed off at the
@@ -1396,7 +1430,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 36 steps and stops it:
+One command reseeds the database, starts the API, runs all 37 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1637,6 +1671,23 @@ The suites, in the order they run:
     the post to him again and shows him why.
   - Only an administrator turns a post's training requirement off and on, and one
     post's page lists everyone, those who know it best first. All of it is audited.
+- **`test/conduct.mjs`** — the board shows the demo's records: the attendance ladder
+  whose next step is a final warning, the written warning refused before a witness,
+  the rescinded one that no longer counts, and the unsigned one chased in the alerts
+  inbox and the sidebar count. Officers and clients cannot see it.
+  - Marcus sees his coaching and who recorded it, without internal ids. Signing needs
+    his full name (in any case and spacing), happens once, and keeps his side of it.
+    Another officer's record is not found.
+  - Recording a step needs a description and expectations, a date in the last 60
+    days, someone other than oneself, and an administrator for a final warning. Only a
+    suspension has days off.
+  - Janelle's verbal warning suggests a written warning next. She refuses to sign, the
+    refusal names a witness, and then there is nothing to sign.
+  - A one-day suspension on the day of an open shift stops her claiming it and takes
+    her off the candidates. Only an administrator rescinds it, once, after which she
+    can claim it again and it no longer counts towards where she stands.
+  - A supervisor's record is for administrators: only one can record a step for a
+    supervisor, read their record, or see it on the board. Every step is audited.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1649,7 +1700,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 373
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 388
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1680,23 +1731,26 @@ The suites, in the order they run:
     holiday rates show it, a supervisor sees how it is staffed, and it is removed again;
   - a client queries a week of hours from the portal, an administrator replies, and
     the client signs the week off;
+  - Marcus reads and signs a coaching with his side of it, then a supervisor records a
+    coaching for Janelle (suggested as the first step, with no final warning on offer)
+    and her refusal to sign it;
   - a supervisor signs an officer off at the armed garage post he has been working,
     which clears his roster flags, then withdraws and restores another officer's
     training at the lab desk; the client sees how many officers are trained at the
     emergency entrance;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 122
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 123
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 133 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 134 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens
   shipped that way before the check existed.
 - **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
   screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
-  light and night mode (324 screens). On each one it measures the layout for faults a
+  light and night mode (336 screens). On each one it measures the layout for faults a
   phone shows and a desktop hides:
   - text squeezed to a few letters a line;
   - a word wider than its box;

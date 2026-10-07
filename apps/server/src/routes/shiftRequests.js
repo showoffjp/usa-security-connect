@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, isoFields } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, sqlToIso } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, atLeast, shiftEligibility, blocksAssignment, blocksSelfService, SHIFT_REQUEST_LABEL } from '../shared.js';
 import { trainingStateFor } from '../services/training.js';
+import { suspendedOn } from '../services/conduct.js';
 import { pushAsync, supervisorIds } from '../services/push.js';
 
 export const shiftRequestsRouter = Router();
@@ -54,7 +55,9 @@ export async function checkEligibility(userId, shift) {
 
   const training = post?.training_required ? await trainingStateFor(userId, post.id) : null;
 
-  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability, training });
+  const suspended = await suspendedOn(userId, new Date(sqlToIso(shift.starts_at)));
+
+  return shiftEligibility({ post, officer, certifications, conflicts, timeOff, availability, training, suspended });
 }
 
 /** The first reason an officer cannot take a shift themselves, worded for them. */
