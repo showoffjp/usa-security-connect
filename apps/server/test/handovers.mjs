@@ -6,9 +6,10 @@
  * Supervisors see both on the board and in the alerts inbox, and chase the
  * late relief; each officer sees their own side of it.
  *
- * Both are set up from whoever is on duty when the seed runs. In the first
- * hours of a payroll week nobody has been on long enough, so those checks are
- * skipped and say so.
+ * Both are set up from whoever is on duty when the seed runs, or with a
+ * stand-in on a quiet post when nobody fits. Only in the first hour of a
+ * payroll week, when no shift may start before it, is there no room for them;
+ * then those checks are skipped and say so.
  */
 
 import { call, log, section, signIn, finish } from './harness.mjs';
@@ -43,7 +44,7 @@ const dash = (await call('/admin/dashboard', { token: supervisor })).data.counts
 log(typeof dash.handoversAtRisk === 'number' && dash.handoversAtRisk === board.data.counts.at_risk, 'the sidebar counts the ones at risk', `${dash.handoversAtRisk}`);
 
 if (!late || !open) {
-  console.log('SKIP  nobody on duty at this hour fits the demo holdovers, so they were not seeded');
+  console.log('SKIP  the payroll week has only just started, so the demo holdovers were not seeded');
 } else {
   log(late.held_over_minutes >= 20 && late.relief.confirmed && late.relief.minutes_late >= 20 && late.relief.phone,
     `${late.officer} is held over at ${late.post_name}: ${late.relief.officer} confirmed and has not come`, `${late.held_over_minutes} min`);

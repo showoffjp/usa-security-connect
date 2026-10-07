@@ -19,6 +19,14 @@
       "destination": "/tour/index.html"
     },
     {
+      "source": "/demo/",
+      "destination": "/tour/index.html"
+    },
+    {
+      "source": "/demo/img/:file",
+      "destination": "/tour/img/:file"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
@@ -104,6 +112,11 @@
     {
       "source": "/tour",
       "destination": "/tour/",
+      "permanent": false
+    },
+    {
+      "source": "/demo",
+      "destination": "/demo/",
       "permanent": false
     }
   ]
