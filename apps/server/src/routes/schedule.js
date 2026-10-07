@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { db, audit } from '../lib/db.js';
 import { HttpError, wrap, isoFields, toDateString, sqlToIso, dateParam, idParam } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
-import { splitOvertime, toHours, CONFIRM_AHEAD_DAYS } from '../shared.js';
+import { splitOvertime, toHours, CONFIRM_AHEAD_DAYS, fatigueIssues, FATIGUE_LABEL } from '../shared.js';
 import { confirmationOf, confirmShift, confirmable, withConfirmation } from '../services/confirmations.js';
 import { toSql } from '../services/compliance.js';
 import { loadPricedEntries, personPay } from '../services/payroll.js';
 import { dayString } from '../services/payPeriods.js';
 import { holidaysForSpan } from '../services/holidays.js';
+import { shiftsAsWorked } from '../services/fatigue.js';
 
 export const scheduleRouter = Router();
 scheduleRouter.use(requireAuth);
@@ -34,6 +35,10 @@ scheduleRouter.get(
       .all(req.user.id, toSql(from), toSql(to)));
     // A shift that starts on a holiday says so: the officer sees it on the roster.
     const holidays = await holidaysForSpan(from, to);
+    // And one still to come that leaves them short of rest, or over the hours
+    // in a day or the days in a row, says that too.
+    const worked = (await shiftsAsWorked({ from: new Date(from - 8 * 86400000), to: new Date(+to + 8 * 86400000), userId: req.user.id })).get(req.user.id) || [];
+    const now = Date.now();
 
     res.json({
       shifts: shifts.map((s) => {
@@ -42,6 +47,10 @@ scheduleRouter.get(
           ...isoFields(withConfirmation(s), ['starts_at', 'ends_at', 'clock_in_at', 'clock_out_at', 'created_at']),
           confirmable: confirmable(s),
           holiday: h ? { name: h.name, pay_multiplier: h.pay_multiplier } : null,
+          fatigue: new Date(sqlToIso(s.starts_at)) > now && s.status === 'scheduled'
+            ? fatigueIssues({ startsAt: sqlToIso(s.starts_at), endsAt: sqlToIso(s.ends_at), others: worked.filter((x) => x.id !== s.id) })
+                .map(({ code, note }) => ({ code, label: FATIGUE_LABEL[code], note }))
+            : [],
         };
       }),
       range: { from: from.toISOString(), to: to.toISOString() },

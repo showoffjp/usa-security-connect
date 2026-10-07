@@ -36,6 +36,7 @@ import OvertimePage from './pages/admin/OvertimePage.jsx';
 import SiteTrainingPage from './pages/admin/SiteTrainingPage.jsx';
 import ConductPage from './pages/admin/ConductPage.jsx';
 import HandoversPage from './pages/admin/HandoversPage.jsx';
+import FatiguePage from './pages/admin/FatiguePage.jsx';
 import HolidaysPage from './pages/admin/HolidaysPage.jsx';
 import HiringPage from './pages/admin/HiringPage.jsx';
 import BroadcastsPage from './pages/admin/BroadcastsPage.jsx';
@@ -144,6 +145,7 @@ export default function App() {
         <Route path="site-training" element={<SiteTrainingPage />} />
         <Route path="conduct" element={<ConductPage />} />
         <Route path="handovers" element={<HandoversPage />} />
+        <Route path="fatigue" element={<FatiguePage />} />
         <Route path="holidays" element={<HolidaysPage />} />
         <Route path="hiring" element={<HiringPage />} />
         <Route path="site-health/:id" element={<SiteMonthPage />} />

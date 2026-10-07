@@ -5,10 +5,10 @@ import { fmtDay, fmtTime, fmtRange, toDateInput, toLocalInput, fmtDate } from '.
 import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Banner, Segmented, useToast,
 } from '../../components/ui.jsx';
-import { toHours } from '@shared/domain.js';
+import { toHours, FATIGUE_LABEL } from '@shared/domain.js';
 
 /** Site training reasons are long; the candidate list says them in a word. */
-const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here' };
+const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here', ...FATIGUE_LABEL };
 
 const WEEKDAYS = [
   { value: 1, label: 'Mon' },

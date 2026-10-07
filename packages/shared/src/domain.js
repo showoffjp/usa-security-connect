@@ -121,7 +121,7 @@ export const SHIFT_REQUEST_STATUS = [
  * Returned as a list so the UI can show every reason at once rather than
  * making someone fix them one at a time. An empty list means eligible.
  */
-export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null, training = null, suspended = false }) {
+export function shiftEligibility({ post, officer, certifications = [], conflicts = [], timeOff = [], availability = null, training = null, suspended = false, fatigue = [] }) {
   const reasons = [];
 
   if (suspended) {
@@ -183,6 +183,11 @@ export function shiftEligibility({ post, officer, certifications = [], conflicts
     );
   }
 
+  // Rest and fatigue (see fatigueIssues): a supervisor can still roster it,
+  // with the warning in front of them, but an officer cannot take it on
+  // themselves.
+  reasons.push(...fatigue);
+
   return reasons;
 }
 
@@ -195,6 +200,116 @@ export const blocksAssignment = (reasons = []) => reasons.some((r) => !r.advisor
  * a supervisor may decide, such as working a post before being trained there.
  */
 export const blocksSelfService = (reasons = []) => reasons.some((r) => !r.advisory || r.supervisorOnly);
+
+/* ------------------------------------------------------- rest and fatigue -- */
+
+export const FATIGUE_CODES = ['short_rest', 'long_day', 'too_many_days'];
+export const FATIGUE_LABEL = {
+  short_rest: 'Short rest',
+  long_day: 'Long day',
+  too_many_days: 'Too many days in a row',
+};
+
+const HOUR_MS = 3600000;
+const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const hoursText = (h) => `${Math.round(h * 10) / 10} h`;
+
+/**
+ * Rest and fatigue around one shift, from the officer's other shifts.
+ *
+ * `others` are their other shifts near it, each with `starts_at` and
+ * `ends_at` as worked: a shift they were held over on ends when they clocked
+ * out (or now, if they are still on). Shifts that overlap this one are a
+ * conflict, not a rest problem, and are left out. Three rules, each from RULES:
+ *
+ *  - at least minRestHours off between shifts, before and after this one;
+ *    working straight on (no gap at all) is a long day instead;
+ *  - at most maxHoursPer24 hours of work in any 24 hours;
+ *  - at most maxConsecutiveDays days in a row with a shift.
+ *
+ * Returns eligibility reasons: advisory, so a supervisor can still roster the
+ * shift, and supervisorOnly, so an officer cannot claim or swap into it.
+ *
+ * With `lookBack`, only what leads up to the shift counts: the rest before
+ * it, the 24 hours ending when it does, and the days in a row up to it. That
+ * is how the fatigue board lists a problem once, on the shift that tips it,
+ * rather than on both shifts either side of a short gap.
+ */
+export function fatigueIssues({ startsAt, endsAt, others = [], rules = RULES, lookBack = false }) {
+  const start = new Date(startsAt).getTime();
+  const end = new Date(endsAt).getTime();
+  const shifts = others
+    .map((o) => ({ start: new Date(o.starts_at).getTime(), end: new Date(o.ends_at).getTime() }))
+    .filter((o) => o.end > o.start && (o.end <= start || o.start >= end));
+  const issues = [];
+  const minRest = rules.minRestHours * HOUR_MS;
+
+  const before = shifts.filter((o) => o.end <= start).sort((a, b) => b.end - a.end)[0];
+  const after = shifts.filter((o) => o.start >= end).sort((a, b) => a.start - b.start)[0];
+  const restBefore = before ? start - before.end : null;
+  const restAfter = after ? after.start - end : null;
+  if (restBefore != null && restBefore > 0 && restBefore < minRest) {
+    issues.push({
+      code: 'short_rest',
+      message: `Only ${hoursText(restBefore / HOUR_MS)} off since their last shift ended (${rules.minRestHours} h is the minimum).`,
+      officerMessage: `You would have only ${hoursText(restBefore / HOUR_MS)} off before this shift; ${rules.minRestHours} h is the minimum. Ask a supervisor.`,
+      note: `Only ${hoursText(restBefore / HOUR_MS)} off before this shift, after your last one.`,
+    });
+  } else if (!lookBack && restAfter != null && restAfter > 0 && restAfter < minRest) {
+    issues.push({
+      code: 'short_rest',
+      message: `Only ${hoursText(restAfter / HOUR_MS)} off before their next shift (${rules.minRestHours} h is the minimum).`,
+      officerMessage: `You would have only ${hoursText(restAfter / HOUR_MS)} off before your next shift; ${rules.minRestHours} h is the minimum. Ask a supervisor.`,
+      note: `Only ${hoursText(restAfter / HOUR_MS)} off between this shift and your next.`,
+    });
+  }
+
+  // The busiest 24 hours that include this shift: every window starting at a
+  // shift start, or ending at a shift end, that touches it.
+  const all = [...shifts, { start, end }];
+  const windows = [];
+  if (lookBack) windows.push(end - 24 * HOUR_MS);
+  else for (const s of all) windows.push(s.start, s.end - 24 * HOUR_MS);
+  let worst = 0;
+  for (const w of windows) {
+    const wEnd = w + 24 * HOUR_MS;
+    if (wEnd <= start || w >= end) continue;
+    const worked = all.reduce((sum, s) => sum + Math.max(0, Math.min(s.end, wEnd) - Math.max(s.start, w)), 0);
+    worst = Math.max(worst, worked);
+  }
+  if (worst > rules.maxHoursPer24 * HOUR_MS) {
+    issues.push({
+      code: 'long_day',
+      message: `${hoursText(worst / HOUR_MS)} of work in 24 hours (${rules.maxHoursPer24} h is the most).`,
+      officerMessage: `That would be ${hoursText(worst / HOUR_MS)} of work in 24 hours; ${rules.maxHoursPer24} h is the most. Ask a supervisor.`,
+      note: `${hoursText(worst / HOUR_MS)} of work in 24 hours.`,
+    });
+  }
+
+  // Days in a row with a shift, counting this one's start day.
+  const days = new Set(all.map((s) => localDay(new Date(s.start))));
+  const day = new Date(start);
+  day.setHours(12, 0, 0, 0);
+  let run = 1;
+  for (const step of lookBack ? [-1] : [-1, 1]) {
+    const d = new Date(day);
+    for (;;) {
+      d.setDate(d.getDate() + step);
+      if (!days.has(localDay(d))) break;
+      run += 1;
+    }
+  }
+  if (run > rules.maxConsecutiveDays) {
+    issues.push({
+      code: 'too_many_days',
+      message: `${run} days in a row (${rules.maxConsecutiveDays} is the most).`,
+      officerMessage: `That would be ${run} days in a row; ${rules.maxConsecutiveDays} is the most. Ask a supervisor.`,
+      note: `Day ${run} in a row.`,
+    });
+  }
+
+  return issues.map((i) => ({ ...i, advisory: true, supervisorOnly: true, rest_before_hours: restBefore != null ? restBefore / HOUR_MS : null }));
+}
 
 /* ----------------------------------------------------------- site training -- */
 
@@ -507,6 +622,12 @@ export const RULES = {
   gpsStaleMinutes: 15,
   /** Location history older than this is deleted by the sweep. */
   locationRetentionDays: 90,
+  /** Fewest hours off between one shift ending (as worked) and the next starting. */
+  minRestHours: 8,
+  /** Most hours worked in any 24 hours. */
+  maxHoursPer24: 16,
+  /** Most days in a row with a shift. */
+  maxConsecutiveDays: 6,
 };
 
 export const BROADCAST_PRIORITY = ['normal', 'important', 'urgent'];

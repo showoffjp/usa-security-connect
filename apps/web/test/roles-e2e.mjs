@@ -1706,6 +1706,45 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* -------------------------------------------- round 31: rest and fatigue --- */
+{
+  console.log('\n--- Rest & fatigue: a supervisor sees who is short of rest; the officer sees it on their schedule ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const supToken = (await api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: '1002', pin: '3571' }) })).token;
+  const board = await api('/admin/fatigue', supToken);
+  const rest = board.shifts.find((f) => f.issues.some((i) => i.code === 'short_rest') && f.employee_code !== '1003');
+
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + '/admin/fatigue');
+  await sup.page.waitForSelector('h1:has-text("Rest & fatigue")', { timeout: 10000 });
+  await settle(sup.page);
+  log(await sup.page.locator('ul.list > li').count() === board.shifts.length, 'the board lists every shift that breaks a rule this week', `${board.shifts.length}`);
+  log(await sup.page.locator('.chip:has-text("Too many days in a row")').count() >= 1, 'including a seventh day in a row');
+  await checkScreen('supervisor: rest and fatigue', sup.page, sup.problems);
+  if (rest) {
+    const row = sup.page.locator(`#fatigue-${rest.shift_id}`);
+    log(await row.locator('.chip:has-text("Short rest")').count() === 1 && await row.locator(`text=${rest.officer}`).count() >= 1,
+      `${rest.officer} is short of rest before ${rest.post_name}`);
+    await row.locator('a:has-text("Open on the schedule")').click();
+    await sup.page.waitForURL(/\/admin\/schedule\?week=.*&shift=/, { timeout: 10000 });
+    log(true, 'and the shift opens on the schedule, to reassign or move');
+  }
+  await sup.context.close();
+
+  if (rest) {
+    const pin = String(((Number(rest.employee_code) * 7919) % 9000) + 1000);
+    const officer = await watchedPage({ width: 390, height: 844 });
+    await staffSignIn(officer.page, rest.employee_code, pin);
+    await officer.page.goto(WEB + '/schedule');
+    await settle(officer.page);
+    log(await officer.page.locator('text=Only 6 h off before this shift').count() >= 1, 'the officer sees the short rest on their schedule');
+    await checkScreen('officer: short rest on the schedule', officer.page, officer.problems);
+    await officer.context.close();
+  }
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

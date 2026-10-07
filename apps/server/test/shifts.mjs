@@ -93,9 +93,13 @@ log(
 section('swapping an assigned shift');
 
 const janelleRoster = await call('/schedule', { token: janelle });
-const janelleShift = janelleRoster.data.shifts.find(
-  (s) => new Date(s.starts_at) > new Date() && s.status === 'scheduled'
-);
+// One Marcus (user 3) could take on himself: no overlap with his own roster,
+// and within the rest and fatigue rules, which the eligibility check applies.
+let janelleShift = null;
+for (const s of janelleRoster.data.shifts.filter((x) => new Date(x.starts_at) > new Date() && x.status === 'scheduled')) {
+  const { reasons } = (await call(`/shifts/eligibility/${s.id}/3`, { token: admin })).data;
+  if (!reasons.some((r) => !r.advisory || r.supervisorOnly)) { janelleShift = s; break; }
+}
 log(!!janelleShift, 'found a future shift to swap', janelleShift && janelleShift.post_name);
 
 const notMine = await call(`/shifts/${janelleShift.id}/swap`, {
@@ -117,7 +121,7 @@ const swap = await call(`/shifts/${janelleShift.id}/swap`, {
   method: 'POST',
   body: { targetUserId: 3, note: 'Dentist that morning.' },
 });
-log(swap.status === 201, 'swap offered to another officer', `request ${swap.data?.request?.id}`);
+log(swap.status === 201, 'swap offered to another officer', swap.status === 201 ? `request ${swap.data?.request?.id}` : swap.data?.error);
 
 const prematureApproval = await call(`/shifts/requests/${swap.data.request.id}`, {
   token: admin,

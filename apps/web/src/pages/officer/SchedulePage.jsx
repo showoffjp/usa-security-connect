@@ -143,6 +143,12 @@ export default function SchedulePage() {
                             </div>
                           </details>
                         )}
+                        {s.fatigue?.length > 0 && (
+                          <div className="tiny" style={{ marginTop: 6, color: 'var(--warn)' }}>
+                            <strong>{s.fatigue.map((f) => f.label).join(', ')}:</strong> {s.fatigue.map((f) => f.note).join(' ')} If you will not get the
+                            rest you need, tell your supervisor.
+                          </div>
+                        )}
                       </div>
                       <div className="list-trailing" style={{ textAlign: 'right' }}>
                         <div className="small strong nowrap">{fmtRange(s.starts_at, s.ends_at)}</div>

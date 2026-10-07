@@ -314,6 +314,7 @@ export function AdminShell() {
         { to: '/admin/schedule', icon: 'calendar', label: 'Schedule', count: counts.unfilledShifts },
         { to: '/admin/shift-requests', icon: 'route', label: 'Shift requests', count: counts.openShiftRequests },
         { to: '/admin/overtime', icon: 'clock', label: 'Overtime watch', count: counts.overtimeRisk, urgent: counts.overtimeRisk > 0 },
+        { to: '/admin/fatigue', icon: 'clock', label: 'Rest & fatigue', count: counts.fatigueRisks },
         { to: '/admin/coverage-requests', icon: 'plus', label: 'Client requests', count: counts.coverageRequests, urgent: true },
         { to: '/admin/punches', icon: 'list', label: 'Punch log' },
         { to: '/admin/timesheets', icon: 'clock', label: 'Timesheets & pay', count: counts.pendingCorrections },

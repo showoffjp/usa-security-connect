@@ -47,6 +47,7 @@ import { holidaysForSpan, holidayOutlook, HOLIDAY_ALERT_DAYS } from '../services
 import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
 import { handovers } from '../services/handovers.js';
+import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -252,6 +253,8 @@ adminRouter.get(
     const untrainedRostered = (await trainingAlerts()).length;
     // Posts changing hands soon with no relief assigned, or a relief who has not come.
     const handoversAtRisk = (await handovers()).counts.at_risk;
+    // Shifts in the next week that break a rest or fatigue rule.
+    const fatigueRisks = (await fatigueBoard()).counts.total;
     // Coaching and warnings an officer has left unsigned for days.
     const conductUnsigned = (await unsignedOverdue()).filter((r) => r.officer_role === 'officer' || req.user.role === ROLES.ADMIN).length;
     // Expense claims waiting for an administrator.
@@ -310,6 +313,7 @@ adminRouter.get(
         signoffDisputes,
         untrainedRostered,
         handoversAtRisk,
+        fatigueRisks,
         conductUnsigned,
         agreementsShort: agreementSummary.short,
         agreementRenewals: agreementSummary.renewals,
@@ -875,6 +879,7 @@ adminRouter.get(
 
     const trainingOf = post.training_required ? await trainingStatesForPost(post.id) : null;
     const suspended = await suspendedIds(startsAt);
+    const fatigueOf = await fatigueForAll({ startsAt, endsAt, excludeShiftId });
 
     const shiftMinutes = Math.round((endsAt - startsAt) / 60000);
     const threshold = RULES.overtimeWeeklyHours * 60;
@@ -889,6 +894,7 @@ adminRouter.get(
         availability: availability.get(u.id) || null,
         training: trainingOf ? trainingOf(u.id) : null,
         suspended: suspended.has(u.id),
+        fatigue: fatigueOf(u.id),
       });
       const before = rostered.get(u.id) || 0;
       const after = before + shiftMinutes;
@@ -2003,6 +2009,20 @@ adminRouter.get(
   })
 );
 
+/* ---------------------------------------------------- rest and fatigue --- */
+
+/**
+ * Shifts on the roster in the next week (or ?days= up to 28) that leave an
+ * officer short of rest, over the hours in a day, or over the days in a row.
+ */
+adminRouter.get(
+  '/fatigue',
+  wrap(async (req, res) => {
+    const { days } = parse(z.object({ days: z.coerce.number().int().min(1).max(28).optional() }), req.query);
+    res.json(await fatigueBoard({ days: days || 7 }));
+  })
+);
+
 /* -------------------------------------------------------- scorecards --- */
 
 /**
@@ -2460,6 +2480,14 @@ async function buildAlerts(userId) {
       at: h.ends_at, link: `/admin/handovers?shift=${h.shift_id}`,
       title: late ? `${h.relief.officer} has not arrived to relieve ${h.officer}` : `Nobody is assigned to relieve ${h.officer}`,
       detail: `${h.post_name} · ${h.site_name}${h.held_over_minutes ? ` · held over ${h.held_over_minutes} min` : ''}` });
+  }
+
+  // A shift in the next day that leaves its officer short of rest, over the
+  // hours in a day, or over the days in a row.
+  for (const f of (await fatigueBoard({ days: 1 })).shifts) {
+    push({ key: `fatigue:${f.shift_id}:${f.user_id}:${f.issues.map((i) => i.code).join(',')}`, kind: 'fatigue', severity: 'warning', at: f.starts_at,
+      link: `/admin/fatigue?shift=${f.shift_id}`, title: `${f.officer}: ${f.issues[0].label.toLowerCase()} before ${f.post_name}`,
+      detail: f.issues.map((i) => i.message).join(' ') });
   }
 
   // A coaching or warning the officer has not signed after a few days.

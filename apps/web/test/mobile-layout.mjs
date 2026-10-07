@@ -109,6 +109,7 @@ const ADMIN = [
   ['Coaching & discipline: record a step', '/admin/conduct', async (p) => p.click('button:has-text("Record a step")')],
   ['Coaching & discipline: refused to sign', '/admin/conduct', async (p) => p.locator('button[aria-label^="Record that "]').first().click()],
   ['Handovers', '/admin/handovers'],
+  ['Rest & fatigue', '/admin/fatigue'],
   ['Handovers: chase a relief', '/admin/handovers', async (p) => {
     // Only when somebody's relief is due: the demo's handovers follow the clock.
     const chase = p.locator('button[aria-label^="Chase "]').first();

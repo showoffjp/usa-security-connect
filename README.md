@@ -96,6 +96,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 9. Under **Site training**, sign Darnell Hughes off at the armed garage post he has been working.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
+12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -294,6 +295,10 @@ Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
     <td width="50%" valign="top"><a href="docs/screenshots/overtime-cover.jpg"><img src="docs/screenshots/overtime-cover.jpg" alt="Finding cover for the shift that would cause overtime"></a><br><b>Find cover</b><br>Opens that shift on the schedule, with the overtime warning and the officers who could take it, those with hours to spare first.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/fatigue.jpg"><img src="docs/screenshots/fatigue.jpg" alt="Rest and fatigue: shifts that leave an officer short of rest or over the days in a row"></a><br><b>Rest &amp; fatigue</b><br>Shifts in the week ahead that leave an officer under 8 hours off, over 16 hours of work in a day, or past 6 days in a row, counted as worked: time held over at a handover counts.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/fatigue-candidates.jpg"><img src="docs/screenshots/fatigue-candidates.jpg" alt="Choosing who works a shift, with a short rest flagged"></a><br><b>When rostering</b><br>The officers offered for a shift carry the warning; a supervisor can still give it to them. An officer cannot claim or swap into one.</td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/payroll.jpg"><img src="docs/screenshots/payroll.jpg" alt="Payroll periods"></a><br><b>Payroll</b><br>Weekly pay periods: last week waiting to close, the week before closed and frozen.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/payroll-period.jpg"><img src="docs/screenshots/payroll-period.jpg" alt="Pay period review"></a><br><b>Pay period review</b><br>Hours, regular, overtime and holiday pay per officer; a corrected punch shows as changed since approval.</td>
   </tr>
@@ -339,7 +344,7 @@ On the phone:
   <tr>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-expenses.jpg"><img src="docs/screenshots/officer-expenses.jpg" alt="An officer's expense claims and what was paid"></a><br><b>My expenses</b><br>What is waiting, approved and paid back, with the pay period that paid it, or why a claim was declined.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-commended.jpg"><img src="docs/screenshots/officer-commended.jpg" alt="An officer's home screen with a new commendation"></a><br><b>You were commended</b><br>On the officer's home screen, web and phone, until read; every one stays on their profile.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-short-rest.jpg"><img src="docs/screenshots/officer-short-rest.jpg" alt="A short rest flagged on an officer's schedule"></a><br><b>Short of rest</b><br>A shift on the officer's own schedule that leaves them short of rest, or past the hours or days, says so, web and phone.</td>
     <td width="25%"></td>
   </tr>
 </table>
@@ -643,6 +648,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Licence reminders** — the home screen (web and mobile) warns when the officer's
   licence or any certification lapses within 30 days, or already has, listing each
   with its date.
+- **Rest on the schedule** — a shift that leaves the officer under 8 hours off, over 16
+  hours of work in a day or past 6 days in a row says so on their schedule (web and
+  phone). They cannot claim or swap into a shift that would, and are told why.
 - **Handover** — near the end of a shift the home screen (web and phone) says who
   relieves the officer and whether they have confirmed; once their relief is on post,
   to hand over and clock out. If the relief is late, or nobody is booked, it tells them
@@ -801,7 +809,8 @@ and a supervisor can only read is noted where it matters.
     that found a problem, licences lapsing within 14 days, and service agreements
     rostered short or inside their notice period.
   - **Office:** new applicants, time corrections and expense claims waiting, overtime a
-    shift not yet started would cause, and open shifts on a holiday in the next 14 days.
+    shift not yet started would cause, open shifts on a holiday in the next 14 days, and
+    shifts in the next day that leave an officer short of rest or over the hours or days.
 
   Opening one goes to the screen that deals with it and marks it read. Alerts are
   worked out from the records, so they clear themselves when the problem is resolved;
@@ -951,6 +960,21 @@ and a supervisor can only read is noted where it matters.
   supervisor schedules a request (which puts that many open shifts on one of the site's
   posts, armed posts only for an armed request) or declines it with a reason the
   client reads. The dashboard and menu count the ones waiting.
+- **Rest & fatigue** (Workforce → Rest & fatigue) — three rules, shared by the API, the
+  web app and the phone app: at least 8 hours off between shifts, at most 16 hours of
+  work in any 24, and at most 6 days in a row.
+  - Shifts count as worked, not as scheduled: one an officer was held over on ends when
+    they clocked out (or now, if they are still on), so a late relief shows up as a short
+    rest before that officer's next shift. Cancelled and missed shifts do not count.
+  - A shift that breaks one is a warning for a supervisor rostering it, in the list of
+    officers offered for it and when it is assigned, and a refusal for an officer
+    claiming it or having it swapped to them, with the reason in their own words.
+  - The board lists the week ahead (or two or four weeks), each problem once, on the
+    shift that tips it, with the shift before it and whether that one was held over,
+    and **Open on the schedule** to reassign or move it. Those in the next day are in
+    the alerts inbox; the sidebar counts the week.
+  - Each officer's schedule (web and phone) shows a short rest, a long day or too many
+    days in a row on the shift it affects.
 - **Overtime watch** (Workforce → Overtime watch) — W-2 officers paid by the hour
   heading past 40 hours this payroll week or next: hours worked, hours still on the
   roster, the projection, the overtime hours and the premium they cost, and the shift
@@ -1469,7 +1493,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 40 steps and stops it:
+One command reseeds the database, starts the API, runs all 42 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1750,6 +1774,21 @@ The suites, in the order they run:
   assigned has nobody to chase; the late relief is chased once, and not again for ten
   minutes, and it is audited. The held-over officer sees who is coming and that they
   are late, the relief sees whose post they take over, and neither sees a phone number.
+- **`test/fatigue-rules.mjs`** (on a throwaway database, before the API starts) — six
+  hours off is short and exactly eight is enough; the rest after a proposed shift counts
+  too; working straight on is a long day only past 16 hours in 24; a seventh day in a
+  row is too many and a sixth is not; looking back from a shift, as the board does, a
+  problem is listed once, on the shift that tips it; an overlap is a conflict, not
+  fatigue. A held-over officer's shift is worked until now and one clocked out late ends
+  at the clock-out, so the next shift's rest is counted from there; missed shifts do
+  not count.
+- **`test/fatigue.mjs`** — supervisors see the week's board, officers and clients do not,
+  four weeks ahead at most; the demo's officer back on six hours after a late event and
+  its seventh day in a row are on it, soonest first, and counted on the sidebar. An open
+  shift four hours after one of Marcus's cannot be claimed by him, and the refusal says
+  why; a supervisor is warned, not stopped, sees it against his name among the
+  candidates, and gives it to him anyway; Marcus then sees the short rest on his
+  schedule, and the board shows it after the shift before.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1762,7 +1801,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 398
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 407
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1800,21 +1839,23 @@ The suites, in the order they run:
     which clears his roster flags, then withdraws and restores another officer's
     training at the lab desk; the client sees how many officers are trained at the
     emergency entrance;
+  - a supervisor finds the demo's short rest and seventh day in a row under **Rest &
+    fatigue** and opens the shift on the schedule; the officer sees the short rest on theirs;
   - a supervisor chases the demo's late relief from **Handovers**, an alert opens the board
     at that handover, and the held-over officer's home screen tells them to stay on post;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 124
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 125
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 135 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 136 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens
   shipped that way before the check existed.
 - **The mobile layout audit** (`npm run test:mobile --workspace @usc/web`) opens every
   screen as an administrator, an officer and a client, at 360 and 390 pixels wide, in
-  light and night mode (342 screens). On each one it measures the layout for faults a
+  light and night mode (345 screens). On each one it measures the layout for faults a
   phone shows and a desktop hides:
   - text squeezed to a few letters a line;
   - a word wider than its box;

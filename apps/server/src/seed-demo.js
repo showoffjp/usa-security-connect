@@ -34,6 +34,7 @@ import { seedSignoffs } from './seed-signoffs.js';
 import { seedTraining } from './seed-training.js';
 import { seedConduct } from './seed-conduct.js';
 import { seedHandovers } from './seed-handovers.js';
+import { seedFatigue } from './seed-fatigue.js';
 import { seedHolidays } from './seed-holidays.js';
 
 /**
@@ -298,16 +299,25 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
 
   const shifts = [];
   // Two weeks back and two weeks forward, so the schedule and timesheets look lived-in.
+  // Marcus and Janelle each have two days off a week, so neither works more
+  // than five days in a row, inside the rest rules, and each has a day free to
+  // pick up an open shift. Today and tomorrow are always working days for
+  // Marcus: he is on duty now, and confirms tomorrow's shift in the demo.
+  const weekDay = (day) => ((day % 7) + 7) % 7;
   for (let day = -14; day <= 14; day++) {
     const past = day < 0;
-    shifts.push({
-      user: users.marcus, post: postIds.riverfrontLobby,
-      start: at(day, 6), end: at(day, 14), status: past ? 'completed' : 'scheduled',
-    });
-    shifts.push({
-      user: users.janelle, post: postIds.palmettoGate,
-      start: at(day, 14), end: at(day, 22), status: past ? 'completed' : 'scheduled',
-    });
+    if (![2, 3].includes(weekDay(day))) {
+      shifts.push({
+        user: users.marcus, post: postIds.riverfrontLobby,
+        start: at(day, 6), end: at(day, 14), status: past ? 'completed' : 'scheduled',
+      });
+    }
+    if (![5, 6].includes(weekDay(day))) {
+      shifts.push({
+        user: users.janelle, post: postIds.palmettoGate,
+        start: at(day, 14), end: at(day, 22), status: past ? 'completed' : 'scheduled',
+      });
+    }
     if (day % 7 !== 0 && day % 7 !== 6) {
       shifts.push({
         user: users.dwayne, post: postIds.gulfportYard,
@@ -1267,6 +1277,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const conductSeed = await seedConduct({ db });
   // Officers held over at the end of their shift: one relief late, one post uncovered.
   const handoverSeed = await seedHandovers({ db });
+  // A short rest and a seventh day in a row on the week ahead.
+  const fatigueSeed = await seedFatigue({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1281,7 +1293,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}${fatigueSeed.shortRest ? `, ${fatigueSeed.shortRest} short of rest` : ''}${fatigueSeed.sevenDays ? `, ${fatigueSeed.sevenDays} on seven days in a row` : ''}
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

@@ -23,6 +23,9 @@ and the API, web app and mobile app all follow.
 | `minPingGapSeconds` | 20 | Reports closer together than this are acknowledged but not stored. Clock events are always kept. |
 | `gpsStaleMinutes` | 15 | An officer on the clock with no position for this long shows as *GPS gone quiet*. |
 | `locationRetentionDays` | 90 | Location history older than this is deleted by the sweep. |
+| `minRestHours` | 8 | Fewest hours off between one shift ending (as worked) and the next starting. |
+| `maxHoursPer24` | 16 | Most hours of work in any 24 hours. |
+| `maxConsecutiveDays` | 6 | Most days in a row with a shift. |
 
 ## Flags
 
@@ -106,6 +109,22 @@ handover is one of these, worst first:
 A shift the same officer works straight after is not a handover. Late reliefs and
 uncovered posts are critical alerts; the sidebar count includes every critical and
 warning handover. Chasing a relief is refused for 10 minutes after the last chase.
+
+## Rest and fatigue
+
+A shift is judged against the officer's other shifts as worked: a shift they were
+held over on ends when they clocked out, or now if they are still on post; cancelled
+and missed shifts are left out. Breaking a rule is:
+
+| Rule | Supervisor rostering the shift | Officer claiming or swapping into it |
+|------|-------------------------------|--------------------------------------|
+| Under `minRestHours` off before or after it | Warned | Refused |
+| Over `maxHoursPer24` of work in any 24 hours | Warned | Refused |
+| Over `maxConsecutiveDays` days in a row | Warned | Refused |
+
+Working straight on into another shift is not short rest; it counts towards the
+hours in a day. The board lists each problem once, on the shift that tips it, and
+the alerts inbox raises those starting in the next 24 hours.
 
 ## Pay rates
 
