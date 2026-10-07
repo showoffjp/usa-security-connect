@@ -1436,7 +1436,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 37 steps and stops it:
+One command reseeds the database, starts the API, runs all 38 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1694,6 +1694,11 @@ The suites, in the order they run:
     can claim it again and it no longer counts towards where she stands.
   - A supervisor's record is for administrators: only one can record a step for a
     supervisor, read their record, or see it on the board. Every step is audited.
+- **`test/holdover.mjs`** (on a throwaway database, before the API starts) — an officer
+  whose relief is late stays on the clock instead of being auto-closed at the
+  scheduled end; one who forgot to clock out after the relief arrived is closed at
+  the handover and paid for the time held over; with nobody following at the post the
+  old rule still applies; and a relief who never came holds nobody past eight hours.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
