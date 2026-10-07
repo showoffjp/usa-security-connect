@@ -87,6 +87,26 @@ The mobile app tracks in the foreground only - while the app is open. Tracking w
 the phone in a pocket needs background location permission, which both app stores
 review closely and which is a policy decision to take deliberately.
 
+## Handovers
+
+The handover board looks at every officer on the clock whose shift ends within
+`HANDOVER_WINDOW_MINUTES` (120; a supervisor can widen it to eight hours), and at the
+shift that starts at the same post within an hour either side of that end. Each
+handover is one of these, worst first:
+
+| State | Meaning | Severity |
+|-------|---------|----------|
+| Relief late | The relief's shift started more than `lateGraceMinutes` ago and they have not clocked in at the post. | Critical |
+| No relief assigned | The following shift has nobody on it. | Critical inside the hour, a warning before |
+| Relief not confirmed | The relief has not confirmed this shift, at these times. | A warning inside the hour |
+| Relief confirmed | Confirmed, and not due yet. | - |
+| Relief on post | Clocked in: the officer can hand over and go. | - |
+| Post closes | No shift follows at the post. | - |
+
+A shift the same officer works straight after is not a handover. Late reliefs and
+uncovered posts are critical alerts; the sidebar count includes every critical and
+warning handover. Chasing a relief is refused for 10 minutes after the last chase.
+
 ## Pay rates
 
 Rates live on the employee record, where timesheets, invoices and reports read them.
