@@ -11,6 +11,7 @@ import PtoCard from './PtoCard.jsx';
 import CommendationsCard from './CommendationsCard.jsx';
 import SiteTrainingCard from './SiteTrainingCard.jsx';
 import ConductCard from './ConductCard.jsx';
+import AttendanceRecord from '../../components/AttendanceRecord.jsx';
 import { ROLE_LABEL, toHours } from '@shared/domain.js';
 
 /** Correcting a punch always records who changed it and why. */
@@ -177,6 +178,8 @@ export default function EmployeeDetailPage() {
           foot="Per hour"
         />
       </div>
+
+      {e.role !== 'admin' && <AttendanceRecord userId={e.id} name={e.full_name} />}
 
       <PtoCard userId={e.id} name={e.full_name} isAdmin={isAdmin} />
 

@@ -10,7 +10,7 @@ import { audit } from '../lib/db.js';
 import { wrap, parse, idParam, rateLimit } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import { RULES, CALL_OFF_REASONS, CALL_OFF_LABEL } from '../shared.js';
-import { headsUpFor, reportRunningLate, callOff } from '../services/attendance.js';
+import { headsUpFor, reportRunningLate, callOff, attendanceRecord } from '../services/attendance.js';
 
 export const headsUpRouter = Router();
 headsUpRouter.use(requireAuth);
@@ -26,6 +26,15 @@ headsUpRouter.get(
       rules: { headsUpHours: RULES.headsUpHours, maxEtaMinutes: RULES.maxEtaMinutes, lateGraceMinutes: RULES.lateGraceMinutes },
       reasons: CALL_OFF_REASONS.map((value) => ({ value, label: CALL_OFF_LABEL[value] })),
     });
+  })
+);
+
+/** The officer's own attendance record: the same one their supervisors see. */
+headsUpRouter.get(
+  '/record',
+  wrap(async (req, res) => {
+    const { days } = parse(z.object({ days: z.coerce.number().int().min(7).max(365).optional() }), req.query);
+    res.json(await attendanceRecord(req.user.id, { days: days || 90 }));
   })
 );
 

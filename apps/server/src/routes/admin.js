@@ -48,7 +48,8 @@ import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
 import { handovers } from '../services/handovers.js';
 import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
-import { attendanceBoard } from '../services/attendance.js';
+import { attendanceBoard, lostShifts } from '../services/attendance.js';
+import { officerScore, CALL_OFF_WEIGHT } from '../services/scorecards.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -1171,8 +1172,12 @@ adminRouter.post(
   '/shifts/bulk',
   wrap(async (req, res) => {
     const body = parse(bulkSchema, req.body);
-    const start = new Date(body.startDate);
-    const end = new Date(body.endDate);
+    // Calendar days in the server's time zone: new Date('2026-11-09') is UTC
+    // midnight, which west of UTC is the evening before, so every shift landed
+    // a day early on a server not set to UTC.
+    const start = parseDay(body.startDate);
+    const end = parseDay(body.endDate);
+    if (!start || !end) throw new HttpError(422, 'Use YYYY-MM-DD dates.');
     if (end < start) throw new HttpError(422, 'The end date is before the start date.');
     if ((end - start) / 86400000 > 180) throw new HttpError(422, 'Generate at most six months at a time.');
 
@@ -1196,7 +1201,7 @@ adminRouter.post(
         await checkAssignment(req, { userId: body.userId, postId: body.postId, startsAt, endsAt });
       } catch (err) {
         if (body.skipConflicts) {
-          skipped.push({ date: startsAt.toISOString().slice(0, 10), reason: err.message });
+          skipped.push({ date: toDateString(startsAt), reason: err.message });
           continue;
         }
         throw err;
@@ -2038,15 +2043,10 @@ adminRouter.get(
 
 /**
  * Officer scorecards: how each officer has actually worked over a period,
- * from the records already kept - never a supervisor's impression.
- *
- * The score (0-100) weighs what a client notices first:
- *   35  punctuality   clocked in within the grace period of the shift start
- *   25  attendance    shifts worked out of shifts that should have been
- *   25  check-ins     answered in their window (a late answer counts half)
- *   15  clean record  fewer compliance flags per shift worked
- * A part with nothing to judge (no check-ins due, say) is left out and the
- * rest scaled up, so an officer is not marked down for what never came up.
+ * from the records already kept - never a supervisor's impression. The score
+ * and its weights are in services/scorecards.js. Call-offs and no-shows given
+ * to somebody else are counted from the attendance record: either takes the
+ * shift off the officer's roster.
  */
 adminRouter.get(
   '/scorecards',
@@ -2073,7 +2073,10 @@ adminRouter.get(
           `SELECT sh.user_id,
                   COUNT(*) AS due,
                   SUM(CASE WHEN te.id IS NOT NULL THEN 1 ELSE 0 END) AS worked,
-                  SUM(CASE WHEN te.id IS NULL AND sh.status IN ('missed', 'no_show') THEN 1 ELSE 0 END) AS missed,
+                  SUM(CASE WHEN te.id IS NULL AND (sh.status IN ('missed', 'no_show')
+                                OR EXISTS (SELECT 1 FROM attendance_events ns
+                                           WHERE ns.shift_id = sh.id AND ns.user_id = sh.user_id AND ns.stage = 'no_show'))
+                           THEN 1 ELSE 0 END) AS missed,
                   SUM(CASE WHEN te.id IS NOT NULL
                             AND te.clock_in_at <= sh.starts_at + make_interval(mins => ?) THEN 1 ELSE 0 END) AS on_time,
                   AVG(CASE WHEN te.id IS NOT NULL AND te.clock_in_at > sh.starts_at + make_interval(mins => ?)
@@ -2135,6 +2138,13 @@ adminRouter.get(
         )
         .all(f, t)
     );
+    const lost = new Map();
+    for (const l of await lostShifts({ from, to })) {
+      const e = lost.get(l.user_id) || { calledOff: 0, noShows: 0 };
+      if (l.stage === 'called_off') e.calledOff += 1;
+      else e.noShows += 1;
+      lost.set(l.user_id, e);
+    }
 
     const n = (v) => Number(v || 0);
     const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
@@ -2145,17 +2155,15 @@ adminRouter.get(
         const c = checks.get(p.id) || {};
         const tr = tours.get(p.id) || {};
         const fl = flags.get(p.id) || {};
+        const ls = lost.get(p.id) || { calledOff: 0, noShows: 0 };
         const worked = n(s.worked);
-        const due = worked + n(s.missed);
+        const missed = n(s.missed) + ls.noShows;
+        const due = worked + missed + ls.calledOff;
         const checksDue = n(c.ok) + n(c.late) + n(c.missed);
-        const parts = [
-          [35, worked ? n(s.on_time) / worked : null],
-          [25, due ? worked / due : null],
-          [25, checksDue ? (n(c.ok) + n(c.late) * 0.5) / checksDue : null],
-          [15, worked ? Math.max(0, 1 - n(fl.n) / worked / 2) : null],
-        ].filter(([, v]) => v !== null);
-        const weight = parts.reduce((a, [w]) => a + w, 0);
-        const score = weight ? Math.round(parts.reduce((a, [w, v]) => a + w * v, 0) / weight * 100) : null;
+        const score = officerScore({
+          worked, onTime: n(s.on_time), missed, calledOff: ls.calledOff,
+          checksOk: n(c.ok), checksLate: n(c.late), checksMissed: n(c.missed), flags: n(fl.n),
+        });
         return {
           id: p.id,
           employee_code: p.employee_code,
@@ -2163,7 +2171,10 @@ adminRouter.get(
           role: p.role,
           employment_type: p.employment_type,
           score,
-          shifts: { due, worked, missed: n(s.missed), onTime: n(s.on_time), onTimePct: pct(n(s.on_time), worked), avgLateMin: s.avg_late ? Math.round(Number(s.avg_late)) : 0 },
+          shifts: {
+            due, worked, missed, calledOff: ls.calledOff, onTime: n(s.on_time), onTimePct: pct(n(s.on_time), worked),
+            avgLateMin: s.avg_late ? Math.round(Number(s.avg_late)) : 0,
+          },
           hours: toHours(n(hours.get(p.id)?.minutes)),
           checkIns: { ok: n(c.ok), late: n(c.late), missed: n(c.missed), answeredPct: pct(n(c.ok) + n(c.late), checksDue) },
           tours: { runs: n(tr.runs), completed: n(tr.completed) },
@@ -2179,6 +2190,7 @@ adminRouter.get(
       return sendCsv(res, `officer-scorecards-${days}-days`, [
         ['Officer', 'name'], ['Code', 'employee_code'], ['Role', 'role'], ['Type', 'employment_type'], ['Score', 'score'],
         ['Shifts due', (c) => c.shifts.due], ['Worked', (c) => c.shifts.worked], ['Missed', (c) => c.shifts.missed],
+        ['Called off', (c) => c.shifts.calledOff],
         ['On time %', (c) => c.shifts.onTimePct], ['Avg minutes late', (c) => c.shifts.avgLateMin], ['Hours', 'hours'],
         ['Check-ins answered %', (c) => c.checkIns.answeredPct], ['Check-ins missed', (c) => c.checkIns.missed],
         ['Tours completed', (c) => c.tours.completed], ['Incidents', 'incidents'], ['Flags', (c) => c.flags.total],
@@ -2191,6 +2203,7 @@ adminRouter.get(
       from: from.toISOString(),
       to: to.toISOString(),
       graceMinutes: grace,
+      callOffWeight: CALL_OFF_WEIGHT,
       averageScore: scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : null,
       cards,
     });

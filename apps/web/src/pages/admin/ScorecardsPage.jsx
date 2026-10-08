@@ -148,9 +148,10 @@ export default function ScorecardsPage() {
                         </td>
                         <td className="small">
                           {c.shifts.worked}/{c.shifts.due}
-                          {c.shifts.missed > 0 && (
-                            <div>
-                              <Chip kind="danger">{c.shifts.missed} missed</Chip>
+                          {(c.shifts.missed > 0 || c.shifts.calledOff > 0) && (
+                            <div className="row wrap" style={{ gap: 4 }}>
+                              {c.shifts.missed > 0 && <Chip kind="danger">{c.shifts.missed} missed</Chip>}
+                              {c.shifts.calledOff > 0 && <Chip kind="warn">{c.shifts.calledOff} called off</Chip>}
                             </div>
                           )}
                         </td>
@@ -189,7 +190,8 @@ export default function ScorecardsPage() {
           <div className="card card-pad small muted">
             <strong className="strong" style={{ color: 'var(--ink)' }}>How the score works.</strong> Out of 100:
             punctuality 35 (clocked in within {data.graceMinutes} minutes of the shift start), attendance 25 (shifts worked
-            out of shifts due), check-ins 25 (answered in their window; a late answer counts half) and a clean record 15
+            out of shifts due; a call-off counts as {data.callOffWeight === 0.5 ? 'half' : data.callOffWeight} a missed shift, a
+            no-show as a whole one, even when somebody else covered it), check-ins 25 (answered in their window; a late answer counts half) and a clean record 15
             (fewer compliance flags per shift). A part with nothing to judge is left out and the rest scaled up, so nobody is
             marked down for what never came up. <Chip kind={band(90)}>90+</Chip> <Chip kind={band(80)}>75-89</Chip>{' '}
             <Chip kind={band(50)}>under 75</Chip>

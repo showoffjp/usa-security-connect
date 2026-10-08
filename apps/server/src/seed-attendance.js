@@ -8,6 +8,8 @@
  *  - an officer due on in about half an hour has said they are running
  *    fifteen minutes late, and another has called off sick for a shift this
  *    evening, which is open with nobody on it yet;
+ *  - the officer calling off has done so twice before in the last two
+ *    weeks, so their record and scorecard have something to show;
  *  - every stage of the last twelve hours is recorded, and the texts Vince
  *    would have had are in the outbox, stamped when each happened. With no
  *    text provider on the demo they are marked 'skipped'.
@@ -36,7 +38,8 @@ const IN_NO_STORY = `NOT EXISTS (SELECT 1 FROM conduct_records c WHERE c.user_id
   AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.clock_out_at IS NULL)`;
 
 export async function seedAttendance({ db, now = new Date() }) {
-  const result = { subscribed: 0, covered: null, runningLate: null, calledOff: null, events: 0, texts: 0 };
+  const result = { subscribed: 0, covered: null, runningLate: null, calledOff: null, earlierCallOffs: 0, events: 0, texts: 0 };
+  let calledOffBy = null;
   const vince = await db.prepare(`SELECT id FROM users WHERE employee_code = '1001'`).get();
   if (vince) {
     await db
@@ -221,13 +224,62 @@ export async function seedAttendance({ db, now = new Date() }) {
         .prepare(`INSERT INTO attendance_events (shift_id, user_id, stage, occurred_at, detail) VALUES (?,?, 'called_off', ?, ?)`)
         .run(sh.id, sh.user_id, toSql(said), JSON.stringify({ reason: 'sick', note }));
       result.calledOff = sh.name;
+      calledOffBy = { id: sh.user_id, name: sh.name };
+    }
+  }
+
+  /* ----------------------------- and twice before, in the last fortnight */
+  // The same officer called off twice before: sick, with five hours' notice,
+  // about two weeks ago, and car trouble an hour before the start last week.
+  // Somebody else worked both, as their employee record and scorecard show.
+  // Shifts already worked by others, so nothing else moves.
+  if (calledOffBy) {
+    const past = await db
+      .prepare(
+        `SELECT sh.id, sh.starts_at, sh.user_id AS cover_id, u.first_name || ' ' || u.last_name AS cover
+         FROM shifts sh JOIN users u ON u.id = sh.user_id JOIN posts p ON p.id = sh.post_id
+         WHERE sh.status = 'completed' AND p.armed = false AND p.training_required = false
+           AND sh.starts_at BETWEEN ? AND ? AND sh.user_id <> ?
+           AND u.employee_code NOT IN (${SUITE_PEOPLE.map(() => '?').join(',')})
+           AND EXISTS (SELECT 1 FROM time_entries te WHERE te.shift_id = sh.id)
+           AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = ?
+                           AND te.clock_in_at < sh.ends_at AND COALESCE(te.clock_out_at, now()) > sh.starts_at)
+           AND NOT EXISTS (SELECT 1 FROM attendance_events a WHERE a.shift_id = sh.id)
+         ORDER BY sh.starts_at, sh.id`
+      )
+      .all(toSql(new Date(now.getTime() - 30 * 24 * HOUR)), toSql(new Date(now.getTime() - 3 * 24 * HOUR)), calledOffBy.id, ...SUITE_PEOPLE,
+        calledOffBy.id);
+    const near = (days) =>
+      past.reduce((best, p) => {
+        const d = Math.abs(new Date(p.starts_at).getTime() - (now.getTime() - days * 24 * HOUR));
+        return !best || d < best.d ? { p, d } : best;
+      }, null)?.p;
+    const before = [
+      { shift: near(13), reason: 'sick', hours: 5, note: 'Stomach bug. Back for my next shift.' },
+      { shift: near(6), reason: 'transport', hours: 1, note: 'Car will not start. Waiting on a jump.' },
+    ].filter((b, i, all) => b.shift && all.findIndex((x) => x.shift?.id === b.shift.id) === i);
+    for (const b of before) {
+      const start = new Date(b.shift.starts_at);
+      const said = new Date(start.getTime() - b.hours * HOUR);
+      await db
+        .prepare(`INSERT INTO attendance_notices (shift_id, user_id, kind, reason, note, created_at) VALUES (?,?, 'call_off', ?, ?, ?)`)
+        .run(b.shift.id, calledOffBy.id, b.reason, b.note, toSql(said));
+      const event = db.prepare(
+        `INSERT INTO attendance_events (shift_id, user_id, stage, occurred_at, detail, notified) VALUES (?,?,?,?,?, true)`
+      );
+      await event.run(b.shift.id, calledOffBy.id, 'called_off', toSql(said), JSON.stringify({ reason: b.reason, note: b.note }));
+      await event.run(b.shift.id, calledOffBy.id, 'covered', toSql(new Date(said.getTime() + 25 * MIN)),
+        JSON.stringify({ by_user_id: b.shift.cover_id, by: b.shift.cover, was: calledOffBy.name }));
+      result.earlierCallOffs += 1;
     }
   }
 
   /* ------------------------------------------- the rest of the last twelve hours */
   // The demo seed's compliance sweep ran before anyone had asked for alerts,
   // so what it recorded went to nobody. Send it now, as it would have gone.
-  await db.prepare(`UPDATE attendance_events SET notified = false WHERE notified = true`).run();
+  await db
+    .prepare(`UPDATE attendance_events SET notified = false WHERE notified = true AND occurred_at >= ?`)
+    .run(toSql(new Date(now.getTime() - 12 * HOUR)));
   const swept = await sweepAttendance(now);
   result.events = Number((await db.prepare(`SELECT COUNT(*) AS n FROM attendance_events`).get()).n);
   result.texts = swept.sent + (await replayHistory({ since: new Date(now.getTime() - 12 * HOUR) }));

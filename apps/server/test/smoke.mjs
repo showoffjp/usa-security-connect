@@ -231,7 +231,7 @@ const bulk = await call('/admin/shifts/bulk', {
 // Fifteen days hold ten or eleven weekdays depending on where they start, so
 // count them the way the server walks the range rather than assuming ten.
 let weekdaysInRange = 0;
-for (let d = new Date(bulkStart); d <= new Date(bulkEnd); d.setDate(d.getDate() + 1)) {
+for (let d = new Date(`${bulkStart}T00:00:00`); d <= new Date(`${bulkEnd}T00:00:00`); d.setDate(d.getDate() + 1)) {
   if (d.getDay() >= 1 && d.getDay() <= 5) weekdaysInRange += 1;
 }
 log(bulk.status === 201 && bulk.data.created === weekdaysInRange, 'bulk roster generated (overnight)', `${bulk.data?.created} of ${weekdaysInRange} weekdays`);

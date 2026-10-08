@@ -9,6 +9,7 @@ import {
 import { OpenShifts, MyShiftRequests, ShiftActionSheet } from '../../src/ShiftActions.jsx';
 import { MyExpenses } from '../../src/MyExpenses.jsx';
 import { RecentPunches } from '../../src/RecentPunches.jsx';
+import { MyAttendance } from '../../src/MyAttendance.jsx';
 import { ConfirmShift } from '../../src/ConfirmShift.jsx';
 import { SiteTraining } from '../../src/SiteTraining.jsx';
 import { C, S } from '../../src/theme.js';
@@ -106,6 +107,7 @@ export default function ScheduleScreen() {
           ]}
         />
 
+        {view === 'past' && <MyAttendance />}
         {view === 'past' && <RecentPunches notify={(message, tone) => setToast({ message, tone })} />}
         {view === 'past' && <MyExpenses notify={(message, tone) => setToast({ message, tone })} />}
 
