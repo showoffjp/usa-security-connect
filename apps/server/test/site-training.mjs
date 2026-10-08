@@ -63,7 +63,12 @@ log(refused.status === 409 && /site training/i.test(refused.data.error), 'claimi
 /* ==================================================== rostering anyway === */
 section('a supervisor rosters a training shift');
 
-// A slot in the next few days when Marcus is free.
+// A slot in the next few days when Marcus is free: within a week, so the
+// alerts inbox flags it. His days off this week are days 2 and 3, and the
+// core suite marked him unavailable on Sundays - which on a Friday run is day
+// 2, with day 3 taken by the overnight shift he claimed - so he says he can
+// work Sundays again first.
+await call('/availability', { token: marcus, method: 'PUT', body: { days: [{ weekday: 0, available: true }] } });
 let slot = null;
 for (let day = 2; day <= 6 && !slot; day++) {
   for (const hour of [1, 9, 13, 17]) {

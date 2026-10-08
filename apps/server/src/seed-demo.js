@@ -449,7 +449,13 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   const todayStart = midnight.getTime() + 15 * 60000;
   const floor = Date.now() - todayStart >= 3600000 ? todayStart : weekStart.getTime();
-  const liveStart = new Date(Math.max(Date.now() - 3 * 3600000, floor));
+  // On a rostered shift that began more than three hours ago, he clocked in
+  // for its start: three hours ago would make him late for it, and his own
+  // attendance record would say so.
+  const liveStart = new Date(Math.max(
+    Math.min(Date.now() - 3 * 3600000, liveShift ? liveShift.start.getTime() - 3 * 60000 : Infinity),
+    floor
+  ));
 
   // Off his roster right now, he works a shift of his own: from then until five
   // hours from now, but over before his next rostered shift begins - seeded at
@@ -457,14 +463,15 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   // him booked twice at the same post. Seeded mid-afternoon, the three hours
   // behind him reach back into that day's 6-to-2, which ended with nobody
   // clocked in; that is the shift he is on, moved, rather than a second one
-  // laid over it beside a no-show.
+  // laid over it beside a no-show. Seeded later in the evening, the same goes
+  // for that day's 6-to-2, ended hours before.
   let liveShiftId = liveShift?.id;
   if (liveShift) {
     (await db.prepare(`UPDATE shifts SET status = 'in_progress' WHERE id = ?`).run(liveShift.id));
   } else {
     const nextStart = Math.min(...marcusShifts.filter((s) => s.start > now).map((s) => s.start.getTime()));
     const liveEnd = new Date(Math.min(now.getTime() + 5 * 3600000, nextStart));
-    const unworked = marcusShifts.find((s) => s.status === 'scheduled' && s.end > liveStart && s.end <= now);
+    const unworked = marcusShifts.find((s) => s.status === 'scheduled' && s.end <= now && (s.end > liveStart || s.start >= midnight));
     if (unworked) {
       (await db.prepare(`UPDATE shifts SET starts_at = ?, ends_at = ?, status = 'in_progress' WHERE id = ?`)
         .run(toSql(liveStart), toSql(liveEnd), unworked.id));

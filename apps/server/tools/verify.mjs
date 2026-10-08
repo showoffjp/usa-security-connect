@@ -24,6 +24,8 @@ const env = {
   USC_PUSH_DISABLED: '1',
   USC_EMAIL_DISABLED: '1',
   PORT: String(PORT),
+  // The suites call the API this starts, on whatever port that is.
+  USC_TEST_BASE: process.env.USC_TEST_BASE || BASE,
   CRON_SECRET: process.env.CRON_SECRET || 'verify-only-cron-secret',
   // Location reports closer together than this are thinned; two seconds lets
   // the tracking suite prove it without sitting through the real twenty.

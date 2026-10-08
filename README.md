@@ -1565,6 +1565,13 @@ One command reseeds the database, starts the API, runs all 44 steps and stops it
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
 ```
 
+To run a second copy beside the first (say, the New York pair), give it its own port and
+data directory; every suite then calls the API on that port:
+
+```bash
+PORT=4300 USC_DATA_DIR=/tmp/usc-ny TZ=America/New_York npm run verify --workspace @usc/server -- --fresh
+```
+
 The order matters and the script enforces it: PGlite is single-writer, so seeding while
 the server is running corrupts the data directory. CI runs the same command twice, in
 UTC and in New York time (see [Time zones](#time-zones)), alongside the web build and
