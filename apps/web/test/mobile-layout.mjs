@@ -394,7 +394,13 @@ const lateToken = runningLate && (await staffToken(runningLate.employee_code, pi
 if (lateToken) {
   await audit('officer due on', [
     ['Officer home, running late', '/'],
-    ["Officer: can't make it", '/', async (p) => p.click('#heads-up button:has-text("Can\'t make it")')],
+    // The full card, or the one-line one for a shift further off. On the live
+    // demo, where each server instance has its own company, the next request
+    // may reach one where this officer has neither; then the home is measured.
+    ["Officer: can't make it", '/', async (p) => {
+      const button = p.locator('#heads-up button:has-text("Can\'t make it"), #heads-up button:has-text("Call off")').first();
+      if (await button.count()) await button.click();
+    }],
   ], async (page, context) => context.addInitScript((t) => localStorage.setItem('usc.token', t), lateToken));
 } else {
   console.log('SKIP  officer due on: nobody is running late on the demo just now');

@@ -341,7 +341,7 @@ await page.keyboard.press('Escape');
     await staffSignIn(late.employee_code, String(((Number(late.employee_code) * 7919) % 9000) + 1000));
     await page.waitForSelector('#heads-up');
     await audit(page, 'Officer home, running late', null);
-    await page.click("#heads-up button:has-text(\"Can't make it\")");
+    await page.locator("#heads-up button:has-text(\"Can't make it\"), #heads-up button:has-text(\"Call off\")").first().click();
     await page.waitForSelector('[role="dialog"]');
     await audit(page, "Officer: can't make it", null);
     await page.keyboard.press('Escape');
