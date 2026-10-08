@@ -740,7 +740,8 @@ export async function attendanceRecord(userId, { days = 90, now = new Date() } =
     if (short) shortNotice += 1;
     if (l.reason) byReason[l.reason] = (byReason[l.reason] || 0) + 1;
     items.push({
-      kind: 'called_off', ...shiftOf(l), called_off_at: sqlToIso(l.occurred_at), notice_hours: Math.round(hours * 10) / 10,
+      // Rounded down, so notice just short of the line never reads as on it.
+      kind: 'called_off', ...shiftOf(l), called_off_at: sqlToIso(l.occurred_at), notice_hours: Math.floor(hours * 10) / 10,
       short_notice: short, reason: l.reason, reason_label: l.reason ? CALL_OFF_LABEL[l.reason] : null, note: l.note || null,
       covered_by: l.covered?.by || null,
     });
