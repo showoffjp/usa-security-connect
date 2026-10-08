@@ -190,6 +190,15 @@ adminRouter.get(
          ) latest WHERE latest.geofence = 'outside'`
       )
       .get()).n);
+    // Called off by the officer and nobody on it yet, starting within the day.
+    const calledOff = Number((await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM shifts sh
+         WHERE sh.user_id IS NULL AND sh.status = 'scheduled' AND sh.ends_at > now()
+           AND sh.starts_at < now() + interval '24 hours'
+           AND EXISTS (SELECT 1 FROM attendance_notices n WHERE n.shift_id = sh.id AND n.kind = 'call_off')`
+      )
+      .get()).n);
     const lateNow = Number((await db
       .prepare(
         `SELECT COUNT(*) AS n FROM shifts sh
@@ -298,6 +307,7 @@ adminRouter.get(
         expiringCredentials,
         offPost,
         lateNow,
+        calledOff,
         lateOrOff: offPost + lateNow,
         payrollDue,
         equipmentOut,
@@ -2489,10 +2499,17 @@ async function buildAlerts(userId) {
 
   // An officer not yet clocked in after the grace period. Once it is a
   // no-show the flag carries it; the key keeps one alert per shift.
-  for (const l of (await attendanceBoard()).open.filter((x) => x.state === 'late')) {
+  // A call-off with nobody on the shift yet is critical until it is covered.
+  for (const l of (await attendanceBoard()).open.filter((x) => x.state === 'late' || x.state === 'called_off')) {
+    if (l.state === 'called_off') {
+      push({ key: `call-off:${l.shift_id}`, kind: 'late', severity: 'critical', at: l.call_off.created_at,
+        link: `/admin/attendance?shift=${l.shift_id}`, title: `${l.call_off.officer} called off ${l.post_name}`,
+        detail: `${l.site_name} · ${l.call_off.reason_label} · starts ${new Date(l.starts_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · needs cover` });
+      continue;
+    }
     push({ key: `late:${l.shift_id}:${l.user_id}`, kind: 'late', severity: 'warning', at: l.starts_at,
       link: `/admin/attendance?shift=${l.shift_id}`, title: `${l.officer} has not clocked in at ${l.post_name}`,
-      detail: `${l.site_name} · ${l.minutes_late} min after the start` });
+      detail: `${l.site_name} · ${l.minutes_late} min after the start${l.notice ? ` · said they would be there by ${new Date(l.notice.eta_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''}` });
   }
 
   // A shift in the next day that leaves its officer short of rest, over the

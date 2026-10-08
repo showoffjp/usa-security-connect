@@ -9,10 +9,12 @@ import { C, S } from '../src/theme.js';
 const EVERY_SECONDS = 15;
 const STATE = {
   no_show: ['danger', 'No-show'],
+  called_off: ['danger', 'Called off'],
+  running_late: ['info', 'Running late'],
   late: ['warn', 'Late'],
   covering: ['info', 'Cover on the way'],
 };
-const STAGE_TONE = { late: 'warn', no_show: 'danger', arrived: 'ok', covered: 'ok' };
+const STAGE_TONE = { running_late: 'info', called_off: 'danger', late: 'warn', no_show: 'danger', arrived: 'ok', covered: 'ok' };
 const mins = (n) => (n >= 60 ? `${Math.floor(n / 60)} h ${n % 60 ? `${n % 60} min` : ''}`.trim() : `${n} min`);
 
 /**
@@ -77,10 +79,14 @@ export default function LateScreen() {
                   </View>
                   <Text style={S.small}>{o.post_name}, {o.site_name}</Text>
                   <Text style={[S.tiny, S.muted]}>
-                    Due {fmtTime(o.starts_at)} · {o.state === 'covering' ? `covering for ${o.covered_from}, not clocked in yet` : `not clocked in, ${mins(o.minutes_late)} after the start`}
+                    {o.started ? 'Due' : 'Starts'} {fmtTime(o.starts_at)} · {
+                      o.state === 'covering' ? `covering for ${o.covered_from}${o.started ? ', not clocked in yet' : ''}`
+                        : o.state === 'called_off' ? `called off (${o.call_off.reason_label.toLowerCase()}), nobody on it yet`
+                          : o.state === 'running_late' ? `says they will be there by ${fmtTime(o.notice.eta_at)}`
+                            : `not clocked in, ${mins(o.minutes_late)} after the start${o.notice ? `; said by ${fmtTime(o.notice.eta_at)}` : ''}`}
                   </Text>
                 </View>
-                {o.phone ? (
+                {o.user_id && o.phone ? (
                   <Button title="Call" variant="ghost" onPress={() => Linking.openURL(`tel:${String(o.phone).replace(/[^\d+]/g, '')}`)} />
                 ) : null}
               </View>

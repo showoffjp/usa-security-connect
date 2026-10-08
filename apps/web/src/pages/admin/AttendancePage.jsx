@@ -7,13 +7,15 @@ import { Banner, Chip, Empty, Field, Icon, LoadingPage, Modal, Stat, useToast } 
 const EVERY_SECONDS = 15;
 const STATE = {
   no_show: { label: 'No-show', kind: 'danger' },
+  called_off: { label: 'Called off', kind: 'danger' },
+  running_late: { label: 'Running late', kind: 'info' },
   late: { label: 'Late', kind: 'warn' },
   covering: { label: 'Cover on the way', kind: 'info' },
   arrived: { label: 'Arrived late', kind: 'warn' },
   covered: { label: 'Covered', kind: 'ok' },
   missed: { label: 'Never covered', kind: 'danger' },
 };
-const STAGE_KIND = { late: 'warn', no_show: 'danger', arrived: 'ok', covered: 'ok' };
+const STAGE_KIND = { running_late: 'info', called_off: 'danger', late: 'warn', no_show: 'danger', arrived: 'ok', covered: 'ok' };
 const TEXT_KIND = { sent: 'ok', skipped: 'warn', failed: 'danger', queued: '' };
 const s = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const mins = (n) => (n >= 60 ? `${Math.floor(n / 60)} h ${n % 60 ? `${n % 60} min` : ''}`.trim() : `${n} min`);
@@ -234,27 +236,50 @@ function SettingsDialog({ initial, rules, onClose, onSaved }) {
 function Row({ o, focused }) {
   const st = STATE[o.state];
   const late = o.state === 'late' || o.state === 'no_show';
+  // What the officer said is spelled out above, so the timeline does not repeat it alone.
+  const steps = o.timeline.length === 1 && ['called_off', 'running_late'].includes(o.timeline[0].stage) ? [] : o.timeline;
+  // Who to call: the officer on it, or for a call-off nobody; who is named:
+  // the officer on it, or the one who called off.
+  const who = o.user_id ? (
+    <Link className="small strong" to={`/admin/employees/${o.user_id}`}>{o.officer}</Link>
+  ) : (
+    <span className="small strong">{o.officer}</span>
+  );
   return (
     <li className={`list-item handover${focused ? ' is-focused' : ''}`} id={`attendance-${o.shift_id}`} style={{ cursor: 'default', alignItems: 'flex-start' }}>
       <div className="grow stack-sm">
         <div className="row wrap" style={{ gap: 8 }}>
           <Chip kind={st.kind} dot={o.state === 'no_show'}>{st.label}</Chip>
-          <Link className="small strong" to={`/admin/employees/${o.user_id}`}>{o.officer}</Link>
+          {who}
           {o.covered_from && <span className="tiny muted">for {o.covered_from}</span>}
         </div>
         <div className="small">
           {o.post_name}, <span className="muted">{o.site_name}</span>
         </div>
         <div className="tiny muted">
-          {fmtDay(o.starts_at)}, due {fmtTime(o.starts_at)}
+          {fmtDay(o.starts_at)}, {o.started ? 'due' : 'starts'} {fmtTime(o.starts_at)}
           {late && ` · not clocked in, ${mins(o.minutes_late)} after the start`}
-          {o.state === 'covering' && ` · not clocked in yet`}
+          {o.state === 'covering' && (o.started ? ' · not clocked in yet' : ' · cover found')}
+          {o.state === 'called_off' && ' · nobody on it yet'}
+          {o.state === 'running_late' && (o.started ? ` · ${mins(o.minutes_late)} in, within the grace` : '')}
           {(o.state === 'arrived' || o.state === 'covered') && ` · clocked in ${fmtTime(o.clock_in_at)}, ${mins(o.minutes_late)} after the start`}
           {o.state === 'missed' && ` · shift ended ${fmtTime(o.ends_at)} with nobody on post`}
         </div>
-        {o.timeline.length > 0 && (
+        {o.call_off && (
+          <div className="small">
+            Called off {fmtTime(o.call_off.created_at)}: {o.call_off.reason_label.toLowerCase()}
+            {o.call_off.note ? <span className="muted">, "{o.call_off.note}"</span> : ''}
+          </div>
+        )}
+        {o.notice && (
+          <div className="small">
+            Said at {fmtTime(o.notice.created_at)} they would be there by <strong>{fmtTime(o.notice.eta_at)}</strong>
+            {o.notice.note ? <span className="muted">: "{o.notice.note}"</span> : ''}
+          </div>
+        )}
+        {steps.length > 0 && (
           <ol className="row wrap tiny muted" style={{ gap: 6, listStyle: 'none', margin: 0, padding: 0 }} aria-label="What happened">
-            {o.timeline.map((t, i) => (
+            {steps.map((t, i) => (
               <li key={i}>
                 {i > 0 && '→ '}
                 {t.label} {fmtTime(t.at)}
@@ -264,15 +289,15 @@ function Row({ o, focused }) {
           </ol>
         )}
       </div>
-      {(late || o.state === 'covering') && (
+      {(late || o.state === 'covering' || o.state === 'called_off' || o.state === 'running_late') && (
         <div className="row wrap handover-actions" style={{ gap: 6, justifyContent: 'flex-end' }}>
-          {o.phone && (
+          {o.user_id && o.phone && (
             <a className="btn btn-ghost btn-sm" href={tel(o.phone)} aria-label={`Call ${o.officer}`}>
               <Icon name="phone" size={14} /> Call
             </a>
           )}
-          {late && (
-            <Link className={`btn btn-sm ${o.state === 'no_show' ? 'btn-primary' : 'btn-ghost'}`}
+          {(late || o.state === 'called_off') && (
+            <Link className={`btn btn-sm ${o.state === 'no_show' || o.state === 'called_off' ? 'btn-primary' : 'btn-ghost'}`}
               to={`/admin/schedule?week=${weekOf(o.starts_at)}&shift=${o.shift_id}`} aria-label={`Find cover for ${o.officer}'s shift`}>
               Find cover
             </Link>
@@ -347,8 +372,9 @@ export default function AttendancePage() {
           <h1>Late &amp; no-shows</h1>
           <p className="lead">
             Every shift that has started without its officer clocked in. Late after {data?.rules.lateGraceMinutes ?? 7} minutes, a no-show
-            after {data?.rules.noShowMinutes ?? 30}, then whether they turned up or someone covered. This page updates itself, and the same
-            updates go to your phone by text if you ask for them.
+            after {data?.rules.noShowMinutes ?? 30}, then whether they turned up or someone covered. Officers can say first that they are
+            running late, or call off, from their own app. This page updates itself, and the same updates go to your phone by text if you
+            ask for them.
           </p>
         </div>
         <div className="row wrap" style={{ gap: 10, alignItems: 'center' }}>
@@ -373,8 +399,8 @@ export default function AttendancePage() {
         <>
           <div className="grid grid-4">
             <Stat label="No-shows" value={c.no_show} foot={`No clock-in ${data.rules.noShowMinutes} min after the start`} alert={c.no_show > 0} />
-            <Stat label="Late" value={c.late} foot={`Past the ${data.rules.lateGraceMinutes}-minute grace`} alert={c.late > 0} />
-            <Stat label="Cover on the way" value={c.covering} foot="Given to another officer" />
+            <Stat label="Called off" value={c.called_off} foot="Nobody on the shift yet" alert={c.called_off > 0} />
+            <Stat label="Late" value={c.late} foot={c.running_late ? `And ${s(c.running_late, 'more')} running late, who said so first` : `Past the ${data.rules.lateGraceMinutes}-minute grace`} alert={c.late > 0} />
             <Stat label="Arrived late" value={c.arrived} foot={`And ${s(c.covered, 'shift')} covered, last 12 h`} />
           </div>
 
@@ -405,7 +431,7 @@ export default function AttendancePage() {
               <span className="small muted">{s(data.open.length, 'shift')}</span>
             </div>
             {data.open.length === 0 ? (
-              <Empty icon="check" title="Everyone due is on post">Every shift that has started has its officer clocked in.</Empty>
+              <Empty icon="check" title="Everyone due is on post">Every shift that has started has its officer clocked in, and nobody has called off.</Empty>
             ) : (
               <ul className="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {data.open.map((o) => <Row key={o.shift_id} o={o} focused={o.shift_id === focus} />)}

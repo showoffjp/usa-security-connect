@@ -1,12 +1,16 @@
 /**
  * Late and no-show alerts, through the API, on the demo data.
  *
- * Vince has texts on to his confirmed number. A supervisor adds their own
+ * Vince has texts on to a confirmed number. A supervisor adds their own
  * number, proves it with the code, and from then on gets the texts too. A
  * shift that started 35 minutes ago with nobody clocked in is a no-show: one
  * text, "no-show", not "late" and then "no-show". Given to another officer,
  * it is covered, and everyone told of the no-show hears that too. One ten
  * minutes late is texted only to those who asked to hear of late starts.
+ *
+ * Officers can say so first: one running late is told to those who asked for
+ * late starts, once; one calling off has the shift taken off them and opened,
+ * everyone hears at once, and again when it is covered.
  *
  * No text provider is configured in the suites, so every text lands in the
  * outbox as 'skipped' and the verification code comes back on screen.
@@ -41,10 +45,10 @@ log(board.data.open[0]?.state === 'no_show', 'no-shows first');
 
 const me = board.data.settings;
 log(me.sms_enabled && me.phone === '(904) 555-0100' && me.phone_verified && me.on_late && me.on_no_show && me.on_update,
-  'Vince has texts on, to his confirmed number, for all three', me.phone);
+  'Vince has texts on, to a confirmed number, for all three', me.phone);
 log(me.provider.configured === false, 'no text provider in the suites');
 const toVince = board.data.texts.filter((t) => t.to_name === 'Vince Ortega');
-log(toVince.length > 0 && toVince.every((t) => t.to === '•••• 0100' && t.status === 'skipped'), 'his texts are in the outbox, number masked, skipped without a provider',
+log(toVince.length > 0 && toVince.every((t) => t.to === '•••• 0100' && t.status === 'skipped'), 'Vince\'s texts are in the outbox, number masked, skipped without a provider',
   `${toVince.length} texts`);
 log(toVince.some((t) => /^USC NO-SHOW: /.test(t.body)) && toVince.some((t) => /is covered/.test(t.body)), 'including a no-show and a covered');
 log(board.data.events.every((e, i, all) => i === 0 || all[i - 1].id > e.id), 'updates newest first');
@@ -150,6 +154,73 @@ for (const id of [shiftId, lateId]) {
 }
 const gone = (await call('/attendance', { token: vince })).data;
 log(!gone.open.some((o) => o.shift_id === shiftId || o.shift_id === lateId), 'and both are gone from the board');
+
+/* ====================================== the officer says so before it happens === */
+section('running late, and calling off');
+const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+// Officers free for a window, signed in as themselves.
+async function officersFor(from, to, count, skip = []) {
+  for (const p of posts.slice(0, 40)) {
+    const c = await call(`/admin/shifts/candidates?postId=${p.id}&startsAt=${encodeURIComponent(from.toISOString())}&endsAt=${encodeURIComponent(to.toISOString())}`, { token: vince });
+    const found = [];
+    for (const x of (c.data?.candidates || []).filter((x) => x.eligible && !x.reasons.length && x.role === 'officer' && !SUITE.has(x.employee_code) && !skip.includes(x.user_id))) {
+      const token = await signIn(x.employee_code, pinFor(x.employee_code));
+      if (token) found.push({ ...x, token });
+      if (found.length === count) return { post: p, people: found };
+    }
+  }
+  return { post: null, people: [] };
+}
+const soon = new Date(Math.ceil((Date.now() + 30 * MIN) / MIN) * MIN);
+const r = await officersFor(soon, new Date(soon.getTime() + 6 * 60 * MIN), 1);
+const rita = r.people[0];
+log(Boolean(rita), 'an officer with a shift starting in half an hour', rita?.name);
+const ritaShift = (await call('/admin/shifts', {
+  token: vince, method: 'POST',
+  body: { postId: r.post.id, userId: rita.user_id, startsAt: soon.toISOString(), endsAt: new Date(soon.getTime() + 6 * 60 * MIN).toISOString(), notes: 'Late and no-show suite.' },
+})).data.shift.id;
+const offered = await call('/heads-up', { token: rita.token });
+log(offered.status === 200 && offered.data.shift?.id === ritaShift && offered.data.reasons.length === 4, 'their home screen offers it, with the reasons to call off');
+log((await call('/heads-up', { token: client })).status === 401, 'clients have nothing to say here');
+log((await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 10 } })).status === 422, 'arriving before the start is not late');
+log((await call(`/heads-up/${ritaShift}/running-late`, { token: marcus, method: 'POST', body: { etaMinutes: 50 } })).status === 409, "nor can anyone else say it for them");
+const ran = await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 45, note: 'Bridge is up' } });
+log(ran.status === 201 && ran.data.notice.minutes_late === 15, 'they say they will be fifteen minutes late', ran.data?.error);
+log((await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 60 } })).status === 409, 'once; if it changes again, they call');
+const heard = await call('/attendance', { token: vince });
+const ritaTexts = textsFor(heard.data, /^USC heads-up: /, rita.name);
+log(ritaTexts.length === 1 && ritaTexts[0].to === '•••• 0100' && /Bridge is up/.test(ritaTexts[0].body), 'Vince, who asked for late starts, is told now; the supervisor is not', ritaTexts[0]?.body);
+const ritaRow = heard.data.open.find((o) => o.shift_id === ritaShift);
+log(ritaRow?.state === 'running_late' && ritaRow.notice?.note === 'Bridge is up', 'the board shows them running late before the shift starts');
+log((await call('/heads-up', { token: rita.token })).data.notice?.kind === 'running_late', 'and their home screen shows what they said');
+
+const later = new Date(Math.ceil((Date.now() + 3 * 60 * MIN) / MIN) * MIN);
+const k = await officersFor(later, new Date(later.getTime() + 6 * 60 * MIN), 2, [rita.user_id]);
+const [nick, sub] = k.people;
+log(Boolean(nick && sub), 'an officer due on in three hours, and another free then', nick && `${nick.name}, ${sub?.name}`);
+const nickShift = (await call('/admin/shifts', {
+  token: vince, method: 'POST',
+  body: { postId: k.post.id, userId: nick.user_id, startsAt: later.toISOString(), endsAt: new Date(later.getTime() + 6 * 60 * MIN).toISOString(), notes: 'Late and no-show suite.' },
+})).data.shift.id;
+log((await call(`/heads-up/${nickShift}/call-off`, { token: nick.token, method: 'POST', body: { reason: 'other' } })).status === 422, "'something else' needs a few words");
+const off = await call(`/heads-up/${nickShift}/call-off`, { token: nick.token, method: 'POST', body: { reason: 'family', note: 'My daughter is in the ER' } });
+log(off.status === 201 && off.data.notice.reason_label === 'Family emergency', 'they call off: a family emergency', off.data?.error);
+log((await call('/heads-up', { token: nick.token })).data.shift?.id !== nickShift, 'the shift is no longer theirs');
+log((await call('/shifts/open', { token: marcus })).data.shifts.some((x) => x.id === nickShift), 'it is open for other officers to claim');
+const told = await call('/attendance', { token: vince });
+const offTexts = textsFor(told.data, /^USC CALL-OFF: /, nick.name);
+log(offTexts.some((t) => t.to === '•••• 0100') && offTexts.some((t) => t.to === '•••• 0142'), 'Vince and the supervisor are texted at once', offTexts[0]?.body);
+log(told.data.open.find((o) => o.shift_id === nickShift)?.state === 'called_off', 'the board has it as called off, needing cover');
+const callOffAlert = (await call('/admin/alerts', { token: supervisor })).data.alerts.find((a) => a.link === `/admin/attendance?shift=${nickShift}`);
+log(callOffAlert?.severity === 'critical' && /called off/.test(callOffAlert.title), 'and it is a critical alert until it is covered', callOffAlert?.title);
+log((await call('/admin/dashboard', { token: supervisor })).data.counts.calledOff >= 1, 'counted on the dashboard');
+const given = await call(`/admin/shifts/${nickShift}`, { token: vince, method: 'PATCH', body: { userId: sub.user_id } });
+log(given.status === 200, `a supervisor gives it to ${sub.name}`, given.data?.error);
+const afterCover = await call('/attendance', { token: vince });
+const coverText = textsFor(afterCover.data, /is covered/, sub.name);
+log(coverText.some((t) => t.to === '•••• 0100') && coverText.some((t) => t.to === '•••• 0142'), 'and both hear it is covered', coverText[0]?.body);
+log(afterCover.data.open.find((o) => o.shift_id === nickShift)?.state === 'covering', 'the board shows the cover');
+for (const id of [ritaShift, nickShift]) await call(`/admin/shifts/${id}`, { token: vince, method: 'DELETE' });
 
 /* ===================================================== removing the number === */
 section('removing the number');

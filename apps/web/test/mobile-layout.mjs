@@ -384,6 +384,21 @@ const admin = await staffToken('1001', '2468');
 await audit('admin', ADMIN, async (page, context) => context.addInitScript((t) => localStorage.setItem('usc.token', t), admin));
 const officer = await staffToken('1003', '4812');
 await audit('officer', OFFICER, async (page, context) => context.addInitScript((t) => localStorage.setItem('usc.token', t), officer));
+// The officer the demo has running late for a shift about to start: their
+// home screen says so, and offers to call off. Found from the board, as it
+// follows the clock; skipped once that shift is over.
+const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+const board = await (await fetch(`${API}/attendance`, { headers: { authorization: `Bearer ${admin}` } })).json();
+const runningLate = (board.open || []).find((o) => o.state === 'running_late' || (o.notice && o.user_id));
+const lateToken = runningLate && (await staffToken(runningLate.employee_code, pinFor(runningLate.employee_code)));
+if (lateToken) {
+  await audit('officer due on', [
+    ['Officer home, running late', '/'],
+    ["Officer: can't make it", '/', async (p) => p.click('#heads-up button:has-text("Can\'t make it")')],
+  ], async (page, context) => context.addInitScript((t) => localStorage.setItem('usc.token', t), lateToken));
+} else {
+  console.log('SKIP  officer due on: nobody is running late on the demo just now');
+}
 await audit('client', PORTAL, async (page) => {
   await page.goto(`${WEB}/portal`, { waitUntil: 'networkidle' });
   await page.fill('input[type="email"]', 'dana.whitfield@riverfrontholdings.com');

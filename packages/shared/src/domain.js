@@ -628,6 +628,22 @@ export const RULES = {
   maxHoursPer24: 16,
   /** Most days in a row with a shift. */
   maxConsecutiveDays: 6,
+  /** How far ahead of a shift an officer can say they are running late or call off. */
+  headsUpHours: 12,
+  /** The latest arrival an officer running late can give, in minutes from now. */
+  maxEtaMinutes: 180,
+};
+
+/**
+ * Why an officer cannot work a shift they are on. A call-off opens the shift
+ * at once and tells the supervisors; planned changes go through a drop request.
+ */
+export const CALL_OFF_REASONS = ['sick', 'family', 'transport', 'other'];
+export const CALL_OFF_LABEL = {
+  sick: 'Sick',
+  family: 'Family emergency',
+  transport: 'Car or transport trouble',
+  other: 'Something else',
 };
 
 export const BROADCAST_PRIORITY = ['normal', 'important', 'urgent'];

@@ -23,7 +23,10 @@ log(
 );
 
 const armedShift = openForMarcus.data.shifts.find((s) => s.armed);
-const unarmedShift = openForMarcus.data.shifts.find((s) => !s.armed);
+// An unarmed one Marcus is free for: the demo also has a shift called off
+// sick a few hours from now, which may clash with his own roster.
+const unarmedShift = openForMarcus.data.shifts.find((s) => !s.armed && !s.eligibility.some((r) => r.code === 'conflict'))
+  || openForMarcus.data.shifts.find((s) => !s.armed);
 log(!!armedShift && !!unarmedShift, 'both an armed and an unarmed open shift exist');
 
 // The rule that matters: a Class D officer cannot take an armed post.
