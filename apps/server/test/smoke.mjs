@@ -1,6 +1,5 @@
-import { localDay } from './harness.mjs';
+import { localDay, BASE } from './harness.mjs';
 
-const BASE = 'http://localhost:4000/api';
 let failures = 0;
 
 const log = (ok, label, extra = '') => {
