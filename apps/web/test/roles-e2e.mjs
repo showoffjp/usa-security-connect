@@ -1813,6 +1813,74 @@ for (const u of STAFF) {
   await sup.context.close();
 }
 
+/* ------------------------------------ round 33: running late, and calling off --- */
+{
+  console.log('\n--- Heads-up: an officer says they are running late, then calls off; supervisors see both ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const login = async (code, pin) => (await api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: code, pin }) })).token;
+  const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+  const adminToken = await login('1001', '2468');
+
+  // An officer free for a shift starting in forty minutes, put on one.
+  const start = new Date(Math.ceil((Date.now() + 40 * 60000) / 60000) * 60000);
+  const end = new Date(start.getTime() + 6 * 3600000);
+  const posts = (await api('/reference', adminToken)).posts;
+  let made = null;
+  for (const p of posts.slice(0, 40)) {
+    const c = await api(`/admin/shifts/candidates?postId=${p.id}&startsAt=${encodeURIComponent(start.toISOString())}&endsAt=${encodeURIComponent(end.toISOString())}`, adminToken);
+    const who = (c.candidates || []).find((x) => x.eligible && !x.reasons.length && x.role === 'officer' && !/^100[1-8]$/.test(x.employee_code));
+    if (!who || !(await login(who.employee_code, pinFor(who.employee_code)))) continue;
+    const r = await api('/admin/shifts', adminToken, { method: 'POST', body: JSON.stringify({ postId: p.id, userId: who.user_id, startsAt: start.toISOString(), endsAt: end.toISOString(), notes: 'Browser suite: heads-up.' }) });
+    if (r.shift) { made = { id: r.shift.id, ...who }; break; }
+  }
+  log(Boolean(made), 'an officer is put on a shift starting in forty minutes', made?.name);
+  if (made) {
+    const officer = await watchedPage({ width: 390, height: 844 });
+    await staffSignIn(officer.page, made.employee_code, pinFor(made.employee_code));
+    await officer.page.waitForSelector('#heads-up', { timeout: 10000 });
+    log(await officer.page.locator('#heads-up button:has-text("Running late")').count() === 1, 'their home screen offers to say they are running late');
+    await checkScreen('officer: next shift, with heads-up', officer.page, officer.problems);
+
+    await officer.page.click('#heads-up button:has-text("Running late")');
+    await officer.page.locator('[role="dialog"] [role="radio"]:has-text("20")').click();
+    await officer.page.locator('[role="dialog"] input').fill('Train delayed');
+    await checkScreen('officer: running late dialog', officer.page, officer.problems);
+    await officer.page.click('[role="dialog"] button:has-text("Tell my supervisors")');
+    await officer.page.waitForSelector('#heads-up :text("Your supervisors know you are running late")', { timeout: 10000 });
+    log(await officer.page.locator('#heads-up :text("Train delayed")').count() === 1, 'and then sees that their supervisors know, with what they said');
+    const board = await api('/attendance', adminToken);
+    const row = board.open.find((o) => o.shift_id === made.id);
+    log(row?.state === 'running_late' && row.notice?.note === 'Train delayed', 'the board shows them running late');
+    log(board.texts.some((t) => t.body.startsWith(`USC heads-up: ${made.name}`)), 'and Vince has the text');
+
+    await officer.page.click("#heads-up button:has-text(\"Can't make it\")");
+    await officer.page.click('[role="dialog"] label:has-text("Car or transport trouble")');
+    await checkScreen("officer: can't make it dialog", officer.page, officer.problems);
+    await officer.page.click('[role="dialog"] button:has-text("Call off this shift")');
+    await officer.page.waitForSelector('.toast:has-text("Called off")', { timeout: 10000 });
+    // The card goes, or moves on to their next shift if they have one today.
+    const mine = await api('/heads-up', await login(made.employee_code, pinFor(made.employee_code)));
+    log(mine.shift?.id !== made.id, 'calling off takes the shift off their home screen');
+    const after = await api('/attendance', adminToken);
+    log(after.open.find((o) => o.shift_id === made.id)?.state === 'called_off', 'the board has it as called off');
+    log(after.texts.some((t) => t.body.startsWith(`USC CALL-OFF: ${made.name}`)), 'and Vince is texted to find cover');
+    await officer.context.close();
+
+    const sup = await watchedPage({ width: 1440, height: 900 });
+    await staffSignIn(sup.page, '1002', '3571');
+    await sup.page.goto(WEB + `/admin/attendance?shift=${made.id}`);
+    await sup.page.waitForSelector(`#attendance-${made.id}`, { timeout: 10000 });
+    const r = sup.page.locator(`#attendance-${made.id}`);
+    log(await r.locator('.chip:has-text("Called off")').count() === 1 && await r.locator('text=car or transport trouble').count() === 1,
+      'a supervisor sees the call-off and why');
+    log(await r.locator('a:has-text("Find cover")').count() === 1 && await r.locator('a:has-text("Call")').count() === 0, 'with Find cover, and no number to call');
+    await checkScreen('supervisor: a call-off on the board', sup.page, sup.problems);
+    await sup.context.close();
+    await api(`/admin/shifts/${made.id}`, adminToken, { method: 'DELETE' });
+  }
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -10,7 +10,7 @@ process.env.USC_PUSH_DISABLED = '1';
 
 const { db, migrate } = await import('../src/lib/db.js');
 const { toSql } = await import('../src/services/compliance.js');
-const { stagesFor, sweepAttendance, attendanceBoard } = await import('../src/services/attendance.js');
+const { stagesFor, sweepAttendance, attendanceBoard, headsUpFor, reportRunningLate, callOff } = await import('../src/services/attendance.js');
 const { normalizePhone, displayPhone, maskPhone } = await import('../src/services/sms.js');
 
 let failed = 0;
@@ -115,6 +115,58 @@ log(oldEvents.map((e) => e.stage).join(',') === 'late,no_show', 'with both its s
 // Quinn turned everything off. Neither got a text.
 const people = new Set((await texts()).map((x) => x.to_user_id));
 log(!people.has(supervisor) && !people.has(quiet), 'nobody without a confirmed number and texts on is texted');
+
+/* ================================================ the officer says so first === */
+console.log('\n--- running late, and calling off ---');
+const refused = async (fn) => { try { await fn(); return null; } catch (err) { return err.status; } };
+const rita = await person('9406', 'Rita', 'officer');
+const ritaShift = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at) VALUES (?,?,?,?)`, rita, post,
+  toSql(new Date(now.getTime() + 20 * MIN)), toSql(new Date(now.getTime() + 8 * 60 * MIN)));
+const offered = await headsUpFor(rita, now);
+log(offered.shift?.id === ritaShift && !offered.shift.started && offered.shift.minutes_to_start === 20, 'the next shift, twenty minutes away, is the one Rita can say something about');
+log(await refused(() => reportRunningLate({ userId: rita, shiftId: ritaShift, etaMinutes: 10, now })) === 422, 'arriving before the start is not late');
+log(await refused(() => reportRunningLate({ userId: officer, shiftId: ritaShift, etaMinutes: 40, now })) === 409, "nobody can say it for someone else's shift");
+let sent = (await texts()).length;
+const said = await reportRunningLate({ userId: rita, shiftId: ritaShift, etaMinutes: 35, note: 'Flat tyre', now });
+t = (await texts()).slice(sent);
+log(said.notice.minutes_late === 15 && t.length === 1 && t[0].to_user_id === admin && /^USC heads-up: Rita Tester is running late .* expects to arrive by .*"Flat tyre"/.test(t[0].body),
+  'running fifteen minutes late: the one who asked for late starts is told now', t[0]?.body);
+log(await refused(() => reportRunningLate({ userId: rita, shiftId: ritaShift, etaMinutes: 50, now })) === 409, 'once per shift; after that, they call');
+const start = new Date(now.getTime() + 20 * MIN);
+const at = (m) => new Date(start.getTime() + m * MIN);
+log((await attendanceBoard({ now })).open.find((o) => o.shift_id === ritaShift)?.state === 'running_late', 'the board shows it before the shift starts');
+sent = (await texts()).length;
+await sweepAttendance(at(8));
+log((await texts()).length === sent, 'eight minutes in, late but within the time given: no late text');
+const lateRow = (await attendanceBoard({ now: at(8) })).open.find((o) => o.shift_id === ritaShift);
+log(lateRow?.state === 'late' && lateRow.notice?.note === 'Flat tyre', 'the board has Rita late, with what was said');
+await sweepAttendance(at(31));
+t = (await texts()).slice(sent);
+log(t.length === 1 && /^USC NO-SHOW: Rita Tester .* They said they would be there by /.test(t[0].body), 'still not there at thirty minutes: the no-show text repeats the time given', t[0]?.body);
+
+const nick = await person('9407', 'Nick', 'officer');
+const nickStart = new Date(now.getTime() + 3 * 60 * MIN);
+const nickShift = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at) VALUES (?,?,?,?)`, nick, post,
+  toSql(nickStart), toSql(new Date(nickStart.getTime() + 6 * 60 * MIN)));
+log(await refused(() => callOff({ userId: nick, shiftId: nickShift, reason: 'bored', now })) === 422, 'a call-off needs one of the reasons');
+log(await refused(() => callOff({ userId: nick, shiftId: nickShift, reason: 'other', note: 'eh', now })) === 422, "and 'something else' needs a few words");
+sent = (await texts()).length;
+await callOff({ userId: nick, shiftId: nickShift, reason: 'sick', note: 'Fever', now });
+const opened = await db.prepare(`SELECT user_id, is_open FROM shifts WHERE id = ?`).get(nickShift);
+t = (await texts()).slice(sent);
+log(opened.user_id === null && opened.is_open, 'calling off sick takes the shift off Nick and opens it');
+log(t.length === 1 && /^USC CALL-OFF: Nick Tester can't work the .* \(sick\)\. It is open: find cover\./.test(t[0].body), 'everyone who hears of no-shows is texted at once', t[0]?.body);
+log(!/Call \(/.test(t[0]?.body || ''), "without the officer's number: they have said they can't come");
+log((await attendanceBoard({ now })).open.find((o) => o.shift_id === nickShift)?.state === 'called_off', 'the board has it as called off, needing cover');
+log((await headsUpFor(nick, now)).shift?.id !== nickShift, 'and it is no longer Nick\'s to say anything about');
+log(await refused(() => callOff({ userId: nick, shiftId: nickShift, reason: 'sick', now })) === 409, 'nor can it be called off twice');
+await db.prepare(`UPDATE shifts SET user_id = ?, is_open = false WHERE id = ?`).run(cover, nickShift);
+sent = (await texts()).length;
+await sweepAttendance(new Date(now.getTime() + MIN));
+t = (await texts()).slice(sent);
+log(t.length === 1 && /is covered\. Casey Tester is taking Nick Tester's/.test(t[0].body), 'given to someone before it starts: covered, and those told are told so', t[0]?.body);
+log((await attendanceBoard({ now: new Date(nickStart.getTime() + 20 * MIN) })).open.find((o) => o.shift_id === nickShift)?.state === 'covering',
+  'twenty minutes in without the cover clocked in, it is cover on the way, not late');
 
 console.log(`\nLate and no-show rules: ${failed ? `${failed} CHECK(S) FAILED.` : 'all checks passed.'}`);
 process.exit(failed ? 1 : 0);

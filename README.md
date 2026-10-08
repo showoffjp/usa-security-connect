@@ -97,7 +97,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
-13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show.
+13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -350,7 +350,7 @@ On the phone:
     <td width="25%" valign="top"><a href="docs/screenshots/officer-expenses.jpg"><img src="docs/screenshots/officer-expenses.jpg" alt="An officer's expense claims and what was paid"></a><br><b>My expenses</b><br>What is waiting, approved and paid back, with the pay period that paid it, or why a claim was declined.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-commended.jpg"><img src="docs/screenshots/officer-commended.jpg" alt="An officer's home screen with a new commendation"></a><br><b>You were commended</b><br>On the officer's home screen, web and phone, until read; every one stays on their profile.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-short-rest.jpg"><img src="docs/screenshots/officer-short-rest.jpg" alt="A short rest flagged on an officer's schedule"></a><br><b>Short of rest</b><br>A shift on the officer's own schedule that leaves them short of rest, or past the hours or days, says so, web and phone.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-running-late.jpg"><img src="docs/screenshots/officer-running-late.jpg" alt="An officer's next shift with Running late and Can't make it"></a><br><b>Running late, or can't make it</b><br>Before the next shift, the officer tells the supervisors they are on their way and when they will arrive, or calls off and the shift opens for cover.</td>
   </tr>
 </table>
 
@@ -861,6 +861,19 @@ and a supervisor can only read is noted where it matters.
     numbers masked; a verification code is never kept.
   - Supervisors have the same live list in the phone app (**My reports → Late &
     no-shows**), with a call button; tapping a late or no-show notification opens it.
+  - **Officers can say so first**, from their home screen on the web or the phone, for
+    their next shift (up to 12 hours before it, until they clock in):
+    - **Running late**: how many minutes late, and a note. Those who asked for late starts
+      hear at once ("expects to arrive by 7:20"), as do those who only want no-shows if
+      that would be past the 30 minutes. The 7-minute late text is then not sent while the
+      officer is within the time they gave; a no-show still is, saying what they had said.
+      Once per shift: if it changes again, they call.
+    - **Can't make it**: sick, a family emergency, car or transport trouble, or something
+      else (which needs a few words). The shift is taken off them and opened for other
+      officers to claim, any request of theirs on it is withdrawn, and everyone who hears
+      of no-shows or late starts is texted at once, without the officer's number. It is a
+      critical alert and counted in the sidebar until someone is put on it, and those told
+      hear when it is covered. For a day or more off, officers request time off instead.
   - Texts go through Twilio (`USC_SMS_TWILIO_SID`, `USC_SMS_TWILIO_TOKEN`,
     `USC_SMS_FROM`). Without them every text is still written to the outbox, marked not
     sent, and the confirmation code is shown on screen instead.
@@ -1832,10 +1845,15 @@ The suites, in the order they run:
   a no-show text; covered when the shift is given to someone else, whose lateness is not
   counted; a sweep that missed the late start sends only the no-show, then that they
   arrived; a no-show from hours ago is recorded but not sent; nobody without a confirmed
-  number and texts on is texted.
+  number and texts on is texted. Running late: arriving before the start is not late,
+  nobody can say it for someone else's shift, those who asked for late starts are told at
+  once and only once, the late text is held back within the time given, and the no-show
+  text repeats it. Calling off needs a reason (and words for "something else"), opens the
+  shift, texts at once without the officer's number, and cannot be done twice; given to
+  someone before it starts, it is covered, and the cover is not counted late.
 - **`test/attendance.mjs`** — supervisors see the board, officers and clients do not. The
   demo's no-show, the no-show covered this morning and the officers who arrived late are
-  on it, no-shows first, and Vince's texts are in the outbox with his number masked. A
+  on it, no-shows first, and Vince's texts are in the outbox with the number masked. A
   supervisor cannot turn texts on without a confirmed number, a bad number is refused,
   the wrong code is refused, the right one confirms the number once, the outbox never
   holds the code, and a test text says why it was not sent. A shift that started 35
@@ -1843,7 +1861,12 @@ The suites, in the order they run:
   no "late" text before it, and nothing more when the board is opened again. Given to
   another officer, it is covered, and both hear so; the cover is not counted late. A
   second officer ten minutes late is texted only to Vince, who asked for late starts,
-  and is in the alerts inbox, opening on the board.
+  and is in the alerts inbox, opening on the board. An officer due on in half an hour
+  says they will be fifteen minutes late, once: Vince is texted, the supervisor (no-shows
+  only) is not, and the board and the officer's home screen show it. Another calls off for
+  a family emergency: the shift leaves their home screen and is open to claim, both are
+  texted at once, it is a critical alert and on the dashboard count, and when a supervisor
+  gives it to someone else both hear it is covered.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1902,6 +1925,10 @@ The suites, in the order they run:
     screen and asks for late starts too; an officer put on a shift that started ten
     minutes ago appears as late without the page being reloaded, with a pop-up, and a
     text each to Vince and the supervisor;
+  - an officer due on in forty minutes taps **Running late**, picks twenty minutes and says
+    why, and sees that their supervisors know; then taps **Can't make it** and calls off,
+    and a supervisor finds it on the board with the reason, **Find cover** and no number
+    to call;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
 - **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 127

@@ -150,6 +150,17 @@ code (ten minutes, five tries, three codes an hour). Without Twilio configured,
 texts are recorded as not sent and the code is shown on screen. The outbox keeps
 every text, never a code, and lists numbers by their last four digits.
 
+Officers can say so first, for their next shift (from `headsUpHours`, 12, before it
+until they clock in):
+
+| They say | What happens | Who is told |
+|----------|--------------|-------------|
+| Running late, by when | Recorded once per shift; the late text is held back while they are within the time given | Late starts; no-shows too if past 30 minutes |
+| Can't make it, and why | The shift is taken off them and opened to claim; their requests on it are withdrawn | No-shows and late starts, at once |
+
+A call-off is a critical alert until someone is put on the shift, then a covered
+update. For a day or more off, officers request time off instead.
+
 **Texts are only as prompt as the sweep.** A long-running server sweeps every
 minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
 point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set

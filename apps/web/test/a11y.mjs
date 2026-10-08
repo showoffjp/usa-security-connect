@@ -329,6 +329,27 @@ await page.waitForSelector('text=Keyboard shortcuts');
 await audit(page, 'Keyboard shortcuts', null);
 await page.keyboard.press('Escape');
 
+// The officer running late for a shift about to start: their home screen,
+// and the call-off dialog. Found from the board, as it follows the clock.
+{
+  const API = process.env.USC_API_URL || 'http://localhost:4000/api';
+  const token = await page.evaluate(() => localStorage.getItem('usc.token'));
+  const board = await (await fetch(`${API}/attendance`, { headers: { authorization: `Bearer ${token}` } })).json();
+  const late = (board.open || []).find((o) => o.state === 'running_late' || (o.notice && o.user_id));
+  if (late) {
+    await page.evaluate(() => localStorage.removeItem('usc.token'));
+    await staffSignIn(late.employee_code, String(((Number(late.employee_code) * 7919) % 9000) + 1000));
+    await page.waitForSelector('#heads-up');
+    await audit(page, 'Officer home, running late', null);
+    await page.click("#heads-up button:has-text(\"Can't make it\")");
+    await page.waitForSelector('[role="dialog"]');
+    await audit(page, "Officer: can't make it", null);
+    await page.keyboard.press('Escape');
+  } else {
+    console.log('SKIP  officer running late: nobody is, on the demo just now');
+  }
+}
+
 // An officer on post, for the post log with visitors and notes in it.
 await page.evaluate(() => localStorage.removeItem('usc.token'));
 await staffSignIn('1003', '4812');

@@ -9,6 +9,11 @@
  *   arrived  the officer clocked in after all (and how late)
  *   covered  the shift was given to somebody else
  *
+ * and two the officer gives before it gets that far, from their own app:
+ *
+ *   running_late  they are on their way, and when they expect to arrive
+ *   called_off    they cannot come; the shift is opened for cover at once
+ *
  * A new stage goes to every supervisor and administrator who asked to hear
  * about it - a text to their verified phone, a push to the app, or both. Only
  * the latest fresh stage is sent, so a sweep that has not run for half an
@@ -18,7 +23,8 @@
 
 import { db } from '../lib/db.js';
 import { sqlToIso } from '../lib/http.js';
-import { RULES, ROLES } from '../shared.js';
+import { RULES, ROLES, CALL_OFF_REASONS, CALL_OFF_LABEL } from '../shared.js';
+import { HttpError } from '../lib/http.js';
 import { toSql } from './compliance.js';
 import { pushAsync } from './push.js';
 import { sendSms, displayPhone, maskPhone, smsConfigured, smsKind } from './sms.js';
@@ -30,8 +36,10 @@ const WATCH_HOURS = 12;
 /** A stage older than this when first seen is recorded, not sent. */
 export const FRESH_MINUTES = 20;
 
-export const STAGES = ['late', 'no_show', 'arrived', 'covered'];
-export const STAGE_LABEL = { late: 'Late', no_show: 'No-show', arrived: 'Arrived late', covered: 'Covered' };
+export const STAGES = ['running_late', 'called_off', 'late', 'no_show', 'arrived', 'covered'];
+export const STAGE_LABEL = {
+  running_late: 'Running late', called_off: 'Called off', late: 'Late', no_show: 'No-show', arrived: 'Arrived late', covered: 'Covered',
+};
 
 /** What somebody with no settings saved hears: no-shows and what follows, by push. */
 export const DEFAULT_SETTINGS = { sms_enabled: false, push_enabled: true, on_late: false, on_no_show: true, on_update: true };
@@ -94,6 +102,28 @@ async function eventsFor(shiftIds) {
   return rows.map((e) => ({ ...e, occurred_at: sqlToIso(e.occurred_at), detail: typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail }));
 }
 
+/** What officers have said about a set of shifts, by shift: { running_late: {..}, call_off: {..} } per officer. */
+async function noticesFor(shiftIds) {
+  const out = new Map();
+  if (!shiftIds.length) return out;
+  const rows = await db
+    .prepare(
+      `SELECT n.*, u.first_name || ' ' || u.last_name AS officer FROM attendance_notices n JOIN users u ON u.id = n.user_id
+       WHERE n.shift_id IN (${shiftIds.map(() => '?').join(',')}) ORDER BY n.created_at`
+    )
+    .all(...shiftIds);
+  for (const n of rows) {
+    if (!out.has(n.shift_id)) out.set(n.shift_id, []);
+    out.get(n.shift_id).push(publicNotice(n));
+  }
+  return out;
+}
+
+const publicNotice = (n) => ({
+  kind: n.kind, user_id: n.user_id, officer: n.officer, reason: n.reason, reason_label: n.reason ? CALL_OFF_LABEL[n.reason] : null,
+  note: n.note, eta_at: n.eta_at ? sqlToIso(n.eta_at) : null, created_at: sqlToIso(n.created_at),
+});
+
 async function insertEvent({ shiftId, userId, stage, at, minutes, detail }) {
   const row = await db
     .prepare(
@@ -124,7 +154,10 @@ export async function sweepAttendance(now = new Date()) {
     seen.get(key).stages.add(e.stage);
   }
 
+  const notices = await noticesFor(shifts.map((sh) => sh.id));
+
   for (const sh of shifts) {
+    sh.notice = (notices.get(sh.id) || []).find((n) => n.kind === 'running_late' && n.user_id === sh.user_id) || null;
     const created = [];
     const mine = seen.get(`${sh.id}:${sh.user_id}`)?.stages || new Set();
     // An officer given somebody else's late shift is cover, on the way as
@@ -151,12 +184,159 @@ export async function sweepAttendance(now = new Date()) {
     result.recorded += created.length;
     // The latest fresh stage only; the older ones are history.
     const send = created.filter((c) => c.at.getTime() >= fresh).pop();
-    if (send) {
+    // Late, but they said so and are not past the time they gave: nobody
+    // needs telling again. A no-show is always sent.
+    const expected = send?.stage === 'late' && sh.notice && new Date(sh.notice.eta_at) > now;
+    if (send && !expected) {
       await db.prepare(`UPDATE attendance_events SET notified = true WHERE id = ?`).run(send.id);
       result.sent += await announce(sh, send);
     }
   }
+  result.sent += await coverCallOffs(now);
   return result;
+}
+
+/**
+ * A called-off shift given to somebody before it started: covered. (Once it
+ * has started, the pass above finds it like any other covered shift.)
+ */
+async function coverCallOffs(now) {
+  const rows = await db
+    .prepare(
+      `SELECT sh.id, sh.user_id, sh.starts_at, sh.post_id, p.name AS post_name, s.name AS site_name,
+              u.first_name || ' ' || u.last_name AS officer, u.phone,
+              e.user_id AS was_id, w.first_name || ' ' || w.last_name AS was
+       FROM attendance_events e
+       JOIN shifts sh ON sh.id = e.shift_id
+       JOIN users u ON u.id = sh.user_id
+       JOIN users w ON w.id = e.user_id
+       JOIN posts p ON p.id = sh.post_id JOIN sites s ON s.id = p.site_id
+       WHERE e.stage = 'called_off' AND sh.user_id IS NOT NULL AND sh.user_id <> e.user_id
+         AND sh.status <> 'cancelled' AND sh.ends_at > ?
+         AND NOT EXISTS (SELECT 1 FROM attendance_events c WHERE c.shift_id = e.shift_id AND c.user_id = e.user_id AND c.stage = 'covered')`
+    )
+    .all(toSql(now));
+  let sent = 0;
+  for (const r of rows) {
+    const id = await insertEvent({ shiftId: r.id, userId: r.was_id, stage: 'covered', at: now, detail: { by_user_id: r.user_id, by: r.officer, was: r.was } });
+    if (!id) continue;
+    await db.prepare(`UPDATE attendance_events SET notified = true WHERE id = ?`).run(id);
+    sent += await announce(r, { id, stage: 'covered', at: now, userId: r.was_id, by: r.officer, was: r.was });
+  }
+  return sent;
+}
+
+/* ------------------------------------------------- what the officer says --- */
+
+/**
+ * The shift an officer can say something about: their next one starting in
+ * the next RULES.headsUpHours, or one already started that they have not
+ * clocked in to and that has not ended. With what they have said about it.
+ */
+export async function headsUpFor(userId, now = new Date()) {
+  const sh = await db
+    .prepare(
+      `SELECT sh.id, sh.user_id, sh.post_id, sh.starts_at, sh.ends_at, sh.status,
+              u.first_name || ' ' || u.last_name AS officer, u.phone,
+              p.name AS post_name, s.name AS site_name
+       FROM shifts sh
+       JOIN users u ON u.id = sh.user_id
+       JOIN posts p ON p.id = sh.post_id
+       JOIN sites s ON s.id = p.site_id
+       WHERE sh.user_id = ? AND sh.status IN ('scheduled','missed')
+         AND sh.starts_at <= ? AND sh.ends_at > ?
+         AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.shift_id = sh.id AND te.user_id = sh.user_id)
+       ORDER BY sh.starts_at LIMIT 1`
+    )
+    .get(userId, toSql(new Date(now.getTime() + RULES.headsUpHours * 3600000)), toSql(now));
+  if (!sh) return { shift: null, notice: null };
+  const notice = (await noticesFor([sh.id])).get(sh.id)?.find((n) => n.user_id === userId && n.kind === 'running_late') || null;
+  const start = new Date(sqlToIso(sh.starts_at));
+  return {
+    shift: {
+      id: sh.id, post_name: sh.post_name, site_name: sh.site_name,
+      starts_at: start.toISOString(), ends_at: sqlToIso(sh.ends_at),
+      started: start <= now, minutes_to_start: Math.round((start - now) / MIN),
+    },
+    notice,
+  };
+}
+
+/** The officer's own shift, as headsUpFor would offer it, or a refusal saying why not. */
+async function ownShift(userId, shiftId, now) {
+  const { shift } = await headsUpFor(userId, now);
+  if (!shift || shift.id !== shiftId) {
+    throw new HttpError(409, `You can only do this for your next shift, up to ${RULES.headsUpHours} hours before it starts, until you clock in.`);
+  }
+  return db
+    .prepare(
+      `SELECT sh.*, u.first_name || ' ' || u.last_name AS officer, u.phone, p.name AS post_name, s.name AS site_name
+       FROM shifts sh JOIN users u ON u.id = sh.user_id JOIN posts p ON p.id = sh.post_id JOIN sites s ON s.id = p.site_id
+       WHERE sh.id = ?`
+    )
+    .get(shiftId);
+}
+
+/**
+ * "I'm running late": when they expect to arrive. Once per shift; if it
+ * changes again, they call. Supervisors who asked for late starts are told
+ * now, and the late text at the grace period is not sent while they are
+ * within the time they gave.
+ */
+export async function reportRunningLate({ userId, shiftId, etaMinutes, note, now = new Date() }) {
+  const sh = await ownShift(userId, shiftId, now);
+  const start = new Date(sqlToIso(sh.starts_at));
+  const eta = new Date(Math.ceil((now.getTime() + etaMinutes * MIN) / MIN) * MIN);
+  if (eta <= start) throw new HttpError(422, `That gets you there before ${fmtTime(start)}: you are not late.`);
+  if (eta >= new Date(sqlToIso(sh.ends_at))) throw new HttpError(422, 'That is after the shift ends. If you cannot make it, call off instead.');
+  const row = await db
+    .prepare(
+      `INSERT INTO attendance_notices (shift_id, user_id, kind, eta_at, note) VALUES (?,?, 'running_late', ?, ?)
+       ON CONFLICT (shift_id, user_id, kind) DO NOTHING RETURNING id`
+    )
+    .get(sh.id, userId, toSql(eta), note || null);
+  if (!row) throw new HttpError(409, 'You have already said you are running late for this shift. If it changes again, call your supervisor.');
+  const minutes = minutesAfter(start, eta);
+  const id = await insertEvent({ shiftId: sh.id, userId, stage: 'running_late', at: now, minutes, detail: { eta_at: eta.toISOString(), note: note || null } });
+  await db.prepare(`UPDATE attendance_events SET notified = true WHERE id = ?`).run(id);
+  const texts = await announce(sh, {
+    id, stage: 'running_late', at: now, userId, eta, note, beyondNoShow: minutes > RULES.noShowMinutes,
+  });
+  return { notice: { kind: 'running_late', eta_at: eta.toISOString(), note: note || null, minutes_late: minutes }, texts };
+}
+
+/**
+ * "I can't make it": the shift is taken off them and opened for anyone to
+ * claim, any request of theirs on it is withdrawn, and every supervisor who
+ * hears of no-shows or late starts is told now, while there is time to cover.
+ */
+export async function callOff({ userId, shiftId, reason, note, now = new Date() }) {
+  if (!CALL_OFF_REASONS.includes(reason)) throw new HttpError(422, 'Choose why you cannot come.');
+  if (reason === 'other' && !(note && note.trim().length >= 5)) throw new HttpError(422, 'Say briefly why you cannot come.');
+  const sh = await ownShift(userId, shiftId, now);
+  let id = null;
+  await db.transaction(async () => {
+    const row = await db
+      .prepare(
+        `INSERT INTO attendance_notices (shift_id, user_id, kind, reason, note) VALUES (?,?, 'call_off', ?, ?)
+         ON CONFLICT (shift_id, user_id, kind) DO NOTHING RETURNING id`
+      )
+      .get(sh.id, userId, reason, note || null);
+    if (!row) throw new HttpError(409, 'You have already called off this shift.');
+    await db
+      .prepare(`UPDATE shifts SET user_id = NULL, is_open = true, status = 'scheduled' WHERE id = ?`)
+      .run(sh.id);
+    await db
+      .prepare(
+        `UPDATE shift_requests SET status = 'cancelled', decided_at = now(), decision_note = 'Called off by the officer.'
+         WHERE shift_id = ? AND requested_by = ? AND status IN ('pending','accepted')`
+      )
+      .run(sh.id, userId);
+    id = await insertEvent({ shiftId: sh.id, userId, stage: 'called_off', at: now, detail: { reason, note: note || null } });
+    await db.prepare(`UPDATE attendance_events SET notified = true WHERE id = ?`).run(id);
+  })();
+  const texts = await announce(sh, { id, stage: 'called_off', at: now, userId, reason, note });
+  return { notice: { kind: 'call_off', reason, reason_label: CALL_OFF_LABEL[reason], note: note || null }, texts };
 }
 
 /* ---------------------------------------------------------- the message --- */
@@ -166,7 +346,20 @@ function messageFor(sh, ev) {
   const where = `${sh.post_name}, ${sh.site_name}`;
   const link = publicUrl() ? ` ${publicUrl()}/admin/attendance?shift=${sh.id}` : '';
   const phone = sh.phone ? ` Call ${sh.phone}.` : '';
+  const said = sh.notice?.eta_at ? ` They said they would be there by ${fmtTime(sh.notice.eta_at)}.` : '';
   switch (ev.stage) {
+    case 'running_late':
+      return {
+        title: `${sh.officer} is running late`,
+        body: `${where}, ${fmtTime(start)} start: expects to arrive ${fmtTime(ev.eta)}.${ev.note ? ` "${ev.note}"` : ''}`,
+        sms: `USC heads-up: ${sh.officer} is running late for ${where} (${fmtTime(start)} start) and expects to arrive by ${fmtTime(ev.eta)}.${ev.note ? ` "${ev.note}"` : ''}${phone}`,
+      };
+    case 'called_off':
+      return {
+        title: `Call-off: ${sh.officer}`,
+        body: `Can't work the ${fmtTime(start)} shift at ${where} (${CALL_OFF_LABEL[ev.reason] || ev.reason}). It is open: find cover.`,
+        sms: `USC CALL-OFF: ${sh.officer} can't work the ${fmtTime(start)} shift at ${where} (${(CALL_OFF_LABEL[ev.reason] || ev.reason).toLowerCase()}). It is open: find cover.${link}`,
+      };
     case 'late':
       return {
         title: `${sh.officer} is late`,
@@ -177,7 +370,7 @@ function messageFor(sh, ev) {
       return {
         title: `No-show: ${sh.officer}`,
         body: `No clock-in at ${where}, ${RULES.noShowMinutes} min after the ${fmtTime(start)} start. Find cover.`,
-        sms: `USC NO-SHOW: ${sh.officer} has not clocked in at ${where}, ${RULES.noShowMinutes} min after the ${fmtTime(start)} start. Find cover.${phone}${link}`,
+        sms: `USC NO-SHOW: ${sh.officer} has not clocked in at ${where}, ${RULES.noShowMinutes} min after the ${fmtTime(start)} start.${said} Find cover.${phone}${link}`,
       };
     case 'arrived':
       return {
@@ -195,7 +388,7 @@ function messageFor(sh, ev) {
 }
 
 /** Everyone who asked to hear about this stage of this shift. */
-async function recipientsFor(shiftId, officerId, stage) {
+async function recipientsFor(shiftId, officerId, stage, ev = {}) {
   const people = await db
     .prepare(
       `SELECT u.id, u.first_name || ' ' || u.last_name AS name,
@@ -205,14 +398,19 @@ async function recipientsFor(shiftId, officerId, stage) {
        WHERE u.role IN (?, ?) AND u.status = 'active'`
     )
     .all(ROLES.SUPERVISOR, ROLES.ADMIN);
+  // A call-off is a no-show with warning, for whoever hears of updates.
   const hadNoShow = stage === 'arrived' || stage === 'covered'
-    ? Boolean(await db.prepare(`SELECT 1 FROM attendance_events WHERE shift_id = ? AND user_id = ? AND stage = 'no_show'`).get(shiftId, officerId))
+    ? Boolean(await db.prepare(`SELECT 1 FROM attendance_events WHERE shift_id = ? AND user_id = ? AND stage IN ('no_show','called_off')`).get(shiftId, officerId))
     : false;
   return people
     .map((p) => (p.saved ? p : { ...p, ...DEFAULT_SETTINGS }))
     .filter((p) => {
       if (stage === 'late') return p.on_late;
       if (stage === 'no_show') return p.on_no_show;
+      if (stage === 'called_off') return p.on_no_show || p.on_late;
+      // Running late is a late start told in advance; one that will be past the
+      // no-show mark is news to those who only want no-shows too.
+      if (stage === 'running_late') return p.on_late || (p.on_no_show && ev.beyondNoShow);
       // An update is only news to somebody who was told of the problem.
       return p.on_update && (p.on_late || (p.on_no_show && hadNoShow));
     });
@@ -221,14 +419,14 @@ async function recipientsFor(shiftId, officerId, stage) {
 async function announce(sh, ev, { quiet = false } = {}) {
   const officerId = ev.userId;
   const msg = messageFor(sh, ev);
-  const people = await recipientsFor(sh.id, officerId, ev.stage);
+  const people = await recipientsFor(sh.id, officerId, ev.stage, ev);
   const pushTo = people.filter((p) => p.push_enabled).map((p) => p.id);
   if (pushTo.length && !quiet) {
     pushAsync(pushTo, {
       title: msg.title,
       body: msg.body,
       data: { type: 'attendance', shiftId: sh.id, stage: ev.stage },
-      priority: ev.stage === 'no_show' ? 'high' : 'default',
+      priority: ev.stage === 'no_show' || ev.stage === 'called_off' ? 'high' : 'default',
     });
   }
   let texts = 0;
@@ -263,6 +461,7 @@ export async function replayHistory({ since }) {
     await db.prepare(`UPDATE attendance_events SET notified = true WHERE id = ?`).run(e.event_id);
     texts += await announce({ ...e, id: e.shift_id }, {
       id: e.event_id, stage: e.stage, at, minutes: e.minutes_late, userId: e.user_id, by: detail.by, was: detail.was,
+      eta: detail.eta_at, note: detail.note, reason: detail.reason, beyondNoShow: e.minutes_late > RULES.noShowMinutes,
     }, { quiet: true });
     await db
       .prepare(`UPDATE sms_messages SET created_at = ? WHERE entity = 'attendance_event' AND entity_id = ?`)
@@ -275,6 +474,8 @@ export async function replayHistory({ since }) {
 
 const eventLine = (e) => {
   const d = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail || {};
+  if (e.stage === 'running_late') return `${e.officer} is running late for ${e.post_name}: expects to arrive ${d.eta_at ? fmtTime(d.eta_at) : 'soon'}`;
+  if (e.stage === 'called_off') return `${e.officer} called off ${e.post_name} (${(CALL_OFF_LABEL[d.reason] || 'no reason').toLowerCase()}): needs cover`;
   if (e.stage === 'late') return `${e.officer} late at ${e.post_name}: no clock-in ${e.minutes_late} min after the start`;
   if (e.stage === 'no_show') return `${e.officer} is a no-show at ${e.post_name}`;
   if (e.stage === 'arrived') return `${e.officer} clocked in at ${e.post_name}, ${e.minutes_late} min late`;
@@ -306,62 +507,121 @@ export async function attendanceEvents({ since = 0, limit = 40 } = {}) {
 }
 
 /**
- * The board: who is late or missing right now, who turned up late or was
- * covered today, and the latest updates.
+ * Shifts for the board: every assigned shift started in the last twelve
+ * hours, and any shift in the twelve hours either side that an officer has
+ * said something about - running late, or called off (left with nobody on it
+ * until it is covered).
+ */
+async function boardShifts(now) {
+  const from = toSql(new Date(now.getTime() - WATCH_HOURS * 3600000));
+  return db
+    .prepare(
+      `SELECT sh.id, sh.user_id, sh.post_id, sh.starts_at, sh.ends_at, sh.status,
+              u.first_name || ' ' || u.last_name AS officer, u.employee_code, u.phone,
+              p.name AS post_name, s.name AS site_name,
+              (SELECT MIN(te.clock_in_at) FROM time_entries te
+                WHERE te.user_id = sh.user_id
+                  AND (te.shift_id = sh.id
+                       OR (te.shift_id IS NULL AND te.post_id = sh.post_id
+                           AND te.clock_in_at BETWEEN sh.starts_at - interval '30 minutes' AND sh.ends_at))) AS clock_in_at
+       FROM shifts sh
+       LEFT JOIN users u ON u.id = sh.user_id
+       JOIN posts p ON p.id = sh.post_id
+       JOIN sites s ON s.id = p.site_id
+       WHERE sh.status <> 'cancelled' AND sh.starts_at > ?
+         AND ((sh.user_id IS NOT NULL AND sh.starts_at <= ?)
+              OR (sh.starts_at <= ? AND EXISTS (SELECT 1 FROM attendance_notices n WHERE n.shift_id = sh.id)))
+       ORDER BY sh.starts_at, sh.id`
+    )
+    .all(from, toSql(now), toSql(new Date(now.getTime() + WATCH_HOURS * 3600000)));
+}
+
+/**
+ * The board: who is late, missing or called off right now, who has said they
+ * are running late, who turned up late or was covered today, and the latest
+ * updates.
  */
 export async function attendanceBoard({ now = new Date() } = {}) {
-  const shifts = await startedShifts(now);
+  const shifts = await boardShifts(now);
+  const ids = shifts.map((s) => s.id);
   const byShift = new Map();
-  for (const e of await eventsFor(shifts.map((s) => s.id))) {
+  for (const e of await eventsFor(ids)) {
     if (!byShift.has(e.shift_id)) byShift.set(e.shift_id, []);
     byShift.get(e.shift_id).push(e);
   }
+  const notices = await noticesFor(ids);
 
   const open = [];
   const resolved = [];
   for (const sh of shifts) {
     const timeline = byShift.get(sh.id) || [];
-    // Given to this officer after somebody else was late or missing.
-    const cover = timeline.some((e) => e.user_id !== sh.user_id);
-    const reached = cover ? [] : stagesFor(sh, now);
-    if (!reached.length && !cover) continue;
-    const coveredFrom = timeline.find((e) => e.stage === 'covered' && e.detail?.by_user_id === sh.user_id);
+    const said = notices.get(sh.id) || [];
+    const callOff = said.find((n) => n.kind === 'call_off') || null;
+    const notice = said.find((n) => n.kind === 'running_late' && n.user_id === sh.user_id) || null;
     const start = sqlToIso(sh.starts_at);
+    const started = new Date(start) <= now;
+    const ended = new Date(sqlToIso(sh.ends_at)) <= now;
+    // Given to this officer after somebody else was late, missing or called off.
+    const cover = Boolean(sh.user_id) && timeline.some((e) => e.user_id !== sh.user_id);
+    const reached = cover || !sh.user_id ? [] : stagesFor(sh, now);
+    const coveredFrom = timeline.find((e) => e.stage === 'covered' && e.detail?.by_user_id === sh.user_id);
     const base = {
-      shift_id: sh.id, user_id: sh.user_id, officer: sh.officer, employee_code: sh.employee_code, phone: sh.phone,
-      post_id: sh.post_id, post_name: sh.post_name, site_name: sh.site_name, starts_at: start, ends_at: sqlToIso(sh.ends_at),
+      shift_id: sh.id, user_id: sh.user_id, officer: sh.officer || callOff?.officer || null, employee_code: sh.employee_code,
+      phone: sh.phone, post_id: sh.post_id, post_name: sh.post_name, site_name: sh.site_name, starts_at: start,
+      ends_at: sqlToIso(sh.ends_at), started,
       timeline: timeline.map((e) => ({
         stage: e.stage, label: STAGE_LABEL[e.stage], officer: e.officer, at: e.occurred_at, minutes_late: e.minutes_late, detail: e.detail,
       })),
       covered_from: cover ? coveredFrom?.detail?.was || timeline.find((e) => e.user_id !== sh.user_id)?.officer : null,
+      notice,
+      call_off: callOff,
     };
+
+    // Called off, and nobody on it yet.
+    if (!sh.user_id) {
+      if (!callOff) continue;
+      if (ended) resolved.push({ ...base, state: 'missed', minutes_late: null });
+      else open.push({ ...base, state: 'called_off', minutes_late: started ? minutesAfter(start, now) : null });
+      continue;
+    }
     if (sh.clock_in_at) {
+      if (!reached.length && !cover) continue;
       const inAt = sqlToIso(sh.clock_in_at);
       resolved.push({ ...base, state: cover ? 'covered' : 'arrived', clock_in_at: inAt, minutes_late: minutesAfter(start, inAt) });
       continue;
     }
-    // Still nobody there. Past the end of the shift it is history.
-    if (new Date(sqlToIso(sh.ends_at)) <= now) {
-      resolved.push({ ...base, state: 'missed', minutes_late: null });
+    if (ended) {
+      if (reached.length || cover) resolved.push({ ...base, state: 'missed', minutes_late: null });
       continue;
     }
-    const state = cover ? 'covering' : reached[reached.length - 1].stage;
-    open.push({ ...base, state, minutes_late: minutesAfter(start, now) });
+    if (cover) {
+      open.push({ ...base, state: 'covering', minutes_late: started ? minutesAfter(start, now) : null });
+      continue;
+    }
+    if (reached.length) {
+      open.push({ ...base, state: reached[reached.length - 1].stage, minutes_late: minutesAfter(start, now) });
+      continue;
+    }
+    // Not late yet (not started, or within the grace), but they have said they will be.
+    if (notice) open.push({ ...base, state: 'running_late', minutes_late: started ? minutesAfter(start, now) : null });
   }
-  const rank = { no_show: 0, late: 1, covering: 2 };
-  open.sort((a, b) => rank[a.state] - rank[b.state] || b.minutes_late - a.minutes_late);
+  const rank = { no_show: 0, called_off: 1, late: 2, running_late: 3, covering: 4 };
+  open.sort((a, b) => rank[a.state] - rank[b.state] || (b.minutes_late ?? -1) - (a.minutes_late ?? -1) || new Date(a.starts_at) - new Date(b.starts_at));
   resolved.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+  const count = (list, state) => list.filter((o) => o.state === state).length;
   return {
     now: now.toISOString(),
-    rules: { lateGraceMinutes: RULES.lateGraceMinutes, noShowMinutes: RULES.noShowMinutes },
+    rules: { lateGraceMinutes: RULES.lateGraceMinutes, noShowMinutes: RULES.noShowMinutes, headsUpHours: RULES.headsUpHours },
     open,
     resolved,
     counts: {
-      late: open.filter((o) => o.state === 'late').length,
-      no_show: open.filter((o) => o.state === 'no_show').length,
-      covering: open.filter((o) => o.state === 'covering').length,
-      arrived: resolved.filter((o) => o.state === 'arrived').length,
-      covered: resolved.filter((o) => o.state === 'covered').length,
+      late: count(open, 'late'),
+      no_show: count(open, 'no_show'),
+      called_off: count(open, 'called_off'),
+      running_late: count(open, 'running_late'),
+      covering: count(open, 'covering'),
+      arrived: count(resolved, 'arrived'),
+      covered: count(resolved, 'covered'),
     },
   };
 }
