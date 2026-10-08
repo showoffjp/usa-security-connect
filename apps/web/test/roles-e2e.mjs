@@ -1881,6 +1881,51 @@ for (const u of STAFF) {
   }
 }
 
+/* --------------------------------------------- round 34: the attendance record --- */
+{
+  console.log('\n--- Attendance record: call-offs on the employee record, the scorecards and the officer\'s own profile ---');
+  const api = async (path, token) =>
+    (await fetch(`${WEB}/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} })).json();
+  const adminToken = (await (await fetch(`${WEB}/api/auth/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ employeeCode: '1001', pin: '2468' }),
+  })).json()).token;
+  const seeded = (await api('/attendance', adminToken)).open.find((o) => o.state === 'called_off' && o.call_off);
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  if (seeded) {
+    const rec = await api(`/attendance/record/${seeded.call_off.user_id}`, adminToken);
+    await sup.page.goto(WEB + `/admin/employees/${seeded.call_off.user_id}`);
+    await sup.page.waitForSelector('#attendance-record', { timeout: 10000 });
+    const card = sup.page.locator('#attendance-record');
+    log(await card.locator('.tally .bad', { hasText: 'Called off' }).locator('.n').innerText() === String(rec.summary.calledOff),
+      `${seeded.officer}'s record counts their call-offs`, `${rec.summary.calledOff}`);
+    log(await card.locator('.list-item', { hasText: 'Called off: Sick' }).count() >= 1 && await card.locator('.chip:has-text("Short notice")').count() >= 1,
+      'and lists each, with the reason and any short notice');
+    log(await card.locator('.list-item', { hasText: 'Covered by' }).count() >= 1, 'and who covered');
+    await checkScreen('supervisor: an employee\'s attendance record', sup.page, sup.problems);
+    await card.locator('[role="radio"]:has-text("30 days")').click();
+    await sup.page.waitForTimeout(400);
+    log(await card.locator('.tally').count() === 1, 'the period can be changed');
+    await sup.page.goto(WEB + '/admin/scorecards');
+    await sup.page.waitForSelector('table.data');
+    const row = sup.page.locator('tr', { has: sup.page.locator(`a[href="/admin/employees/${seeded.call_off.user_id}"]`) });
+    log(await row.locator('.chip:has-text("called off")').count() === 1, 'the scorecards show the call-offs beside the shifts');
+    log(await sup.page.locator('text=a call-off counts as half a missed shift').count() === 1, 'and say how they are scored');
+  } else {
+    log(true, 'no call-off seeded at this hour');
+  }
+  await sup.context.close();
+
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await officer.page.goto(WEB + '/profile');
+  await officer.page.waitForSelector('#my-attendance', { timeout: 10000 });
+  log(await officer.page.locator('#my-attendance h3:has-text("My attendance")').count() === 1 &&
+    await officer.page.locator('#my-attendance .tally > div').count() === 4, 'an officer sees their own attendance on their profile');
+  await checkScreen('officer: my attendance', officer.page, officer.problems);
+  await officer.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

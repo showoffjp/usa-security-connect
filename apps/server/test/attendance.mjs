@@ -58,6 +58,32 @@ log(board.data.events.every((e, i, all) => i === 0 || all[i - 1].id > e.id), 'up
 const lastId = board.data.events[0]?.id || 0;
 const since = await call(`/attendance?since=${lastId}`, { token: vince });
 log(since.status === 200 && since.data.events.every((e) => e.id > lastId), 'and ?since= gives only the newer ones, for the live feed');
+log(board.data.events.every((e) => Date.now() - Date.parse(e.occurred_at) < 25 * 60 * MIN), 'only the last day: older call-offs are records, not news');
+
+/* ======================================================== the record === */
+section("an officer's attendance record");
+const seededOff = board.data.open.find((o) => o.state === 'called_off');
+if (seededOff) {
+  const rec = await call(`/attendance/record/${seededOff.call_off.user_id}?days=30`, { token: supervisor });
+  const offs = rec.data.items?.filter((i) => i.kind === 'called_off') || [];
+  log(rec.status === 200 && rec.data.summary.calledOff >= 3 && offs.length === rec.data.summary.calledOff,
+    `${seededOff.officer} has called off three times in a fortnight`, JSON.stringify(rec.data.summary));
+  log(offs.filter((i) => i.covered_by).length >= 2 && offs.some((i) => i.short_notice) && rec.data.byReason.some((r) => r.reason === 'sick' && r.count >= 2),
+    'twice sick, once at short notice, and somebody else covered the earlier two', JSON.stringify(rec.data.byReason));
+  const cards = (await call('/admin/scorecards?days=30', { token: supervisor })).data.cards;
+  const card = cards.find((c) => c.id === seededOff.call_off.user_id);
+  log(card?.shifts.calledOff === rec.data.summary.calledOff && card.shifts.due === card.shifts.worked + card.shifts.missed + card.shifts.calledOff,
+    'the scorecard counts the same call-offs among the shifts due', JSON.stringify(card?.shifts));
+  log(card?.score < 100, 'and they cost the score', `${card?.score}`);
+} else {
+  log(true, 'no call-off seeded at this hour (nothing rostered two to eleven hours ahead)');
+}
+log((await call(`/attendance/record/${board.data.open[0]?.user_id || 3}`, { token: marcus })).status === 403, "officers cannot see each other's records");
+log((await call('/heads-up/record', { token: client })).status === 401, 'nor can clients see any');
+const ownRec = await call('/heads-up/record?days=30', { token: marcus });
+log(ownRec.status === 200 && ownRec.data.days === 30 && ownRec.data.summary.worked > 0, 'an officer sees their own', JSON.stringify(ownRec.data.summary));
+const vinceId = (await call('/auth/me', { token: vince })).data.user?.id;
+log((await call(`/attendance/record/${vinceId}`, { token: supervisor })).status === 404, 'administrators have none');
 
 /* =================================================== a supervisor's own phone === */
 section("a supervisor's settings");
@@ -188,7 +214,9 @@ log((await call('/heads-up', { token: client })).status === 401, 'clients have n
 log((await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 10 } })).status === 422, 'arriving before the start is not late');
 log((await call(`/heads-up/${ritaShift}/running-late`, { token: marcus, method: 'POST', body: { etaMinutes: 50 } })).status === 409, "nor can anyone else say it for them");
 const ran = await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 45, note: 'Bridge is up' } });
-log(ran.status === 201 && ran.data.notice.minutes_late === 15, 'they say they will be fifteen minutes late', ran.data?.error);
+// The arrival time is rounded up to the minute; if the clock ticks over
+// between booking the shift and saying so, that is sixteen.
+log(ran.status === 201 && [15, 16].includes(ran.data.notice.minutes_late), 'they say they will be fifteen minutes late', ran.data?.error || `${ran.data.notice?.minutes_late}`);
 log((await call(`/heads-up/${ritaShift}/running-late`, { token: rita.token, method: 'POST', body: { etaMinutes: 60 } })).status === 409, 'once; if it changes again, they call');
 const heard = await call('/attendance', { token: vince });
 const ritaTexts = textsFor(heard.data, /^USC heads-up: /, rita.name);
@@ -223,6 +251,12 @@ const afterCover = await call('/attendance', { token: vince });
 const coverText = textsFor(afterCover.data, /is covered/, sub.name);
 log(coverText.some((t) => t.to === '•••• 0100') && coverText.some((t) => t.to === '•••• 0142'), 'and both hear it is covered', coverText[0]?.body);
 log(afterCover.data.open.find((o) => o.shift_id === nickShift)?.state === 'covering', 'the board shows the cover');
+const nickRec = await call(`/attendance/record/${nick.user_id}?days=7`, { token: supervisor });
+const nickOff = nickRec.data.items?.find((i) => i.shift_id === nickShift);
+log(nickOff?.kind === 'called_off' && nickOff.reason_label === 'Family emergency' && nickOff.covered_by === sub.name && nickOff.short_notice === true,
+  `the call-off is on ${nick.name}'s record: three hours' notice is short, and who covered it`, JSON.stringify(nickOff));
+const nickOwn = await call('/heads-up/record?days=7', { token: nick.token });
+log(nickOwn.data.items?.some((i) => i.shift_id === nickShift) && nickOwn.data.summary.calledOff === nickRec.data.summary.calledOff, 'and on the record they see themselves');
 for (const id of [ritaShift, nickShift]) await call(`/admin/shifts/${id}`, { token: vince, method: 'DELETE' });
 
 /* ===================================================== removing the number === */

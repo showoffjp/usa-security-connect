@@ -97,7 +97,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
-13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show.
+13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. Open the officer who called off under **Employees**: their **Attendance** shows two more call-offs in the last fortnight, and the scorecards count all three.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -267,7 +267,7 @@ Build rosters, answer requests, keep licences current.
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
-    <td width="50%"></td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-attendance.jpg"><img src="docs/screenshots/employee-attendance.jpg" alt="An officer's attendance record: on time, late, no-shows and call-offs"></a><br><b>Attendance record</b><br>On each officer's record: how often on time, and every late arrival, no-show and call-off, with the reason, the notice given and who covered. The scorecards count call-offs too.</td>
   </tr>
 </table>
 
@@ -351,6 +351,12 @@ On the phone:
     <td width="25%" valign="top"><a href="docs/screenshots/officer-commended.jpg"><img src="docs/screenshots/officer-commended.jpg" alt="An officer's home screen with a new commendation"></a><br><b>You were commended</b><br>On the officer's home screen, web and phone, until read; every one stays on their profile.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-short-rest.jpg"><img src="docs/screenshots/officer-short-rest.jpg" alt="A short rest flagged on an officer's schedule"></a><br><b>Short of rest</b><br>A shift on the officer's own schedule that leaves them short of rest, or past the hours or days, says so, web and phone.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-running-late.jpg"><img src="docs/screenshots/officer-running-late.jpg" alt="An officer's next shift with Running late and Can't make it"></a><br><b>Running late, or can't make it</b><br>Before the next shift, the officer tells the supervisors they are on their way and when they will arrive, or calls off and the shift opens for cover.</td>
+  </tr>
+  <tr>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-my-attendance.jpg"><img src="docs/screenshots/officer-my-attendance.jpg" alt="An officer's own attendance record on their profile"></a><br><b>My attendance</b><br>The officer sees the same record their supervisors do, on the profile and the phone's Worked tab.</td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+    <td width="25%"></td>
   </tr>
 </table>
 
@@ -713,6 +719,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   where they worked, exactly as payroll approved it, with any expenses paid back
   alongside and any holiday premium beside the overtime. A 1099 contractor sees *My
   payments*, with no overtime or holiday premium.
+- **My attendance** (profile on the web, the **Worked** tab on the phone) — the
+  officer's own record for the last 90 days, the same one their supervisors see: how
+  often on time, each late arrival, no-show and call-off, and the notice they gave.
 - **My expenses** (profile on the web, the **Worked** tab on the phone) — claim back
   parking, tolls, supplies, meals or miles driven in your own car on the job. Mileage
   is priced at the IRS rate (70¢ a mile) as it is typed; anything else over $25 needs
@@ -1096,9 +1105,18 @@ and a supervisor can only read is noted where it matters.
 - **Officer scorecards** — every officer who worked in the last 7, 30 or 90 days,
   ranked out of 100: punctuality 35 (clocked in within the grace period), attendance
   25 (shifts worked out of shifts due), check-ins 25 (answered in time; late counts
-  half), clean record 15 (compliance flags per shift). A part with nothing to judge
-  is left out rather than scored as zero. Filter to those under 75. Commendations are
-  counted beside the score (and how many came from clients), never part of it.
+  half), clean record 15 (compliance flags per shift). A call-off counts as half a
+  missed shift, and a no-show counts in full even when somebody else covered it: both
+  take the shift off the officer's roster, so they are counted from the attendance
+  record. A part with nothing to judge is left out rather than scored as zero. Filter
+  to those under 75. Commendations are counted beside the score (and how many came
+  from clients), never part of it.
+- **Attendance record** — on each officer's employee record, over 30, 90 or 180 days:
+  on time (of the shifts worked), late arrivals and by how much on average, no-shows
+  and call-offs, with every one listed: how late, the reason for a call-off and how
+  much notice (under four hours is **short notice**), who covered it, and whether an
+  officer who said they were running late got there by the time they gave. The
+  officer sees the same record on their profile (web) and the **Worked** tab (phone).
 - **Commendations** — on each officer's record: every commendation from a client or
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
@@ -1850,7 +1868,13 @@ The suites, in the order they run:
   once and only once, the late text is held back within the time given, and the no-show
   text repeats it. Calling off needs a reason (and words for "something else"), opens the
   shift, texts at once without the officer's number, and cannot be done twice; given to
-  someone before it starts, it is covered, and the cover is not counted late.
+  someone before it starts, it is covered, and the cover is not counted late. The
+  attendance record: a call-off stays on the record of the officer who made it (with
+  the reason, the notice, short under four hours, and who covered it), not the cover's;
+  a no-show keeps the time the officer gave; a late arrival within the time given is
+  kept as their word; and a week later it is outside a seven-day record. The score:
+  nothing to judge is no score, two call-offs cost the same as one no-show, and calling
+  off every shift scores nothing.
 - **`test/attendance.mjs`** — supervisors see the board, officers and clients do not. The
   demo's no-show, the no-show covered this morning and who turned up late (with how late) are
   on it, no-shows first, and Vince's texts are in the outbox with the number masked. A
@@ -1866,7 +1890,12 @@ The suites, in the order they run:
   only) is not, and the board and the officer's home screen show it. Another calls off for
   a family emergency: the shift leaves their home screen and is open to claim, both are
   texted at once, it is a critical alert and on the dashboard count, and when a supervisor
-  gives it to someone else both hear it is covered.
+  gives it to someone else both hear it is covered. The call-off is then on that officer's
+  attendance record, as short notice with who covered it, and on the record they see
+  themselves. The live feed holds only the last day. The demo officer who called off has
+  three call-offs in a fortnight on their record (twice sick, once at short notice, the
+  earlier two covered), and the scorecard counts the same three among the shifts due.
+  Officers cannot see each other's records, clients none, and administrators have none.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1879,7 +1908,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 434
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 443
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1929,6 +1958,11 @@ The suites, in the order they run:
     why, and sees that their supervisors know; then taps **Can't make it** and calls off,
     and a supervisor finds it on the board with the reason, **Find cover** and no number
     to call;
+  - a supervisor opens the employee record of the officer who called off: **Attendance**
+    counts the call-offs and lists each with the reason, any short notice and who
+    covered it, and the period can be changed; the scorecards show the call-offs beside
+    the shifts and say how they are scored; an officer sees **My attendance** on their
+    profile;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
 - **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 129

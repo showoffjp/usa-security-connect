@@ -161,6 +161,15 @@ until they clock in):
 A call-off is a critical alert until someone is put on the shift, then a covered
 update. For a day or more off, officers request time off instead.
 
+**On the record.** Each officer's employee record has an **Attendance** card (30, 90
+or 180 days): on time, late, no-shows and call-offs, each listed with the shift. A
+call-off stays on the record of the officer who made it, with the reason and how much
+notice they gave (under `shortNoticeHours`, 4, is marked short notice), and a no-show
+stays on theirs even after someone else covers the shift. The officer sees the same
+record on their profile and the phone's **Worked** tab. The scorecards count both
+among the shifts due: a no-show as a missed shift, a call-off as half of one, because
+they warned you but the shift still had to be covered.
+
 **Texts are only as prompt as the sweep.** A long-running server sweeps every
 minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
 point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set

@@ -482,8 +482,11 @@ const eventLine = (e) => {
   return `${e.post_name} covered: ${d.by || 'another officer'} is taking ${e.officer}'s shift`;
 };
 
-/** Recent stages, newest first; `since` gives only those after an id. */
-export async function attendanceEvents({ since = 0, limit = 40 } = {}) {
+/**
+ * Recent stages, newest first; `since` gives only those after an id. Only the
+ * last day's: older ones are the officers' records, not news.
+ */
+export async function attendanceEvents({ since = 0, limit = 40, now = new Date() } = {}) {
   const rows = await db
     .prepare(
       `SELECT e.id, e.shift_id, e.user_id, e.stage, e.occurred_at, e.minutes_late, e.detail, e.notified, e.created_at,
@@ -494,10 +497,10 @@ export async function attendanceEvents({ since = 0, limit = 40 } = {}) {
        JOIN shifts sh ON sh.id = e.shift_id
        JOIN posts p ON p.id = sh.post_id
        JOIN sites s ON s.id = p.site_id
-       WHERE e.id > ?
+       WHERE e.id > ? AND e.occurred_at > ?
        ORDER BY e.id DESC LIMIT ?`
     )
-    .all(since, limit);
+    .all(since, toSql(new Date(now.getTime() - 2 * WATCH_HOURS * 3600000)), limit);
   return rows.map((e) => ({
     id: Number(e.id), shift_id: e.shift_id, user_id: e.user_id, stage: e.stage, label: STAGE_LABEL[e.stage],
     occurred_at: sqlToIso(e.occurred_at), created_at: sqlToIso(e.created_at), minutes_late: e.minutes_late,
@@ -623,6 +626,148 @@ export async function attendanceBoard({ now = new Date() } = {}) {
       arrived: count(resolved, 'arrived'),
       covered: count(resolved, 'covered'),
     },
+  };
+}
+
+/* ------------------------------------------------------------ the record --- */
+
+const json = (v) => (typeof v === 'string' ? JSON.parse(v) : v || null);
+
+/**
+ * Shifts officers lost in a period: called off, or a no-show given to
+ * somebody else. Either takes the shift off their roster, so the shifts table
+ * alone would show them never due at all. One row per shift, with who covered
+ * it and anything they said first. For one officer, or everybody.
+ */
+export async function lostShifts({ from, to, userId = null }) {
+  const rows = await db
+    .prepare(
+      `SELECT e.user_id, e.shift_id, e.stage, e.occurred_at, sh.starts_at, sh.ends_at,
+              p.name AS post_name, s.name AS site_name,
+              n.reason, n.note, r.eta_at, r.note AS late_note,
+              (SELECT c.detail FROM attendance_events c
+                WHERE c.shift_id = e.shift_id AND c.user_id = e.user_id AND c.stage = 'covered' LIMIT 1) AS covered
+       FROM attendance_events e
+       JOIN shifts sh ON sh.id = e.shift_id
+       JOIN posts p ON p.id = sh.post_id
+       JOIN sites s ON s.id = p.site_id
+       LEFT JOIN attendance_notices n ON n.shift_id = e.shift_id AND n.user_id = e.user_id AND n.kind = 'call_off'
+       LEFT JOIN attendance_notices r ON r.shift_id = e.shift_id AND r.user_id = e.user_id AND r.kind = 'running_late'
+       WHERE e.stage IN ('called_off', 'no_show') AND sh.status <> 'cancelled'
+         AND sh.user_id IS DISTINCT FROM e.user_id
+         AND e.occurred_at >= ? AND e.occurred_at < ?
+         ${userId ? 'AND e.user_id = ?' : ''}
+         AND NOT EXISTS (SELECT 1 FROM attendance_events a
+                         WHERE a.shift_id = e.shift_id AND a.user_id = e.user_id AND a.stage = 'arrived')
+       ORDER BY e.occurred_at DESC, e.id DESC`
+    )
+    .all(toSql(from), toSql(to), ...(userId ? [userId] : []));
+  return rows.map((r) => ({ ...r, covered: json(r.covered) }));
+}
+
+/**
+ * One officer's attendance over a period, for their employee record and for
+ * their own profile: shifts due and worked, on time or how late, no-shows,
+ * call-offs (and how much notice they gave), and the times they said they
+ * were running late - and whether they got there by the time they said.
+ * The same counts the scorecard scores.
+ */
+export async function attendanceRecord(userId, { days = 90, now = new Date() } = {}) {
+  const from = new Date(now.getTime() - days * 86400000);
+  const grace = RULES.lateGraceMinutes;
+  const own = await db
+    .prepare(
+      `SELECT sh.id AS shift_id, sh.starts_at, sh.ends_at, sh.status, p.name AS post_name, s.name AS site_name,
+              te.clock_in_at, r.eta_at, r.note AS late_note,
+              EXISTS (SELECT 1 FROM attendance_events ns
+                      WHERE ns.shift_id = sh.id AND ns.user_id = sh.user_id AND ns.stage = 'no_show') AS no_show_seen
+       FROM shifts sh
+       JOIN posts p ON p.id = sh.post_id
+       JOIN sites s ON s.id = p.site_id
+       LEFT JOIN LATERAL (
+         SELECT clock_in_at FROM time_entries x WHERE x.shift_id = sh.id ORDER BY x.clock_in_at LIMIT 1
+       ) te ON true
+       LEFT JOIN attendance_notices r ON r.shift_id = sh.id AND r.user_id = sh.user_id AND r.kind = 'running_late'
+       WHERE sh.user_id = ? AND sh.status <> 'cancelled' AND sh.starts_at >= ? AND sh.starts_at < ?
+       ORDER BY sh.starts_at DESC`
+    )
+    .all(userId, toSql(from), toSql(now));
+
+  const items = [];
+  const t = { worked: 0, onTime: 0, lateMinutes: 0, noShows: 0, headsUps: 0, keptWord: 0 };
+  const shiftOf = (r) => ({
+    shift_id: r.shift_id, post_name: r.post_name, site_name: r.site_name,
+    starts_at: sqlToIso(r.starts_at), ends_at: sqlToIso(r.ends_at),
+  });
+  const saidLate = (r) => (r.eta_at ? { eta_at: sqlToIso(r.eta_at), note: r.late_note || null } : null);
+
+  for (const r of own) {
+    const start = new Date(sqlToIso(r.starts_at));
+    const notice = saidLate(r);
+    if (notice) t.headsUps += 1;
+    if (r.clock_in_at) {
+      t.worked += 1;
+      const inAt = new Date(sqlToIso(r.clock_in_at));
+      const kept = notice ? inAt <= new Date(notice.eta_at) : null;
+      if (kept) t.keptWord += 1;
+      if (inAt.getTime() <= start.getTime() + grace * MIN) {
+        t.onTime += 1;
+        continue;
+      }
+      const late = minutesAfter(start, inAt);
+      t.lateMinutes += late;
+      items.push({ kind: 'late', ...shiftOf(r), clock_in_at: inAt.toISOString(), minutes_late: late, notice, kept_word: kept });
+    } else if (r.status === 'missed' || r.status === 'no_show' || r.no_show_seen) {
+      t.noShows += 1;
+      items.push({ kind: 'no_show', ...shiftOf(r), notice, covered_by: null });
+    }
+  }
+
+  const byReason = {};
+  let calledOff = 0;
+  let shortNotice = 0;
+  for (const l of await lostShifts({ from, to: now, userId })) {
+    const notice = saidLate(l);
+    if (notice) t.headsUps += 1;
+    if (l.stage === 'no_show') {
+      t.noShows += 1;
+      items.push({ kind: 'no_show', ...shiftOf(l), notice, covered_by: l.covered?.by || null });
+      continue;
+    }
+    const hours = Math.max(0, (new Date(sqlToIso(l.starts_at)) - new Date(sqlToIso(l.occurred_at))) / 3600000);
+    const short = hours < RULES.shortNoticeHours;
+    calledOff += 1;
+    if (short) shortNotice += 1;
+    if (l.reason) byReason[l.reason] = (byReason[l.reason] || 0) + 1;
+    items.push({
+      kind: 'called_off', ...shiftOf(l), called_off_at: sqlToIso(l.occurred_at), notice_hours: Math.round(hours * 10) / 10,
+      short_notice: short, reason: l.reason, reason_label: l.reason ? CALL_OFF_LABEL[l.reason] : null, note: l.note || null,
+      covered_by: l.covered?.by || null,
+    });
+  }
+
+  items.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+  const late = t.worked - t.onTime;
+  return {
+    days,
+    from: from.toISOString(),
+    to: now.toISOString(),
+    rules: { lateGraceMinutes: grace, shortNoticeHours: RULES.shortNoticeHours },
+    summary: {
+      due: t.worked + t.noShows + calledOff,
+      worked: t.worked,
+      onTime: t.onTime,
+      onTimePct: t.worked ? Math.round((t.onTime / t.worked) * 1000) / 10 : null,
+      late,
+      avgLateMin: late ? Math.round(t.lateMinutes / late) : 0,
+      noShows: t.noShows,
+      calledOff,
+      shortNotice,
+      headsUps: t.headsUps,
+      keptWord: t.keptWord,
+    },
+    byReason: CALL_OFF_REASONS.filter((r) => byReason[r]).map((r) => ({ reason: r, label: CALL_OFF_LABEL[r], count: byReason[r] })),
+    items: items.slice(0, 60),
   };
 }
 

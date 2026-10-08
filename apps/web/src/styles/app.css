@@ -177,6 +177,15 @@ a { color: var(--navy-600); }
 .stat.alert { border-color: var(--banner-danger-line); background: linear-gradient(180deg, var(--surface) 0%, var(--danger-bg) 220%); }
 .stat.alert .value { color: var(--danger); }
 
+/* Small figures in a row inside a card, such as an attendance record's counts. */
+.tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; padding: 14px 18px 0; }
+.tally > div { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; min-width: 0; }
+.tally .l { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; }
+.tally .n { font-size: 1.3rem; font-weight: 750; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tally .f { font-size: 0.76rem; color: var(--muted); }
+.tally .bad { border-color: var(--banner-danger-line); }
+.tally .bad .n { color: var(--danger); }
+
 /* -------------------------------------------------------------- buttons -- */
 
 .btn {

@@ -119,8 +119,8 @@ log(cards.status === 200 && cards.data.cards.length > 10, 'a supervisor sees a s
 log(cards.data.cards.every((c) => c.score === null || (c.score >= 0 && c.score <= 100)), 'every score is between 0 and 100');
 const scores = cards.data.cards.map((c) => c.score ?? -1);
 log(scores.every((s, i) => i === 0 || scores[i - 1] >= s), 'ranked best first');
-log(cards.data.cards.every((c) => c.shifts.worked + c.shifts.missed === c.shifts.due && c.shifts.onTime <= c.shifts.worked),
-  'shifts worked and missed add up, and on time is never more than worked');
+log(cards.data.cards.every((c) => c.shifts.worked + c.shifts.missed + c.shifts.calledOff === c.shifts.due && c.shifts.onTime <= c.shifts.worked),
+  'shifts worked, missed and called off add up, and on time is never more than worked');
 const bell = cards.data.cards.find((c) => c.employee_code === '1003');
 // His first check-in on tonight's shift is due an hour after he clocked in, which
 // the demo puts no earlier than a quarter past midnight: just after midnight there

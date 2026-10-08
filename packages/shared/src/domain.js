@@ -632,6 +632,8 @@ export const RULES = {
   headsUpHours: 12,
   /** The latest arrival an officer running late can give, in minutes from now. */
   maxEtaMinutes: 180,
+  /** A call-off with less than this left before the start is short notice. */
+  shortNoticeHours: 4,
 };
 
 /**

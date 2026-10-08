@@ -10,6 +10,7 @@ import MyTimeOff from './MyTimeOff.jsx';
 import { MySiteTraining } from './SiteTraining.jsx';
 import { MyConduct } from './Conduct.jsx';
 import { MyCommendations } from './Commendations.jsx';
+import AttendanceRecord from '../../components/AttendanceRecord.jsx';
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
@@ -184,6 +185,8 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      <AttendanceRecord />
 
       {pay && <MyPay pay={pay} />}
 

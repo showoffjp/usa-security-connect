@@ -10,7 +10,8 @@ process.env.USC_PUSH_DISABLED = '1';
 
 const { db, migrate } = await import('../src/lib/db.js');
 const { toSql } = await import('../src/services/compliance.js');
-const { stagesFor, sweepAttendance, attendanceBoard, headsUpFor, reportRunningLate, callOff } = await import('../src/services/attendance.js');
+const { stagesFor, sweepAttendance, attendanceBoard, headsUpFor, reportRunningLate, callOff, attendanceRecord } = await import('../src/services/attendance.js');
+const { officerScore } = await import('../src/services/scorecards.js');
 const { normalizePhone, displayPhone, maskPhone } = await import('../src/services/sms.js');
 
 let failed = 0;
@@ -167,6 +168,50 @@ t = (await texts()).slice(sent);
 log(t.length === 1 && /is covered\. Casey Tester is taking Nick Tester's/.test(t[0].body), 'given to someone before it starts: covered, and those told are told so', t[0]?.body);
 log((await attendanceBoard({ now: new Date(nickStart.getTime() + 20 * MIN) })).open.find((o) => o.shift_id === nickShift)?.state === 'covering',
   'twenty minutes in without the cover clocked in, it is cover on the way, not late');
+
+/* ================================================== the attendance record === */
+console.log('\n--- the attendance record ---');
+const soon = new Date(now.getTime() + MIN);
+const nickRec = await attendanceRecord(nick, { now: soon });
+const nickOff = nickRec.items.find((i) => i.shift_id === nickShift);
+log(nickRec.summary.calledOff === 1 && nickRec.summary.due === 1 && nickRec.summary.worked === 0,
+  "Nick's record has the call-off, though the shift is no longer Nick's", JSON.stringify(nickRec.summary));
+log(nickOff?.kind === 'called_off' && nickOff.reason_label === 'Sick' && nickOff.note === 'Fever' && nickOff.notice_hours === 3,
+  'with the reason, the note, and three hours of notice', JSON.stringify(nickOff));
+log(nickOff?.short_notice === true && nickRec.summary.shortNotice === 1, 'under four hours before the start is short notice');
+log(nickOff?.covered_by === 'Casey Tester', 'and who covered it');
+log((await attendanceRecord(cover, { now: soon })).summary.calledOff === 0, 'covering it does not count against Casey');
+
+const ritaRec = await attendanceRecord(rita, { now: at(31) });
+const ritaMiss = ritaRec.items.find((i) => i.shift_id === ritaShift);
+log(ritaRec.summary.noShows === 1 && ritaMiss?.kind === 'no_show' && ritaMiss.notice?.note === 'Flat tyre',
+  'Rita never came: a no-show, with the time Rita gave', JSON.stringify(ritaMiss));
+log(ritaRec.summary.headsUps === 1 && ritaRec.summary.keptWord === 0, 'warned them once, and did not make it by then');
+
+const kim = await person('9408', 'Kim', 'officer');
+const kimStart = new Date(now.getTime() + 10 * MIN);
+const kimShift = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at) VALUES (?,?,?,?)`, kim, post,
+  toSql(kimStart), toSql(new Date(kimStart.getTime() + 6 * 60 * MIN)));
+await reportRunningLate({ userId: kim, shiftId: kimShift, etaMinutes: 25, note: 'Bridge is up', now });
+const kimIn = new Date(kimStart.getTime() + 12 * MIN);
+await db.prepare(`INSERT INTO time_entries (user_id, shift_id, post_id, clock_in_at, clock_in_geofence, method) VALUES (?,?,?,?, 'inside', 'gps')`)
+  .run(kim, kimShift, post, toSql(kimIn));
+const kimRec = await attendanceRecord(kim, { now: new Date(kimIn.getTime() + MIN) });
+const kimLate = kimRec.items.find((i) => i.shift_id === kimShift);
+log(kimRec.summary.worked === 1 && kimRec.summary.onTime === 0 && kimRec.summary.late === 1 && kimLate?.minutes_late === 12,
+  'Kim clocked in twelve minutes after the start: worked, and late', JSON.stringify(kimRec.summary));
+log(kimLate?.kept_word === true && kimRec.summary.keptWord === 1, 'but within the fifteen minutes Kim gave: as good as their word');
+log((await attendanceRecord(kim, { days: 7, now: new Date(kimIn.getTime() + 9 * 86400000) })).summary.due === 0, 'and a week later it is outside a seven-day record');
+
+/* ============================================================== the score === */
+console.log('\n--- the score ---');
+log(officerScore({}) === null, 'nothing worked or due: no score, rather than zero');
+log(officerScore({ worked: 10, onTime: 10 }) === 100, 'every shift worked on time, nothing else to judge: 100');
+log(officerScore({ worked: 9, onTime: 9, calledOff: 2 }) === officerScore({ worked: 9, onTime: 9, missed: 1 }), 'two call-offs cost the same as one no-show');
+log(officerScore({ worked: 9, onTime: 9, calledOff: 1 }) > officerScore({ worked: 9, onTime: 9, missed: 1 }), 'so calling off costs less than not turning up');
+log(officerScore({ worked: 0, calledOff: 3 }) === 0, 'calling off every shift due scores nothing');
+log(officerScore({ worked: 10, onTime: 5, checksOk: 4, checksLate: 0, checksMissed: 0 }) === Math.round((35 * 0.5 + 25 + 25 + 15) / 100 * 100),
+  'half on time loses half the punctuality part');
 
 console.log(`\nLate and no-show rules: ${failed ? `${failed} CHECK(S) FAILED.` : 'all checks passed.'}`);
 process.exit(failed ? 1 : 0);

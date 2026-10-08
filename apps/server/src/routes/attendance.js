@@ -12,10 +12,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { db, audit } from '../lib/db.js';
-import { HttpError, wrap, parse, rateLimit, sqlToIso } from '../lib/http.js';
+import { HttpError, wrap, parse, rateLimit, sqlToIso, idParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES } from '../shared.js';
-import { attendanceBoard, attendanceEvents, recentTexts, settingsFor, sweepAttendance, DEFAULT_SETTINGS } from '../services/attendance.js';
+import { attendanceBoard, attendanceEvents, attendanceRecord, recentTexts, settingsFor, sweepAttendance, DEFAULT_SETTINGS } from '../services/attendance.js';
 import { sendSms, normalizePhone, displayPhone, smsConfigured } from '../services/sms.js';
 
 export const attendanceRouter = Router();
@@ -42,6 +42,20 @@ attendanceRouter.get(
       settingsFor(req.user.id),
     ]);
     res.json({ ...board, events, texts, settings });
+  })
+);
+
+/* ------------------------------------------------------ one officer's record --- */
+
+/** An officer's or supervisor's attendance over a period, for their employee record. */
+attendanceRouter.get(
+  '/record/:userId',
+  wrap(async (req, res) => {
+    const userId = idParam(req.params.userId, 'employee');
+    const { days } = parse(z.object({ days: z.coerce.number().int().min(7).max(365).optional() }), req.query);
+    const who = await db.prepare(`SELECT id, role FROM users WHERE id = ?`).get(userId);
+    if (!who || who.role === ROLES.ADMIN) throw new HttpError(404, 'No attendance record for that person.');
+    res.json(await attendanceRecord(userId, { days: days || 90 }));
   })
 );
 
