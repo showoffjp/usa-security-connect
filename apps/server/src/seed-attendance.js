@@ -23,6 +23,17 @@ import { fatigueFor } from './services/fatigue.js';
 const MIN = 60000;
 const HOUR = 60 * MIN;
 const SUITE_PEOPLE = ['1001', '1002', '1003', '1004', '1005', '1006', '1007', '1008'];
+/** An officer (u) in no other demo story, and not on duty now. */
+const IN_NO_STORY = `NOT EXISTS (SELECT 1 FROM conduct_records c WHERE c.user_id = u.id)
+  AND NOT EXISTS (SELECT 1 FROM post_qualifications q WHERE q.user_id = u.id)
+  AND NOT EXISTS (SELECT 1 FROM attendance_events a WHERE a.user_id = u.id)
+  AND NOT EXISTS (SELECT 1 FROM attendance_notices a WHERE a.user_id = u.id)
+  AND NOT EXISTS (SELECT 1 FROM shifts x JOIN posts xp ON xp.id = x.post_id
+                  WHERE x.user_id = u.id AND (xp.armed OR xp.training_required)
+                    AND x.starts_at > now() - interval '30 days')
+  AND NOT EXISTS (SELECT 1 FROM shifts x WHERE x.user_id = u.id
+                  AND (x.notes LIKE 'Late event cover%' OR x.notes LIKE 'Extra patrol%'))
+  AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.clock_out_at IS NULL)`;
 
 export async function seedAttendance({ db, now = new Date() }) {
   const result = { subscribed: 0, covered: null, runningLate: null, calledOff: null, events: 0, texts: 0 };
@@ -52,6 +63,14 @@ export async function seedAttendance({ db, now = new Date() }) {
       )
       .get(toSql(new Date(end.getTime() + 90 * MIN)), toSql(new Date(start.getTime() - 90 * MIN)),
         toSql(new Date(end.getTime() + 90 * MIN)), toSql(new Date(start.getTime() - 90 * MIN)));
+  const anyPlainPost = () =>
+    db
+      .prepare(
+        `SELECT p.id FROM posts p JOIN sites s ON s.id = p.site_id
+         WHERE p.active = true AND s.active = true AND p.armed = false AND p.training_required = false
+         ORDER BY p.id LIMIT 1`
+      )
+      .get();
   // Officers with nothing within `slack` hours either side, nothing on their
   // record, in no other story and not on leave.
   const free = (exclude, start, end, slack = 9) =>
@@ -79,10 +98,11 @@ export async function seedAttendance({ db, now = new Date() }) {
       )
       .all(...SUITE_PEOPLE, exclude, toSql(new Date(end.getTime() + slack * HOUR)), toSql(new Date(start.getTime() - slack * HOUR)),
         toSql(end), toSql(start));
-  // The first of them the shift leaves rested: short rest and seventh days in
-  // a row are the rest and fatigue story's to tell.
+  // The first of them free within the hour either side that the shift leaves
+  // rested: short rest and seventh days in a row are the rest and fatigue
+  // story's to tell.
   const rested = async (exclude, start, end) => {
-    for (const c of await free(exclude, start, end)) {
+    for (const c of await free(exclude, start, end, 1)) {
       if (!(await fatigueFor(c.id, { startsAt: start, endsAt: end, now })).length) return c;
     }
     return null;
@@ -99,8 +119,10 @@ export async function seedAttendance({ db, now = new Date() }) {
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   if (start.getTime() >= weekStart.getTime() + 10 * MIN) {
-    const post = await quietPost(start, end);
-    const missing = post && (await free(0, start, end))[0];
+    // Ended hours ago, so it does no harm if somebody else was on the post too.
+    const post = (await quietPost(start, end)) || (await anyPlainPost());
+    // The officer who never came did not work it, so only a clash matters.
+    const missing = post && (await free(0, start, end, 1))[0];
     const cover = missing && (await rested(missing.id, start, end));
     if (cover) {
       const shift = await db
@@ -129,32 +151,52 @@ export async function seedAttendance({ db, now = new Date() }) {
     }
   }
 
-  /* ----------------------------------- running late, for a shift about to start */
+  /* ------------------------------------- running late, for a shift soon */
+  // A shift already on the roster starting in the next four hours, at a plain
+  // post, for an officer in no other story; or, failing that, one put on a
+  // quiet post half an hour from now. They said eight minutes ago they would
+  // be fifteen minutes late.
   {
-    const start = new Date(Math.ceil((now.getTime() + 25 * MIN) / (5 * MIN)) * 5 * MIN);
-    const end = new Date(start.getTime() + 8 * HOUR);
-    const post = await quietPost(start, end);
-    const who = post && (await rested(0, start, end));
-    if (who) {
-      const shift = await db
-        .prepare(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at, status, notes, created_by) VALUES (?,?,?,?,'scheduled',?,?) RETURNING id`)
-        .get(who.id, post.id, toSql(start), toSql(end), 'Evening cover.', admin);
+    let shift = await db
+      .prepare(
+        `SELECT sh.id, sh.user_id, sh.starts_at, u.first_name || ' ' || u.last_name AS name
+         FROM shifts sh JOIN users u ON u.id = sh.user_id JOIN posts p ON p.id = sh.post_id
+         WHERE sh.status = 'scheduled' AND p.armed = false AND p.training_required = false
+           AND sh.starts_at BETWEEN ? AND ?
+           AND u.role = 'officer' AND u.employee_code NOT IN (${SUITE_PEOPLE.map(() => '?').join(',')})
+           AND ${IN_NO_STORY}
+         ORDER BY sh.starts_at, sh.id LIMIT 1`
+      )
+      .get(toSql(new Date(now.getTime() + 15 * MIN)), toSql(new Date(now.getTime() + 4 * HOUR)), ...SUITE_PEOPLE);
+    if (!shift) {
+      const start = new Date(Math.ceil((now.getTime() + 25 * MIN) / (5 * MIN)) * 5 * MIN);
+      const end = new Date(start.getTime() + 8 * HOUR);
+      const post = await quietPost(start, end);
+      const who = post && (await rested(0, start, end));
+      if (who) {
+        const row = await db
+          .prepare(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at, status, notes, created_by) VALUES (?,?,?,?,'scheduled',?,?) RETURNING id`)
+          .get(who.id, post.id, toSql(start), toSql(end), 'Evening cover.', admin);
+        shift = { id: row.id, user_id: who.id, starts_at: toSql(start), name: who.name };
+      }
+    }
+    if (shift) {
       const said = new Date(now.getTime() - 8 * MIN);
-      const eta = new Date(start.getTime() + 15 * MIN);
+      const eta = new Date(new Date(shift.starts_at).getTime() + 15 * MIN);
       const note = 'Stuck behind an accident on I-95. Fifteen minutes.';
       await db
         .prepare(`INSERT INTO attendance_notices (shift_id, user_id, kind, eta_at, note, created_at) VALUES (?,?, 'running_late', ?,?,?)`)
-        .run(shift.id, who.id, toSql(eta), note, toSql(said));
+        .run(shift.id, shift.user_id, toSql(eta), note, toSql(said));
       await db
         .prepare(`INSERT INTO attendance_events (shift_id, user_id, stage, occurred_at, minutes_late, detail) VALUES (?,?, 'running_late', ?, 15, ?)`)
-        .run(shift.id, who.id, toSql(said), JSON.stringify({ eta_at: eta.toISOString(), note }));
-      result.runningLate = who.name;
+        .run(shift.id, shift.user_id, toSql(said), JSON.stringify({ eta_at: eta.toISOString(), note }));
+      result.runningLate = shift.name;
     }
   }
 
   /* -------------------------------------- a call-off, a few hours from now */
-  // A shift already on the roster, starting two and a half to eight hours from
-  // now at a plain post, worked by an officer in no other story. They call off
+  // A shift already on the roster, starting two to eleven hours from now at a
+  // plain post, worked by an officer in no other story. They call off
   // sick; it is left with nobody on it.
   {
     const sh = await db
@@ -164,19 +206,10 @@ export async function seedAttendance({ db, now = new Date() }) {
          WHERE sh.status = 'scheduled' AND p.armed = false AND p.training_required = false
            AND sh.starts_at BETWEEN ? AND ?
            AND u.role = 'officer' AND u.employee_code NOT IN (${SUITE_PEOPLE.map(() => '?').join(',')})
-           AND NOT EXISTS (SELECT 1 FROM conduct_records c WHERE c.user_id = u.id)
-           AND NOT EXISTS (SELECT 1 FROM post_qualifications q WHERE q.user_id = u.id)
-           AND NOT EXISTS (SELECT 1 FROM attendance_events a WHERE a.user_id = u.id)
-           AND NOT EXISTS (SELECT 1 FROM attendance_notices a WHERE a.user_id = u.id)
-           AND NOT EXISTS (SELECT 1 FROM shifts x JOIN posts xp ON xp.id = x.post_id
-                           WHERE x.user_id = u.id AND (xp.armed OR xp.training_required)
-                             AND x.starts_at > now() - interval '30 days')
-           AND NOT EXISTS (SELECT 1 FROM shifts x WHERE x.user_id = u.id
-                           AND (x.notes LIKE 'Late event cover%' OR x.notes LIKE 'Extra patrol%'))
-           AND NOT EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = u.id AND te.clock_out_at IS NULL)
+           AND ${IN_NO_STORY}
          ORDER BY sh.starts_at, sh.id LIMIT 1`
       )
-      .get(toSql(new Date(now.getTime() + 150 * MIN)), toSql(new Date(now.getTime() + 8 * HOUR)), ...SUITE_PEOPLE);
+      .get(toSql(new Date(now.getTime() + 2 * HOUR)), toSql(new Date(now.getTime() + 11 * HOUR)), ...SUITE_PEOPLE);
     if (sh) {
       const said = new Date(now.getTime() - 40 * MIN);
       const note = 'Fever since this morning. Sorry for the short notice.';
