@@ -181,6 +181,13 @@ log(nickOff?.kind === 'called_off' && nickOff.reason_label === 'Sick' && nickOff
 log(nickOff?.short_notice === true && nickRec.summary.shortNotice === 1, 'under four hours before the start is short notice');
 log(nickOff?.covered_by === 'Casey Tester', 'and who covered it');
 log((await attendanceRecord(cover, { now: soon })).summary.calledOff === 0, 'covering it does not count against Casey');
+const lee = await person('9409', 'Lee', 'officer');
+const leeStart = new Date(now.getTime() + 239 * MIN);
+const leeShift = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at) VALUES (?,?,?,?)`, lee, post,
+  toSql(leeStart), toSql(new Date(leeStart.getTime() + 6 * 60 * MIN)));
+await callOff({ userId: lee, shiftId: leeShift, reason: 'transport', now });
+const leeOff = (await attendanceRecord(lee, { now: soon })).items[0];
+log(leeOff?.notice_hours === 3.9 && leeOff.short_notice, 'a minute under four hours reads 3.9 hours and is short notice, never "4 h" and short', JSON.stringify(leeOff?.notice_hours));
 
 const ritaRec = await attendanceRecord(rita, { now: at(31) });
 const ritaMiss = ritaRec.items.find((i) => i.shift_id === ritaShift);
