@@ -1852,7 +1852,7 @@ The suites, in the order they run:
   shift, texts at once without the officer's number, and cannot be done twice; given to
   someone before it starts, it is covered, and the cover is not counted late.
 - **`test/attendance.mjs`** — supervisors see the board, officers and clients do not. The
-  demo's no-show, the no-show covered this morning and the officers who arrived late are
+  demo's no-show, the no-show covered this morning and who turned up late (with how late) are
   on it, no-shows first, and Vince's texts are in the outbox with the number masked. A
   supervisor cannot turn texts on without a confirmed number, a bad number is refused,
   the wrong code is refused, the right one confirms the number once, the outbox never
