@@ -23,9 +23,12 @@ log(
 );
 
 const armedShift = openForMarcus.data.shifts.find((s) => s.armed);
-// An unarmed one Marcus is free for: the demo also has a shift called off
-// sick a few hours from now, which may clash with his own roster.
-const unarmedShift = openForMarcus.data.shifts.find((s) => !s.armed && !s.eligibility.some((r) => r.code === 'conflict'))
+// An unarmed one both Marcus and Janelle can ask for, as they compete for it
+// below. The demo also has a shift called off sick a few hours from now,
+// which, depending on the hour, may clash with either one's roster.
+const openForJanelle = await call('/shifts/open', { token: janelle });
+const janelleCan = new Set(openForJanelle.data.shifts.filter((s) => s.canClaim).map((s) => s.id));
+const unarmedShift = openForMarcus.data.shifts.find((s) => !s.armed && s.canClaim && janelleCan.has(s.id))
   || openForMarcus.data.shifts.find((s) => !s.armed);
 log(!!armedShift && !!unarmedShift, 'both an armed and an unarmed open shift exist');
 

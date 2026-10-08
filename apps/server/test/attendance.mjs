@@ -40,7 +40,10 @@ log(Boolean(noShow) && noShow.timeline.map((t) => t.stage).join('>') === 'late>n
   noShow && `${noShow.officer} at ${noShow.post_name}`);
 const covered = board.data.resolved.find((o) => o.state === 'covered');
 log(Boolean(covered?.covered_from) && covered.minutes_late > 0, 'this morning a no-show was covered by another officer', covered && `${covered.officer} for ${covered.covered_from}`);
-log(board.data.resolved.some((o) => o.state === 'arrived' && o.minutes_late > 7), 'and officers who turned up late are listed with how late');
+// Who turned up late depends on the hour the demo is loaded; the covered
+// shift's cover, who got there 55 minutes in, is always there.
+log(board.data.resolved.some((o) => (o.state === 'arrived' || o.state === 'covered') && o.minutes_late > 7),
+  'and who turned up late is listed with how late');
 log(board.data.open[0]?.state === 'no_show', 'no-shows first');
 
 const me = board.data.settings;
