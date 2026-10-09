@@ -23,7 +23,7 @@
 
 import { db } from '../lib/db.js';
 import { sqlToIso } from '../lib/http.js';
-import { RULES, ROLES, CALL_OFF_REASONS, CALL_OFF_LABEL } from '../shared.js';
+import { RULES, ROLES, CALL_OFF_REASONS, CALL_OFF_LABEL, ATTENDANCE_POINTS, attendancePointsFor, CONDUCT_LEVEL_LABEL } from '../shared.js';
 import { HttpError } from '../lib/http.js';
 import { toSql } from './compliance.js';
 import { pushAsync } from './push.js';
@@ -665,19 +665,11 @@ export async function lostShifts({ from, to, userId = null }) {
   return rows.map((r) => ({ ...r, covered: json(r.covered) }));
 }
 
-/**
- * One officer's attendance over a period, for their employee record and for
- * their own profile: shifts due and worked, on time or how late, no-shows,
- * call-offs (and how much notice they gave), and the times they said they
- * were running late - and whether they got there by the time they said.
- * The same counts the scorecard scores.
- */
-export async function attendanceRecord(userId, { days = 90, now = new Date() } = {}) {
-  const from = new Date(now.getTime() - days * 86400000);
-  const grace = RULES.lateGraceMinutes;
-  const own = await db
+/** Officers' own shifts started in a period, with the first clock-in to each and anything said beforehand. */
+async function ownShifts({ from, to, userId = null }) {
+  return db
     .prepare(
-      `SELECT sh.id AS shift_id, sh.starts_at, sh.ends_at, sh.status, p.name AS post_name, s.name AS site_name,
+      `SELECT sh.id AS shift_id, sh.user_id, sh.starts_at, sh.ends_at, sh.status, p.name AS post_name, s.name AS site_name,
               te.clock_in_at, r.eta_at, r.note AS late_note,
               EXISTS (SELECT 1 FROM attendance_events ns
                       WHERE ns.shift_id = sh.id AND ns.user_id = sh.user_id AND ns.stage = 'no_show') AS no_show_seen
@@ -688,20 +680,40 @@ export async function attendanceRecord(userId, { days = 90, now = new Date() } =
          SELECT clock_in_at FROM time_entries x WHERE x.shift_id = sh.id ORDER BY x.clock_in_at LIMIT 1
        ) te ON true
        LEFT JOIN attendance_notices r ON r.shift_id = sh.id AND r.user_id = sh.user_id AND r.kind = 'running_late'
-       WHERE sh.user_id = ? AND sh.status <> 'cancelled' AND sh.starts_at >= ? AND sh.starts_at < ?
+       WHERE sh.user_id IS NOT NULL ${userId ? 'AND sh.user_id = ?' : ''}
+         AND sh.status <> 'cancelled' AND sh.starts_at >= ? AND sh.starts_at < ?
        ORDER BY sh.starts_at DESC`
     )
-    .all(userId, toSql(from), toSql(now));
+    .all(...(userId ? [userId] : []), toSql(from), toSql(to));
+}
 
-  const items = [];
-  const t = { worked: 0, onTime: 0, lateMinutes: 0, noShows: 0, headsUps: 0, keptWord: 0 };
+/**
+ * Officers' attendance from their own shifts and the shifts they lost: per
+ * officer, the counts and an item for every lapse - late past the grace, a
+ * no-show, a call-off - each with when it happened and the points it scores.
+ */
+function tally(own, lost) {
+  const grace = RULES.lateGraceMinutes;
+  const people = new Map();
+  const of = (id) => {
+    if (!people.has(id)) {
+      people.set(id, {
+        t: { worked: 0, onTime: 0, lateMinutes: 0, noShows: 0, headsUps: 0, keptWord: 0, calledOff: 0, shortNotice: 0 },
+        items: [], byReason: {},
+      });
+    }
+    return people.get(id);
+  };
   const shiftOf = (r) => ({
     shift_id: r.shift_id, post_name: r.post_name, site_name: r.site_name,
     starts_at: sqlToIso(r.starts_at), ends_at: sqlToIso(r.ends_at),
   });
   const saidLate = (r) => (r.eta_at ? { eta_at: sqlToIso(r.eta_at), note: r.late_note || null } : null);
+  const add = (p, item) => p.items.push({ ...item, points: attendancePointsFor(item) });
 
   for (const r of own) {
+    const p = of(r.user_id);
+    const t = p.t;
     const start = new Date(sqlToIso(r.starts_at));
     const notice = saidLate(r);
     if (notice) t.headsUps += 1;
@@ -716,59 +728,121 @@ export async function attendanceRecord(userId, { days = 90, now = new Date() } =
       }
       const late = minutesAfter(start, inAt);
       t.lateMinutes += late;
-      items.push({ kind: 'late', ...shiftOf(r), clock_in_at: inAt.toISOString(), minutes_late: late, notice, kept_word: kept });
+      add(p, { kind: 'late', ...shiftOf(r), at: inAt.toISOString(), clock_in_at: inAt.toISOString(), minutes_late: late, notice, kept_word: kept });
     } else if (r.status === 'missed' || r.status === 'no_show' || r.no_show_seen) {
       t.noShows += 1;
-      items.push({ kind: 'no_show', ...shiftOf(r), notice, covered_by: null });
+      add(p, { kind: 'no_show', ...shiftOf(r), at: start.toISOString(), notice, covered_by: null });
     }
   }
 
-  const byReason = {};
-  let calledOff = 0;
-  let shortNotice = 0;
-  for (const l of await lostShifts({ from, to: now, userId })) {
+  for (const l of lost) {
+    const p = of(l.user_id);
+    const t = p.t;
     const notice = saidLate(l);
     if (notice) t.headsUps += 1;
     if (l.stage === 'no_show') {
       t.noShows += 1;
-      items.push({ kind: 'no_show', ...shiftOf(l), notice, covered_by: l.covered?.by || null });
+      add(p, { kind: 'no_show', ...shiftOf(l), at: sqlToIso(l.starts_at), notice, covered_by: l.covered?.by || null });
       continue;
     }
     const hours = Math.max(0, (new Date(sqlToIso(l.starts_at)) - new Date(sqlToIso(l.occurred_at))) / 3600000);
     const short = hours < RULES.shortNoticeHours;
-    calledOff += 1;
-    if (short) shortNotice += 1;
-    if (l.reason) byReason[l.reason] = (byReason[l.reason] || 0) + 1;
-    items.push({
+    t.calledOff += 1;
+    if (short) t.shortNotice += 1;
+    if (l.reason) p.byReason[l.reason] = (p.byReason[l.reason] || 0) + 1;
+    add(p, {
       // Rounded down, so notice just short of the line never reads as on it.
-      kind: 'called_off', ...shiftOf(l), called_off_at: sqlToIso(l.occurred_at), notice_hours: Math.floor(hours * 10) / 10,
-      short_notice: short, reason: l.reason, reason_label: l.reason ? CALL_OFF_LABEL[l.reason] : null, note: l.note || null,
+      kind: 'called_off', ...shiftOf(l), at: sqlToIso(l.occurred_at), called_off_at: sqlToIso(l.occurred_at),
+      notice_hours: Math.floor(hours * 10) / 10, short_notice: short,
+      reason: l.reason, reason_label: l.reason ? CALL_OFF_LABEL[l.reason] : null, note: l.note || null,
       covered_by: l.covered?.by || null,
     });
   }
+  for (const p of people.values()) p.items.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+  return people;
+}
 
-  items.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+/**
+ * Attendance points over the last ATTENDANCE_POINTS.windowDays, for one
+ * officer or everybody: the total, the lapses that score, and whether a
+ * supervisor has dealt with it - an attendance coaching or warning recorded
+ * since the latest of them. Over the threshold and not dealt with is what
+ * the alerts inbox flags.
+ */
+export async function attendancePoints({ now = new Date(), userId = null } = {}) {
+  const from = new Date(now.getTime() - ATTENDANCE_POINTS.windowDays * 86400000);
+  const [own, lost] = await Promise.all([ownShifts({ from, to: now, userId }), lostShifts({ from, to: now, userId })]);
+  const reviews = new Map(
+    (await db
+      .prepare(
+        `SELECT DISTINCT ON (user_id) id, user_id, level, created_at FROM conduct_records
+         WHERE category = 'attendance' AND status <> 'rescinded' AND created_at >= ? ${userId ? 'AND user_id = ?' : ''}
+         ORDER BY user_id, created_at DESC`
+      )
+      .all(toSql(from), ...(userId ? [userId] : []))).map((r) => [r.user_id, r])
+  );
+  const out = new Map();
+  for (const [id, p] of tally(own, lost)) {
+    const scoring = p.items.filter((i) => i.points > 0);
+    const points = scoring.reduce((a, i) => a + i.points, 0);
+    const latest = scoring.reduce((a, i) => (!a || new Date(i.at) > new Date(a) ? i.at : a), null);
+    const review = reviews.get(id);
+    const reviewed = review && latest && new Date(sqlToIso(review.created_at)) >= new Date(latest)
+      ? { id: review.id, level: review.level, level_label: CONDUCT_LEVEL_LABEL[review.level], created_at: sqlToIso(review.created_at) }
+      : null;
+    out.set(id, {
+      points, threshold: ATTENDANCE_POINTS.threshold, windowDays: ATTENDANCE_POINTS.windowDays,
+      over: points >= ATTENDANCE_POINTS.threshold, latest_at: latest, reviewed,
+      needs_review: points >= ATTENDANCE_POINTS.threshold && !reviewed,
+      items: scoring.map((i) => ({ kind: i.kind, shift_id: i.shift_id, post_name: i.post_name, starts_at: i.starts_at, at: i.at, points: i.points })),
+    });
+  }
+  return out;
+}
+
+const noPoints = () => ({
+  points: 0, threshold: ATTENDANCE_POINTS.threshold, windowDays: ATTENDANCE_POINTS.windowDays,
+  over: false, latest_at: null, reviewed: null, needs_review: false, items: [],
+});
+
+/**
+ * One officer's attendance over a period, for their employee record and for
+ * their own profile: shifts due and worked, on time or how late, no-shows,
+ * call-offs (and how much notice they gave), and the times they said they
+ * were running late - and whether they got there by the time they said.
+ * The same counts the scorecard scores, with their attendance points.
+ */
+export async function attendanceRecord(userId, { days = 90, now = new Date() } = {}) {
+  const from = new Date(now.getTime() - days * 86400000);
+  const [own, lost, standing] = await Promise.all([
+    ownShifts({ from, to: now, userId }),
+    lostShifts({ from, to: now, userId }),
+    attendancePoints({ now, userId }),
+  ]);
+  const p = tally(own, lost).get(userId) || { t: { worked: 0, onTime: 0, lateMinutes: 0, noShows: 0, headsUps: 0, keptWord: 0, calledOff: 0, shortNotice: 0 }, items: [], byReason: {} };
+  const { t } = p;
   const late = t.worked - t.onTime;
   return {
     days,
     from: from.toISOString(),
     to: now.toISOString(),
-    rules: { lateGraceMinutes: grace, shortNoticeHours: RULES.shortNoticeHours },
+    rules: { lateGraceMinutes: RULES.lateGraceMinutes, shortNoticeHours: RULES.shortNoticeHours, points: ATTENDANCE_POINTS },
     summary: {
-      due: t.worked + t.noShows + calledOff,
+      due: t.worked + t.noShows + t.calledOff,
       worked: t.worked,
       onTime: t.onTime,
       onTimePct: t.worked ? Math.round((t.onTime / t.worked) * 1000) / 10 : null,
       late,
       avgLateMin: late ? Math.round(t.lateMinutes / late) : 0,
       noShows: t.noShows,
-      calledOff,
-      shortNotice,
+      calledOff: t.calledOff,
+      shortNotice: t.shortNotice,
       headsUps: t.headsUps,
       keptWord: t.keptWord,
     },
-    byReason: CALL_OFF_REASONS.filter((r) => byReason[r]).map((r) => ({ reason: r, label: CALL_OFF_LABEL[r], count: byReason[r] })),
-    items: items.slice(0, 60),
+    standing: standing.get(userId) || noPoints(),
+    byReason: CALL_OFF_REASONS.filter((r) => p.byReason[r]).map((r) => ({ reason: r, label: CALL_OFF_LABEL[r], count: p.byReason[r] })),
+    items: p.items.slice(0, 60),
   };
 }
 

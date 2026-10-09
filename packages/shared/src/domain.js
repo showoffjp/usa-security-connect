@@ -648,6 +648,22 @@ export const CALL_OFF_LABEL = {
   other: 'Something else',
 };
 
+/**
+ * Attendance points: every lapse in the last `windowDays` scores, and an
+ * officer on `threshold` or more is flagged for a supervisor to talk to. A
+ * late start the officer warned of, arriving by the time they gave, scores
+ * nothing: that is what the heads-up is for.
+ */
+export const ATTENDANCE_POINTS = { windowDays: 30, threshold: 4, noShow: 3, shortCallOff: 2, callOff: 1, late: 1 };
+
+/** The points one item on an attendance record scores. */
+export function attendancePointsFor(item) {
+  if (item.kind === 'no_show') return ATTENDANCE_POINTS.noShow;
+  if (item.kind === 'called_off') return item.short_notice ? ATTENDANCE_POINTS.shortCallOff : ATTENDANCE_POINTS.callOff;
+  if (item.kind === 'late') return item.kept_word ? 0 : ATTENDANCE_POINTS.late;
+  return 0;
+}
+
 export const BROADCAST_PRIORITY = ['normal', 'important', 'urgent'];
 
 /** Great-circle distance in metres. Used for geofence checks on both client + server. */

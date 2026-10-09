@@ -48,6 +48,17 @@ export function MyAttendance({ refreshKey }) {
           bad={s.calledOff > 1 || s.shortNotice > 0}
         />
       </View>
+      {data.standing && (
+        <View style={{ gap: 4, marginTop: 10 }}>
+          <View style={[S.row, { justifyContent: 'space-between', flexWrap: 'wrap' }]}>
+            <Text style={[S.small, S.strong]}>{`Attendance points: ${data.standing.points} of ${data.standing.threshold}`}</Text>
+            {data.standing.over && !data.standing.reviewed && <Chip tone="danger">Over the limit</Chip>}
+          </View>
+          <Text style={[S.tiny, S.muted]}>
+            {`In the last ${data.standing.windowDays} days. A no-show is ${data.rules.points.noShow}, a call-off ${data.rules.points.callOff} (${data.rules.points.shortCallOff} at short notice), a late start ${data.rules.points.late}, or none if you warned us and made it by the time you gave.`}
+          </Text>
+        </View>
+      )}
       {items.map((i, n) => (
         <View key={`${i.kind}-${i.shift_id}`} style={[S.listItem, n === items.length - 1 && { borderBottomWidth: 0 }]}>
           <View style={S.grow}>

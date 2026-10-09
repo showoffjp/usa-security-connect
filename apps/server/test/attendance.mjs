@@ -16,7 +16,7 @@
  * outbox as 'skipped' and the verification code comes back on screen.
  */
 
-import { call, log, section, signIn, finish } from './harness.mjs';
+import { call, log, section, signIn, finish, localDay } from './harness.mjs';
 
 const vince = await signIn('1001', '2468');
 const supervisor = await signIn('1002', '3571');
@@ -75,6 +75,26 @@ if (seededOff) {
   log(card?.shifts.calledOff === rec.data.summary.calledOff && card.shifts.due === card.shifts.worked + card.shifts.missed + card.shifts.calledOff,
     'the scorecard counts the same call-offs among the shifts due', JSON.stringify(card?.shifts));
   log(card?.score < 100, 'and they cost the score', `${card?.score}`);
+
+  // Three call-offs in a fortnight are over the attendance points limit.
+  const offId = seededOff.call_off.user_id;
+  const st = rec.data.standing;
+  log(st && st.points >= st.threshold && st.needs_review && st.items.filter((i) => i.kind === 'called_off').length === 3,
+    `${seededOff.officer} is over the attendance points limit, and nobody has talked to them`, JSON.stringify(st && { points: st.points, threshold: st.threshold }));
+  const pointsAlert = (list) => list.find((a) => a.key.startsWith(`attendance-points:${offId}:`));
+  const inbox = (await call('/admin/alerts', { token: supervisor })).data.alerts;
+  const pa = pointsAlert(inbox);
+  log(pa?.severity === 'warning' && pa.link === `/admin/employees/${offId}#attendance-record` && /attendance points in 30 days/.test(pa.title),
+    'the alerts inbox says so, and opens their record', pa?.title);
+  const step = await call('/conduct', {
+    token: supervisor, method: 'POST',
+    body: { userId: offId, category: 'attendance', level: 'coaching', occurredOn: localDay(0),
+      summary: 'Three call-offs in a fortnight, one at short notice.', expectations: 'Call off only when you must, and as early as you can.' },
+  });
+  log(step.status === 201, 'a supervisor records a coaching on attendance', step.data?.error);
+  const after = await call(`/attendance/record/${offId}?days=30`, { token: supervisor });
+  log(after.data.standing.reviewed?.level === 'coaching' && !after.data.standing.needs_review, 'which the record shows as dealt with');
+  log(!pointsAlert((await call('/admin/alerts', { token: supervisor })).data.alerts), 'and the alert goes');
 } else {
   log(true, 'no call-off seeded at this hour (nothing rostered two to eleven hours ahead)');
 }

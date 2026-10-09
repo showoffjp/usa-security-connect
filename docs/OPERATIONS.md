@@ -170,6 +170,22 @@ record on their profile and the phone's **Worked** tab. The scorecards count bot
 among the shifts due: a no-show as a missed shift, a call-off as half of one, because
 they warned you but the shift still had to be covered.
 
+**Attendance points.** Each lapse in the last 30 days scores (`ATTENDANCE_POINTS` in
+the shared rules):
+
+| Lapse | Points |
+|-------|--------|
+| No-show | 3 |
+| Call-off with under 4 hours to go | 2 |
+| Call-off with more notice | 1 |
+| Late start past the grace | 1 |
+| Late start the officer warned of, arriving by the time they gave | 0 |
+
+At 4 points the officer is in the alerts inbox and their record shows a warning with
+**Record a step**: a coaching on attendance, filled in with the lapses. Any attendance
+coaching or warning recorded after the latest lapse clears the flag; the next lapse
+brings it back, and a lapse drops out after 30 days. Officers see their own points.
+
 **Texts are only as prompt as the sweep.** A long-running server sweeps every
 minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
 point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set
