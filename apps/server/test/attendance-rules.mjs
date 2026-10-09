@@ -10,7 +10,8 @@ process.env.USC_PUSH_DISABLED = '1';
 
 const { db, migrate } = await import('../src/lib/db.js');
 const { toSql } = await import('../src/services/compliance.js');
-const { stagesFor, sweepAttendance, attendanceBoard, headsUpFor, reportRunningLate, callOff, attendanceRecord } = await import('../src/services/attendance.js');
+const { stagesFor, sweepAttendance, attendanceBoard, headsUpFor, reportRunningLate, callOff, attendanceRecord, attendancePoints } = await import('../src/services/attendance.js');
+const { attendancePointsFor, ATTENDANCE_POINTS } = await import('../src/shared.js');
 const { officerScore } = await import('../src/services/scorecards.js');
 const { normalizePhone, displayPhone, maskPhone } = await import('../src/services/sms.js');
 
@@ -209,6 +210,46 @@ log(kimRec.summary.worked === 1 && kimRec.summary.onTime === 0 && kimRec.summary
   'Kim clocked in twelve minutes after the start: worked, and late', JSON.stringify(kimRec.summary));
 log(kimLate?.kept_word === true && kimRec.summary.keptWord === 1, 'but within the fifteen minutes Kim gave: as good as their word');
 log((await attendanceRecord(kim, { days: 7, now: new Date(kimIn.getTime() + 9 * 86400000) })).summary.due === 0, 'and a week later it is outside a seven-day record');
+
+/* ===================================================== attendance points === */
+console.log('\n--- attendance points ---');
+log(attendancePointsFor({ kind: 'no_show' }) === 3 && attendancePointsFor({ kind: 'called_off', short_notice: true }) === 2
+  && attendancePointsFor({ kind: 'called_off', short_notice: false }) === 1 && attendancePointsFor({ kind: 'late' }) === 1,
+  'a no-show is 3, a call-off 1 (2 at short notice), a late start 1');
+log(attendancePointsFor({ kind: 'late', kept_word: true }) === 0, 'and a late start warned of, arriving by the time given, nothing');
+log(ATTENDANCE_POINTS.windowDays === 30 && ATTENDANCE_POINTS.threshold === 4, 'counted over 30 days; 4 is the limit');
+log((await attendancePoints({ now: soon, userId: nick })).get(nick)?.points === 2, "Nick's short-notice call-off: 2 points");
+log(!(await attendancePoints({ now: new Date(kimIn.getTime() + MIN), userId: kim })).get(kim)?.points, 'Kim, late but as good as their word: none');
+
+// Rita never came (3), and was 20 minutes late two days before (1): 4, the limit.
+const ritaEarlier = new Date(now.getTime() - 2 * 86400000);
+const ritaOld = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at, status) VALUES (?,?,?,?, 'completed')`, rita, post,
+  toSql(ritaEarlier), toSql(new Date(ritaEarlier.getTime() + 6 * 60 * MIN)));
+await db.prepare(`INSERT INTO time_entries (user_id, shift_id, post_id, clock_in_at, clock_in_geofence, method) VALUES (?,?,?,?, 'inside', 'gps')`)
+  .run(rita, ritaOld, post, toSql(new Date(ritaEarlier.getTime() + 20 * MIN)));
+const later2 = new Date(at(31).getTime() + MIN);
+let rp = (await attendancePoints({ now: later2, userId: rita })).get(rita);
+log(rp?.points === 4 && rp.over && rp.needs_review && rp.items.length === 2, 'Rita: a no-show and a late start make 4, the limit: flagged', JSON.stringify(rp && { points: rp.points, items: rp.items.map((i) => i.kind) }));
+const review = await db
+  .prepare(`INSERT INTO conduct_records (user_id, category, level, occurred_on, summary, expectations, issued_by, created_at) VALUES (?, 'attendance', 'coaching', ?, ?, ?, ?, ?) RETURNING id`)
+  .get(rita, toSql(later2).slice(0, 10), 'Missed a shift and was late earlier in the week.', 'Call ahead, every time.', supervisor, toSql(later2));
+rp = (await attendancePoints({ now: new Date(later2.getTime() + MIN), userId: rita })).get(rita);
+log(rp.over && !rp.needs_review && rp.reviewed?.id === review.id && rp.reviewed.level_label === 'Coaching', 'a coaching on attendance after it clears the flag, and is shown', JSON.stringify(rp.reviewed));
+await db.prepare(`INSERT INTO conduct_records (user_id, category, level, occurred_on, summary, expectations, issued_by, created_at) VALUES (?, 'uniform', 'coaching', ?, ?, ?, ?, ?)`)
+  .run(nick, toSql(later2).slice(0, 10), 'Uniform not to standard on the night shift.', 'Full uniform on post.', supervisor, toSql(later2));
+log(!(await attendancePoints({ now: new Date(later2.getTime() + MIN), userId: nick })).get(nick)?.reviewed, 'a coaching about something else does not');
+// A third lapse after the coaching: flagged again.
+const ritaNext = new Date(later2.getTime() + 2 * 3600000);
+const ritaNew = await id(`INSERT INTO shifts (user_id, post_id, starts_at, ends_at, status) VALUES (?,?,?,?, 'completed')`, rita, post,
+  toSql(ritaNext), toSql(new Date(ritaNext.getTime() + 4 * 60 * MIN)));
+await db.prepare(`INSERT INTO time_entries (user_id, shift_id, post_id, clock_in_at, clock_in_geofence, method) VALUES (?,?,?,?, 'inside', 'gps')`)
+  .run(rita, ritaNew, post, toSql(new Date(ritaNext.getTime() + 15 * MIN)));
+rp = (await attendancePoints({ now: new Date(ritaNext.getTime() + 20 * MIN), userId: rita })).get(rita);
+log(rp.points === 5 && rp.needs_review && !rp.reviewed, 'late again after it: 5 points, and flagged again', `${rp.points}`);
+rp = (await attendancePoints({ now: new Date(ritaEarlier.getTime() + 31 * 86400000), userId: rita })).get(rita);
+log(rp && !rp.items.some((i) => i.shift_id === ritaOld), 'and a month on, the old late start no longer counts');
+const ritaMonth = await attendanceRecord(rita, { days: 30, now: new Date(ritaNext.getTime() + 20 * MIN) });
+log(ritaMonth.standing.points === 5 && ritaMonth.items.every((i) => typeof i.points === 'number'), 'the record carries the points, and each lapse its own');
 
 /* ============================================================== the score === */
 console.log('\n--- the score ---');

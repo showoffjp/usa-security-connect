@@ -24,17 +24,17 @@ export function RecordState({ r }) {
  * otherwise the active officers are offered. The step a new record would
  * usually be is suggested once the officer and the kind of problem are known.
  */
-export function IssueDialog({ officer, onClose, onDone }) {
+export function IssueDialog({ officer, initial = null, onClose, onDone }) {
   const toast = useToast();
   const { isAdmin, user } = useAuth();
   const [people, setPeople] = useState(null);
   const [userId, setUserId] = useState(officer ? String(officer.id) : '');
   const [standing, setStanding] = useState(null);
-  const [category, setCategory] = useState('attendance');
+  const [category, setCategory] = useState(initial?.category || 'attendance');
   const [level, setLevel] = useState('coaching');
   const [touched, setTouched] = useState(false);
   const [occurredOn, setOccurredOn] = useState(ymd(new Date()));
-  const [summary, setSummary] = useState('');
+  const [summary, setSummary] = useState(initial?.summary || '');
   const [expectations, setExpectations] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');

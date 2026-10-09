@@ -48,7 +48,7 @@ import { trainingStatesForPost, trainingAlerts } from '../services/training.js';
 import { suspendedIds, unsignedOverdue } from '../services/conduct.js';
 import { handovers } from '../services/handovers.js';
 import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
-import { attendanceBoard, lostShifts } from '../services/attendance.js';
+import { attendanceBoard, lostShifts, attendancePoints } from '../services/attendance.js';
 import { officerScore, CALL_OFF_WEIGHT } from '../services/scorecards.js';
 
 export const adminRouter = Router();
@@ -2540,6 +2540,28 @@ async function buildAlerts(userId) {
     push({ key: `conduct:${r.id}`, kind: 'conduct', severity: 'info', at: r.created_at, link: `/admin/conduct?record=${r.id}`,
       title: `${r.officer} has not signed a ${r.level_label.toLowerCase()}`,
       detail: `${r.category_label} · issued ${r.occurred_on}. Go through it with them, or record that they refused.` });
+  }
+
+  // An officer over the attendance points limit whom nobody has talked to
+  // since. The key carries the points, so it comes back unread as they rise.
+  const points = [...(await attendancePoints())].filter(([id, p]) => p.needs_review && id !== userId);
+  if (points.length) {
+    const people = new Map(
+      (await db
+        .prepare(`SELECT id, first_name || ' ' || last_name AS name, role FROM users WHERE status = 'active' AND id IN (${points.map(() => '?').join(',')})`)
+        .all(...points.map(([id]) => id))).map((u) => [u.id, u])
+    );
+    for (const [id, p] of points) {
+      const who = people.get(id);
+      if (!who || (who.role !== ROLES.OFFICER && viewer?.role !== ROLES.ADMIN)) continue;
+      const count = (kind) => p.items.filter((i) => i.kind === kind).length;
+      const parts = [[count('no_show'), 'no-show'], [count('called_off'), 'call-off'], [count('late'), 'late start']]
+        .filter(([n]) => n).map(([n, w]) => s(n, w));
+      push({ key: `attendance-points:${id}:${p.points}`, kind: 'attendance', severity: 'warning', at: p.latest_at,
+        link: `/admin/employees/${id}#attendance-record`,
+        title: `${who.name}: ${p.points} attendance points in ${p.windowDays} days`,
+        detail: `${parts.join(', ')} · the limit is ${p.threshold}. Talk to them and record a step.` });
+    }
   }
 
   // Money an officer spent and has claimed back.

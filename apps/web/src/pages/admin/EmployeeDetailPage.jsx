@@ -12,6 +12,7 @@ import CommendationsCard from './CommendationsCard.jsx';
 import SiteTrainingCard from './SiteTrainingCard.jsx';
 import ConductCard from './ConductCard.jsx';
 import AttendanceRecord from '../../components/AttendanceRecord.jsx';
+import { IssueDialog } from './ConductParts.jsx';
 import { ROLE_LABEL, toHours } from '@shared/domain.js';
 
 /** Correcting a punch always records who changed it and why. */
@@ -95,6 +96,9 @@ export default function EmployeeDetailPage() {
   const [tab, setTab] = useState('time');
   const [adjust, setAdjust] = useState(null);
   const [credentials, setCredentials] = useState(null);
+  // A step recorded from the attendance card: both cards then reload.
+  const [stepFor, setStepFor] = useState(null);
+  const [recorded, setRecorded] = useState(0);
 
   const load = async () => {
     try {
@@ -179,14 +183,21 @@ export default function EmployeeDetailPage() {
         />
       </div>
 
-      {e.role !== 'admin' && <AttendanceRecord userId={e.id} name={e.full_name} />}
+      {e.role !== 'admin' && (
+        <AttendanceRecord
+          userId={e.id}
+          name={e.full_name}
+          refreshKey={recorded}
+          onRecordStep={user?.id !== e.id && e.status === 'active' && (e.role === 'officer' || isAdmin) ? setStepFor : null}
+        />
+      )}
 
       <PtoCard userId={e.id} name={e.full_name} isAdmin={isAdmin} />
 
       {e.role !== 'admin' && <SiteTrainingCard userId={e.id} name={e.full_name} />}
 
       {e.role !== 'admin' && user?.id !== e.id && (
-        <ConductCard userId={e.id} name={e.full_name} canIssue={e.status === 'active' && (e.role === 'officer' || isAdmin)} />
+        <ConductCard key={recorded} userId={e.id} name={e.full_name} canIssue={e.status === 'active' && (e.role === 'officer' || isAdmin)} />
       )}
 
       {e.role !== 'admin' && <CommendationsCard userId={e.id} name={e.full_name} isAdmin={isAdmin} isSelf={user?.id === e.id} />}
@@ -364,6 +375,17 @@ export default function EmployeeDetailPage() {
         />
       )}
       {credentials && <CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />}
+      {stepFor && (
+        <IssueDialog
+          officer={{ id: e.id, name: e.full_name }}
+          initial={stepFor}
+          onClose={() => setStepFor(null)}
+          onDone={() => {
+            setStepFor(null);
+            setRecorded((n) => n + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

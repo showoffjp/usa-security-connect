@@ -1926,6 +1926,56 @@ for (const u of STAFF) {
   await officer.context.close();
 }
 
+/* ------------------------------------------- round 35: attendance points --- */
+{
+  console.log('\n--- Attendance points: over the limit, a supervisor records a step, and the officer sees their points ---');
+  const api = async (path, token) =>
+    (await fetch(`${WEB}/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} })).json();
+  const adminToken = (await (await fetch(`${WEB}/api/auth/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ employeeCode: '1001', pin: '2468' }),
+  })).json()).token;
+  const off = (await api('/attendance', adminToken)).open.find((o) => o.state === 'called_off' && o.call_off);
+  if (off) {
+    const id = off.call_off.user_id;
+    const sup = await watchedPage({ width: 1440, height: 900 });
+    await staffSignIn(sup.page, '1002', '3571');
+    await sup.page.click('.bell-btn');
+    await sup.page.waitForSelector('.alerts-list', { timeout: 10000 });
+    const alert = sup.page.locator('.alert-item', { hasText: `${off.call_off.officer}:` }).filter({ hasText: 'attendance points' });
+    log(await alert.count() === 1, 'the alerts inbox flags the officer over the attendance limit', off.call_off.officer);
+    await alert.first().click();
+    await sup.page.waitForSelector('#attendance-points', { timeout: 10000 });
+    log(sup.page.url().includes(`/admin/employees/${id}`), 'and opens their record');
+    const banner = sup.page.locator('#attendance-points');
+    log(await banner.locator('text=Over the attendance limit').count() === 1, 'their record says they are over the limit, and why', (await banner.innerText()).split('\n')[0]);
+    await checkScreen('supervisor: over the attendance limit', sup.page, sup.problems);
+    await banner.locator('button:has-text("Record a step")').click();
+    await sup.page.waitForSelector('[role="dialog"]');
+    const dialog = sup.page.locator('[role="dialog"]');
+    const summary = await dialog.locator('textarea').first().inputValue();
+    log(/attendance points in the last 30 days, over the limit of 4/.test(summary) && /called off/.test(summary),
+      'Record a step opens on attendance, with the lapses written out', summary.slice(0, 90));
+    await dialog.locator('textarea').nth(1).fill('Call off only when you must, and as early as you can.');
+    await checkScreen('supervisor: record a step for attendance', sup.page, sup.problems);
+    await dialog.locator('button:has-text("Record coaching")').click();
+    await sup.page.waitForSelector('#attendance-points .chip:has-text("Coaching recorded")', { timeout: 10000 });
+    log(await sup.page.locator('#conduct .conduct-record', { hasText: 'Attendance and punctuality' }).count() >= 1, 'it is on their coaching record, and the warning becomes a note of it');
+    await sup.context.close();
+    const inbox = await api('/admin/alerts', adminToken);
+    log(!inbox.alerts.some((a) => a.key.startsWith(`attendance-points:${id}:`)), 'and it leaves the alerts inbox');
+  } else {
+    log(true, 'no call-off seeded at this hour');
+  }
+
+  const officer = await watchedPage({ width: 390, height: 844 });
+  await staffSignIn(officer.page, '1003', '4812');
+  await officer.page.goto(WEB + '/profile');
+  await officer.page.waitForSelector('#attendance-points', { timeout: 10000 });
+  log(await officer.page.locator('#attendance-points :text("Your attendance points")').count() === 1 &&
+    await officer.page.locator('#attendance-points [role="meter"]').count() === 1, 'an officer sees their own attendance points, and how they are scored');
+  await officer.context.close();
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

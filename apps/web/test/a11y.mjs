@@ -301,6 +301,25 @@ await page.click('#pto button:has-text("Adjust")');
 await page.waitForSelector('[role="dialog"]');
 await audit(page, 'Employee: adjust paid time off', null);
 await page.keyboard.press('Escape');
+// An officer over the attendance points limit: the warning on their record,
+// and recording a step from it. The demo's officer who called off tonight.
+{
+  const API = process.env.USC_API_URL || 'http://localhost:4000/api';
+  const token = await page.evaluate(() => localStorage.getItem('usc.token'));
+  const board = await (await fetch(`${API}/attendance`, { headers: { authorization: `Bearer ${token}` } })).json();
+  const off = (board.open || []).find((o) => o.state === 'called_off' && o.call_off);
+  if (off) {
+    await page.goto(`${WEB}/admin/employees/${off.call_off.user_id}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#attendance-points');
+    await audit(page, 'Employee: over the attendance limit', null);
+    await page.click('#attendance-points button:has-text("Record a step")');
+    await page.waitForSelector('[role="dialog"]');
+    await audit(page, 'Employee: record a step for attendance', null);
+    await page.keyboard.press('Escape');
+  } else {
+    console.log('SKIP  over the attendance limit: no call-off on the demo just now');
+  }
+}
 await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
 await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click();
 await page.waitForSelector('[role="dialog"]');

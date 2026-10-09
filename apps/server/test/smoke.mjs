@@ -235,6 +235,13 @@ for (let d = new Date(`${bulkStart}T00:00:00`); d <= new Date(`${bulkEnd}T00:00:
 }
 log(bulk.status === 201 && bulk.data.created === weekdaysInRange, 'bulk roster generated (overnight)', `${bulk.data?.created} of ${weekdaysInRange} weekdays`);
 
+// A bare date in a range is that local day, the same as its midnight sent in full.
+const ids = async (q) => ((await call(`/admin/shifts?${q}`, { token: aTok })).data?.shifts || []).map((x) => x.id).sort().join(',');
+const midnight = (d) => new Date(`${d}T00:00:00`).toISOString();
+const byDay = await ids(`from=${localDay(0)}&to=${localDay(2)}`);
+log(byDay.length > 0 && byDay === (await ids(`from=${midnight(localDay(0))}&to=${midnight(localDay(2))}`)),
+  'a date range given as plain days is read as local days');
+
 const csv = await fetch(BASE + '/admin/export/timesheets.csv', { headers: { Authorization: `Bearer ${aTok}` } });
 const csvText = await csv.text();
 log(csv.status === 200 && csvText.split('\n').length > 5, 'payroll CSV export', `${csvText.split('\n').length - 1} rows`);

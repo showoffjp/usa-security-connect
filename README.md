@@ -97,7 +97,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 10. Under **Coaching & discipline**, see who stands where, and record that an officer refused to sign.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
-13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. Open the officer who called off under **Employees**: their **Attendance** shows two more call-offs in the last fortnight, and the scorecards count all three.
+13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. The officer who called off has two more call-offs in the last fortnight: the alerts bell has them over the attendance points limit, and their record offers **Record a step** to coach them, which clears it.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -267,7 +267,11 @@ Build rosters, answer requests, keep licences current.
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/employee-attendance.jpg"><img src="docs/screenshots/employee-attendance.jpg" alt="An officer's attendance record: on time, late, no-shows and call-offs"></a><br><b>Attendance record</b><br>On each officer's record: how often on time, and every late arrival, no-show and call-off, with the reason, the notice given and who covered. The scorecards count call-offs too.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/employee-attendance.jpg"><img src="docs/screenshots/employee-attendance.jpg" alt="An officer's attendance record: on time, late, no-shows and call-offs, over the points limit"></a><br><b>Attendance record</b><br>On each officer's record: how often on time, and every late arrival, no-show and call-off, with the reason, the notice given, who covered and the points it scores. Over the limit, it says so.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/attendance-points-step.jpg"><img src="docs/screenshots/attendance-points-step.jpg" alt="Recording a coaching on attendance, with the lapses written out"></a><br><b>Record a step</b><br>From the warning: a coaching on attendance, with the lapses already written out. Recording it clears the alert until the next lapse.</td>
+    <td width="50%"></td>
   </tr>
 </table>
 
@@ -353,7 +357,7 @@ On the phone:
     <td width="25%" valign="top"><a href="docs/screenshots/officer-running-late.jpg"><img src="docs/screenshots/officer-running-late.jpg" alt="An officer's next shift with Running late and Can't make it"></a><br><b>Running late, or can't make it</b><br>Before the next shift, the officer tells the supervisors they are on their way and when they will arrive, or calls off and the shift opens for cover.</td>
   </tr>
   <tr>
-    <td width="25%" valign="top"><a href="docs/screenshots/officer-my-attendance.jpg"><img src="docs/screenshots/officer-my-attendance.jpg" alt="An officer's own attendance record on their profile"></a><br><b>My attendance</b><br>The officer sees the same record their supervisors do, on the profile and the phone's Worked tab.</td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-my-attendance.jpg"><img src="docs/screenshots/officer-my-attendance.jpg" alt="An officer's own attendance record on their profile"></a><br><b>My attendance</b><br>The officer sees the same record their supervisors do, with their attendance points and how they are scored, on the profile and the phone's Worked tab.</td>
     <td width="25%"></td>
     <td width="25%"></td>
     <td width="25%"></td>
@@ -825,7 +829,8 @@ and a supervisor can only read is noted where it matters.
     rostered short or inside their notice period.
   - **Office:** new applicants, time corrections and expense claims waiting, overtime a
     shift not yet started would cause, open shifts on a holiday in the next 14 days, and
-    shifts in the next day that leave an officer short of rest or over the hours or days.
+    shifts in the next day that leave an officer short of rest or over the hours or days,
+    and officers over the attendance points limit whom nobody has talked to yet.
 
   Opening one goes to the screen that deals with it and marks it read. Alerts are
   worked out from the records, so they clear themselves when the problem is resolved;
@@ -1117,6 +1122,14 @@ and a supervisor can only read is noted where it matters.
   much notice (under four hours is **short notice**), who covered it, and whether an
   officer who said they were running late got there by the time they gave. The
   officer sees the same record on their profile (web) and the **Worked** tab (phone).
+
+  **Attendance points** over the last 30 days: a no-show is 3, a call-off 1 (2 at short
+  notice) and a late start 1, or nothing if the officer warned the supervisors and got
+  there by the time they gave. At 4 the officer is flagged in the alerts inbox and on
+  their record, with **Record a step**, which opens a coaching on attendance with the
+  lapses already written out. Recording any attendance coaching or warning clears the
+  flag until the next lapse; a lapse more than 30 days old drops out. The officer sees
+  their points, and how they are scored, beside their record.
 - **Commendations** — on each officer's record: every commendation from a client or
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
@@ -1585,7 +1598,8 @@ The suites, in the order they run:
   over. Runs on its own throwaway database before the API starts.
 - **`test/smoke.mjs`** — authentication, PIN lockout, geofenced clock-in, status
   check-ins, tours and NFC tag validation, training enforcement, scheduling conflicts,
-  the compliance sweep and the payroll export.
+  a fortnight's overnight roster on the right weekdays, a date range given as plain days
+  read as local days, the compliance sweep and the payroll export.
 - **`test/features.mjs`** — employment classification rules, overtime by worker type,
   margin, certification expiry, availability, time off, breaks, duress alerts, the
   daily report, map data and push registration.
@@ -1879,7 +1893,11 @@ The suites, in the order they run:
   attendance record: a call-off stays on the record of the officer who made it (with
   the reason, the notice, short under four hours, and who covered it), not the cover's;
   a no-show keeps the time the officer gave; a late arrival within the time given is
-  kept as their word; and a week later it is outside a seven-day record. The score:
+  kept as their word; and a week later it is outside a seven-day record. Attendance
+  points: a no-show 3, a call-off 1 or 2 at short notice, a late start 1 and none when
+  warned of and kept to; a no-show and a late start make 4 and are flagged; an
+  attendance coaching after them clears the flag (one about uniform does not), a late
+  start after it brings it back at 5, and a lapse a month old drops out. The score:
   nothing to judge is no score, two call-offs cost the same as one no-show, and calling
   off every shift scores nothing.
 - **`test/attendance.mjs`** — supervisors see the board, officers and clients do not. The
@@ -1902,7 +1920,10 @@ The suites, in the order they run:
   themselves. The live feed holds only the last day. The demo officer who called off has
   three call-offs in a fortnight on their record (twice sick, once at short notice, the
   earlier two covered), and the scorecard counts the same three among the shifts due.
-  Officers cannot see each other's records, clients none, and administrators have none.
+  That puts them over the attendance points limit: the alerts inbox says so and opens
+  their record, and once a supervisor records a coaching on attendance the record shows
+  it dealt with and the alert goes. Officers cannot see each other's records, clients
+  none, and administrators have none.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1915,7 +1936,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 443
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 452
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -1970,12 +1991,16 @@ The suites, in the order they run:
     covered it, and the period can be changed; the scorecards show the call-offs beside
     the shifts and say how they are scored; an officer sees **My attendance** on their
     profile;
+  - the alerts bell has that officer over the attendance points limit and opens their
+    record, which says why; **Record a step** opens a coaching on attendance with the
+    lapses written out, and recording it turns the warning into a note of it and clears
+    the alert; an officer sees their own attendance points and how they are scored;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 129
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 131
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 140 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 142 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens

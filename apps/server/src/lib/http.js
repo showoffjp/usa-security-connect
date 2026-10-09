@@ -97,6 +97,9 @@ export function limitParam(value, fallback, max) {
 /** A date or date-time, or the fallback when absent. An unreadable one is refused. */
 export function dateParam(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
+  // A bare calendar date is that local day, as everywhere else: new Date()
+  // would read it as UTC midnight, the evening before west of UTC.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return parseDay(String(value));
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) throw new HttpError(422, 'That date is not valid.');
   return d;
