@@ -792,6 +792,7 @@ export async function attendancePoints({ now = new Date(), userId = null } = {})
       : null;
     out.set(id, {
       points, threshold: ATTENDANCE_POINTS.threshold, windowDays: ATTENDANCE_POINTS.windowDays,
+      worked: p.t.worked, on_time_pct: p.t.worked ? Math.round((p.t.onTime / p.t.worked) * 100) : null,
       over: points >= ATTENDANCE_POINTS.threshold, latest_at: latest, reviewed,
       needs_review: points >= ATTENDANCE_POINTS.threshold && !reviewed,
       items: scoring.map((i) => ({ kind: i.kind, shift_id: i.shift_id, post_name: i.post_name, starts_at: i.starts_at, at: i.at, points: i.points })),
@@ -801,7 +802,7 @@ export async function attendancePoints({ now = new Date(), userId = null } = {})
 }
 
 const noPoints = () => ({
-  points: 0, threshold: ATTENDANCE_POINTS.threshold, windowDays: ATTENDANCE_POINTS.windowDays,
+  points: 0, threshold: ATTENDANCE_POINTS.threshold, windowDays: ATTENDANCE_POINTS.windowDays, worked: 0, on_time_pct: null,
   over: false, latest_at: null, reviewed: null, needs_review: false, items: [],
 });
 

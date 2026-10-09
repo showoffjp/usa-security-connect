@@ -1006,7 +1006,11 @@ and a supervisor can only read is noted where it matters.
   which goes on the audit log. Recurring rosters skip days the officer cannot work,
   and copying a week leaves those shifts open. At a post that needs site training,
   officers trained there are marked **Trained here** and come first; anyone else is
-  marked **Not trained here** and can still be rostered, as a training shift.
+  marked **Not trained here** and can still be rostered, as a training shift. Each
+  also shows how often they were on time this month and their attendance points;
+  anyone over the points limit is marked **Over the attendance limit** and comes after
+  everyone else who could take the shift the same way, and fewer points break the last
+  ties, so the cover offered for a call-off is the most reliable first.
 - **Officers are told** — adding, moving, reassigning or removing an upcoming shift
   sends the officer a push notification, and a recurring roster or copied week sends
   one summary instead of dozens.
@@ -1921,9 +1925,11 @@ The suites, in the order they run:
   three call-offs in a fortnight on their record (twice sick, once at short notice, the
   earlier two covered), and the scorecard counts the same three among the shifts due.
   That puts them over the attendance points limit: the alerts inbox says so and opens
-  their record, and once a supervisor records a coaching on attendance the record shows
-  it dealt with and the alert goes. Officers cannot see each other's records, clients
-  none, and administrators have none.
+  their record; suggested for a shift, they are marked over the limit (a warning, not a
+  block) and come after everyone not over it who could take it the same way, and every
+  suggestion says how often they were on time; once a supervisor records a coaching on
+  attendance the record shows it dealt with and the alert goes. Officers cannot see
+  each other's records, clients none, and administrators have none.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every

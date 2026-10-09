@@ -8,7 +8,7 @@ import {
 import { toHours, FATIGUE_LABEL } from '@shared/domain.js';
 
 /** Site training reasons are long; the candidate list says them in a word. */
-const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here', ...FATIGUE_LABEL };
+const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here', attendance_points: 'Over the attendance limit', ...FATIGUE_LABEL };
 
 const WEEKDAYS = [
   { value: 1, label: 'Mon' },
@@ -264,8 +264,10 @@ function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick
                     {c.times_at_post > 0 && <Chip kind="navy">Worked here {c.times_at_post}x</Chip>}
                     {c.home_site_match && <Chip kind="navy">Home site</Chip>}
                     {c.overtime_hours > 0 && <Chip kind="warn">+{c.overtime_hours}h OT</Chip>}
+                    {c.attendance?.points > 0 && !c.attendance.over && <Chip>{c.attendance.points} attendance pt{c.attendance.points === 1 ? '' : 's'}</Chip>}
                   </div>
                   <div className="tiny muted" style={{ marginTop: 3 }}>
+                    {c.attendance?.on_time_pct != null && `On time ${c.attendance.on_time_pct}% this month · `}
                     {c.week_hours_before}h this week, {c.week_hours_after}h with this shift
                     {c.cost != null && ` · costs $${c.cost.toFixed(2)}`}
                     {c.margin_percent != null && ` · ${c.margin_percent}% margin`}
