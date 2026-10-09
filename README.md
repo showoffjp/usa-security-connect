@@ -301,7 +301,7 @@ Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/overtime.jpg"><img src="docs/screenshots/overtime.jpg" alt="The overtime watch: officers heading past 40 hours this week"></a><br><b>Overtime watch</b><br>Hours worked plus hours still rostered, for every hourly W-2 officer: who is going past 40, the premium it costs, and the shift that tips them over.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/overtime-cover.jpg"><img src="docs/screenshots/overtime-cover.jpg" alt="Finding cover for the shift that would cause overtime"></a><br><b>Find cover</b><br>Opens that shift on the schedule, with the overtime warning and the officers who could take it, those with hours to spare first.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/overtime-cover.jpg"><img src="docs/screenshots/overtime-cover.jpg" alt="Finding cover for the shift that would cause overtime"></a><br><b>Find cover</b><br>Opens that shift on the schedule, with the overtime warning and the officers who could take it: those with hours to spare first, anyone over the attendance limit after them, and how often each was on time this month.</td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/fatigue.jpg"><img src="docs/screenshots/fatigue.jpg" alt="Rest and fatigue: shifts that leave an officer short of rest or over the days in a row"></a><br><b>Rest &amp; fatigue</b><br>Shifts in the week ahead that leave an officer under 8 hours off, over 16 hours of work in a day, or past 6 days in a row, counted as worked: time held over at a handover counts.</td>
@@ -1042,7 +1042,8 @@ and a supervisor can only read is noted where it matters.
   heading past 40 hours this payroll week or next: hours worked, hours still on the
   roster, the projection, the overtime hours and the premium they cost, and the shift
   that first carries each one over the line. **Find cover** opens that shift on the
-  schedule, where the suggested officers put those with hours to spare first.
+  schedule, where the suggested officers put those with hours to spare first and
+  anyone over the attendance points limit after them.
   Overtime that a shift not yet started would cause is counted on the sidebar and
   raised in the alerts inbox. Contractors and salaried staff, who do not earn
   overtime, are left out.
