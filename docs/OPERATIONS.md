@@ -186,6 +186,11 @@ At 4 points the officer is in the alerts inbox and their record shows a warning 
 coaching or warning recorded after the latest lapse clears the flag; the next lapse
 brings it back, and a lapse drops out after 30 days. Officers see their own points.
 
+The suggested officers for a shift show each one's points and how often they were on
+time this month. Anyone over the limit is marked so and offered after everyone else
+who could take the shift the same way: a warning, never a block, since the supervisor
+may still know best.
+
 **Texts are only as prompt as the sweep.** A long-running server sweeps every
 minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
 point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set

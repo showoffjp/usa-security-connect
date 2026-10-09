@@ -805,9 +805,10 @@ adminRouter.post(
  * Every active officer is judged with the same shared rule claims and swaps
  * use - licence for an armed post, overlaps, approved leave, stated
  * availability - and then ranked by what a scheduler weighs: eligible before
- * blocked, no overtime before overtime, people who know the post before
- * strangers, then whoever has the fewest hours that week. Queries are made
- * once for everybody, not once per officer.
+ * blocked, no overtime before overtime, anyone over the attendance points
+ * limit after those who are not, people who know the post before strangers,
+ * then fewer attendance points, then whoever has the fewest hours that week.
+ * Queries are made once for everybody, not once per officer.
  */
 adminRouter.get(
   '/shifts/candidates',
@@ -892,6 +893,8 @@ adminRouter.get(
     const trainingOf = post.training_required ? await trainingStatesForPost(post.id) : null;
     const suspended = await suspendedIds(startsAt);
     const fatigueOf = await fatigueForAll({ startsAt, endsAt, excludeShiftId });
+    // How reliably each has turned up this last month.
+    const reliability = await attendancePoints();
 
     const shiftMinutes = Math.round((endsAt - startsAt) / 60000);
     const threshold = RULES.overtimeWeeklyHours * 60;
@@ -908,6 +911,13 @@ adminRouter.get(
         suspended: suspended.has(u.id),
         fatigue: fatigueOf(u.id),
       });
+      const att = reliability.get(u.id);
+      if (att?.over) {
+        reasons.push({
+          code: 'attendance_points', advisory: true, supervisorOnly: true,
+          message: `Over the attendance limit: ${att.points} points in ${att.windowDays} days, from ${att.items.length} late start${att.items.length === 1 ? '' : 's'}, call-offs or no-shows.`,
+        });
+      }
       const before = rostered.get(u.id) || 0;
       const after = before + shiftMinutes;
       const earnsOvertime = u.employment_type === 'w2' && !u.exempt && u.pay_type === 'hourly';
@@ -941,17 +951,22 @@ adminRouter.get(
         training: trainingOf ? trainingOf(u.id) : null,
         cost: costCents != null ? costCents / 100 : null,
         margin_percent: billCents && costCents != null ? Math.round(((billCents - costCents) / billCents) * 1000) / 10 : null,
+        attendance: { points: att?.points || 0, over: Boolean(att?.over), on_time_pct: att?.on_time_pct ?? null },
       };
     });
 
+    // Somebody over the attendance limit comes after everybody else who could
+    // take it the same way; fewer points breaks the last ties.
     candidates.sort(
       (a, b) =>
         Number(b.eligible) - Number(a.eligible) ||
         Number(a.overtime_hours > 0) - Number(b.overtime_hours > 0) ||
+        Number(a.attendance.over) - Number(b.attendance.over) ||
         a.reasons.length - b.reasons.length ||
         Number(b.times_at_post > 0) - Number(a.times_at_post > 0) ||
         Number(b.home_site_match) - Number(a.home_site_match) ||
         (a.home_distance_km ?? 9999) - (b.home_distance_km ?? 9999) ||
+        a.attendance.points - b.attendance.points ||
         a.week_hours_before - b.week_hours_before
     );
 

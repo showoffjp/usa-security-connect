@@ -86,6 +86,15 @@ if (seededOff) {
   const pa = pointsAlert(inbox);
   log(pa?.severity === 'warning' && pa.link === `/admin/employees/${offId}#attendance-record` && /attendance points in 30 days/.test(pa.title),
     'the alerts inbox says so, and opens their record', pa?.title);
+  // Asked who could cover a shift, they come after everyone not over the limit who could take it the same way.
+  const cand = (await call(`/admin/shifts/candidates?postId=${seededOff.post_id}&startsAt=${encodeURIComponent(seededOff.starts_at)}&endsAt=${encodeURIComponent(seededOff.ends_at)}&excludeShiftId=${seededOff.shift_id}`, { token: supervisor })).data.candidates || [];
+  const them = cand.find((c) => c.user_id === offId);
+  log(them?.attendance.over && them.reasons.some((r) => r.code === 'attendance_points' && r.advisory && !r.message.includes('undefined')),
+    'suggested for a shift, they are marked over the attendance limit, as a warning', them?.reasons.map((r) => r.code).join(','));
+  const sameWay = (a, b) => a.eligible === b.eligible && (a.overtime_hours > 0) === (b.overtime_hours > 0);
+  log(cand.length > 5 && cand.every((c, i) => i === 0 || !(cand[i - 1].attendance.over && !c.attendance.over && sameWay(cand[i - 1], c))),
+    'and come after everyone not over it who could take it the same way');
+  log(cand.filter((c) => c.attendance.on_time_pct !== null).length > 5, 'each suggestion says how often they were on time this month');
   const step = await call('/conduct', {
     token: supervisor, method: 'POST',
     body: { userId: offId, category: 'attendance', level: 'coaching', occurredOn: localDay(0),
