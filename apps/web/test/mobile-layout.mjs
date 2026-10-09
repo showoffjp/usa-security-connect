@@ -343,35 +343,45 @@ async function audit(who, list, setup) {
       const page = await context.newPage();
       await setup(page, context);
       for (const [label, route, act] of list) {
-        try {
-          await page.goto(WEB + route, { waitUntil: 'networkidle' });
-          await page.waitForTimeout(500);
-          if (act) {
-            await act(page);
-            await page.waitForTimeout(700);
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            await page.goto(WEB + route, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(500);
+            if (act) {
+              await act(page);
+              await page.waitForTimeout(700);
+            }
+            const faults = await page.evaluate(measure);
+            screens += 1;
+            const tag = `${who} · ${label} @${width}${scheme === 'dark' ? ' night' : ''}`;
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${who}-${label}-${width}-${scheme}.png`.replace(/[^\w.-]+/g, '_')), fullPage: true });
+            const fresh = faults.filter(([kind, what]) => {
+              // The same fault on the same element is reported once, wherever it shows.
+              const key = `${who}|${kind}|${what.replace(/\d+px/g, '')}`;
+              if (seen.has(key)) return false;
+              seen.set(key, true);
+              return true;
+            });
+            if (fresh.length) {
+              problems += fresh.length;
+              console.log(`FAIL  ${tag}`);
+              for (const [kind, what] of fresh.slice(0, 12)) console.log(`        ${kind.padEnd(10)} ${what}`);
+              if (fresh.length > 12) console.log(`        ... and ${fresh.length - 12} more`);
+            } else {
+              console.log(`PASS  ${tag}`);
+            }
+            break;
+          } catch (err) {
+            // A page that failed to load leaves the tab on its way to Chrome's
+            // error page, which would interrupt every load after it: start the
+            // next from a blank tab. A dropped connection is tried once more;
+            // failing twice, or failing any other way, is a fault.
+            await page.goto('about:blank').catch(() => {});
+            if (attempt === 1 && /net::ERR_/.test(err.message)) continue;
+            problems += 1;
+            console.log(`FAIL  ${who} · ${label} @${width}: could not open (${err.message.split('\n')[0]})`);
+            break;
           }
-          const faults = await page.evaluate(measure);
-          screens += 1;
-          const tag = `${who} · ${label} @${width}${scheme === 'dark' ? ' night' : ''}`;
-          if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${who}-${label}-${width}-${scheme}.png`.replace(/[^\w.-]+/g, '_')), fullPage: true });
-          const fresh = faults.filter(([kind, what]) => {
-            // The same fault on the same element is reported once, wherever it shows.
-            const key = `${who}|${kind}|${what.replace(/\d+px/g, '')}`;
-            if (seen.has(key)) return false;
-            seen.set(key, true);
-            return true;
-          });
-          if (fresh.length) {
-            problems += fresh.length;
-            console.log(`FAIL  ${tag}`);
-            for (const [kind, what] of fresh.slice(0, 12)) console.log(`        ${kind.padEnd(10)} ${what}`);
-            if (fresh.length > 12) console.log(`        ... and ${fresh.length - 12} more`);
-          } else {
-            console.log(`PASS  ${tag}`);
-          }
-        } catch (err) {
-          problems += 1;
-          console.log(`FAIL  ${who} · ${label} @${width}: could not open (${err.message.split('\n')[0]})`);
         }
       }
       await context.close();
