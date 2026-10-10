@@ -9,13 +9,17 @@
  *    phone, with a fix good to a few metres; one post was dropped on the map;
  *  - every check-in answered is judged against its post like a clock-in, and
  *    one officer answered a check-in this morning from about 400 m away, which
- *    raised a flag.
+ *    raised a flag;
+ *  - every clock-out has its distance from the post;
+ *  - one clock-in the phone placed 580 m off was put back at the post by a
+ *    supervisor who saw the officer there, which closed its flag.
  */
 
 import { toSql, raiseFlag } from './services/compliance.js';
+import { fixPunchLocation } from './services/punchLocations.js';
 import { rememberGeocode } from './services/geocode.js';
 import { siteAddress, postAddress } from './services/locations.js';
-import { evaluateGeofence } from './shared.js';
+import { distanceMeters, evaluateGeofence } from './shared.js';
 import { offsetM } from './seed-demo.js';
 
 const HOUR = 3600000;
@@ -36,7 +40,7 @@ const FOUND = {
 };
 
 export async function seedLocations({ db, now = new Date() }) {
-  const result = { sites: 0, surveyed: 0, cached: 0, judged: 0, away: null };
+  const result = { sites: 0, surveyed: 0, cached: 0, judged: 0, away: null, fixed: null };
   const admin = await db.prepare(`SELECT id FROM users WHERE employee_code = '1001'`).get();
   const supervisor = await db.prepare(`SELECT id FROM users WHERE employee_code = '1002'`).get();
   const ago = (days) => toSql(new Date(now.getTime() - days * 24 * HOUR));
@@ -119,6 +123,42 @@ export async function seedLocations({ db, now = new Date() }) {
       detail: { distance_m: fence.distance, radius_m: fence.radius, accuracy: 9, post: away.post_name },
     });
     result.away = `${away.officer}, ${fence.distance} m from ${away.post_name}`;
+  }
+
+  // Every clock-out, how far from the post.
+  const outs = await db
+    .prepare(
+      `SELECT te.id, te.clock_out_lat, te.clock_out_lng, p.latitude AS post_lat, p.longitude AS post_lng
+       FROM time_entries te JOIN posts p ON p.id = te.post_id
+       WHERE te.clock_out_lat IS NOT NULL AND te.clock_out_distance_m IS NULL AND p.latitude IS NOT NULL`
+    )
+    .all();
+  for (const o of outs) {
+    const d = Math.round(distanceMeters(o.clock_out_lat, o.clock_out_lng, o.post_lat, o.post_lng));
+    await db.prepare(`UPDATE time_entries SET clock_out_distance_m = ? WHERE id = ?`).run(d, o.id);
+  }
+
+  // Two days ago a phone put a clock-in 580 m from the post; the supervisor
+  // had seen the officer at the desk, and put the punch back where it was made.
+  const drifted = await db
+    .prepare(
+      `SELECT f.ref_id, u.first_name || ' ' || u.last_name AS officer, p.name AS post_name
+       FROM flags f JOIN time_entries te ON te.id = f.ref_id JOIN users u ON u.id = te.user_id JOIN posts p ON p.id = te.post_id
+       WHERE f.type = 'geofence_violation' AND f.ref_type = 'time_entry' AND f.resolved_at IS NULL
+         AND te.clock_out_at IS NOT NULL AND te.clock_in_at BETWEEN ? AND ?
+         AND u.employee_code NOT IN (${SUITE_PEOPLE.map(() => '?').join(',')})
+       ORDER BY te.clock_in_at DESC LIMIT 1`
+    )
+    .get(toSql(new Date(now.getTime() - 4 * 24 * HOUR)), toSql(new Date(now.getTime() - 24 * HOUR)), ...SUITE_PEOPLE);
+  if (drifted && supervisor) {
+    await fixPunchLocation({
+      kind: 'clock_in',
+      id: drifted.ref_id,
+      place: { atPost: true },
+      reason: 'Phone GPS drifted in the parking garage. I was on site and saw them at the desk when they clocked in.',
+      by: supervisor.id,
+    });
+    result.fixed = `${drifted.officer}'s clock-in at ${drifted.post_name}`;
   }
   return result;
 }

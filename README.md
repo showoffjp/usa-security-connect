@@ -101,6 +101,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. The officer who called off has two more call-offs in the last fortnight: the alerts bell has them over the attendance points limit, and their record offers **Record a step** to coach them, which clears it.
 14. On that board, **Find cover** for the called-off shift: it is already out to four officers as an offer, one of whom said no. Tick another suggestion, or **Ask the top 3**, to ask more.
 15. Open **Sites & posts**: every pin passes the **Location check**, and **Status check-ins** are hourly. Open a post and see **Set from where I'm standing**.
+16. Open the **Punch log** from five days ago: a clock-in the phone put several hundred metres from its post was corrected by Renata Diaz, who saw the officer there (look for **Corrected**). **Correct** opens it, with where the phone said and why it was moved. Under **Flags**, an officer checked in from 417 m away: **Correct location** puts it at the post, or wherever you type, and closes the flag.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -336,15 +337,15 @@ Every punch, what it costs, and closing payroll. *Pay changes: admin only.*
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/punches.jpg"><img src="docs/screenshots/punches.jpg" alt="Punch log"></a><br><b>Punch log</b><br>Every clock-in and check-in with position, geofence verdict and distance from post.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/punch-location.jpg"><img src="docs/screenshots/punch-location.jpg" alt="Correcting where a clock-in was made: the post's geofence, where the phone said, and the corrected pin"></a><br><b>Correct a punch's location</b><br>When the phone was wrong, a supervisor puts a clock-in, clock-out or check-in at the post, on the map or at exact coordinates, with a reason. The phone's reading is kept.</td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/timesheets.jpg"><img src="docs/screenshots/timesheets.jpg" alt="Timesheets"></a><br><b>Timesheets &amp; pay</b><br>Hours, weekly overtime, holiday hours, estimated pay, billing and margin, W-2 and 1099 apart.</td>
-  </tr>
-  <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/pay-rates.jpg"><img src="docs/screenshots/pay-rates.jpg" alt="Pay rates"></a><br><b>Pay rates</b><br>Classification, overtime and bill rate for everyone, with dated changes and bulk raises.</td>
-    <td width="50%" valign="top"><a href="docs/screenshots/reports.jpg"><img src="docs/screenshots/reports.jpg" alt="Payroll register report"></a><br><b>Reports</b><br>Fifteen reports over any range; here the payroll register, with W-9 status for 1099 contractors.</td>
   </tr>
   <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/reports.jpg"><img src="docs/screenshots/reports.jpg" alt="Payroll register report"></a><br><b>Reports</b><br>Fifteen reports over any range; here the payroll register, with W-9 status for 1099 contractors.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/report-incidents.jpg"><img src="docs/screenshots/report-incidents.jpg" alt="Incidents by site report"></a><br><b>Incident reports</b><br>Incidents by site, by type and by day: how serious, police called, still open, hours to close, and the worst week.</td>
-    <td width="50%"></td>
   </tr>
 </table>
 
@@ -592,7 +593,7 @@ merely see more or less of the same screen — they get different applications.
 |---|---|---|---|
 | **Lands on** | Their own shift | The live operations dashboard | The live operations dashboard |
 | **Navigation** | 5 tabs | 37 destinations | 38 destinations |
-| **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log, review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
+| **Can do** | Clock in/out, check in, walk tours, file incidents, claim shifts, request time off | All of that, plus run the shift: live GPS tracking, the punch log (and correcting where a punch was made when a phone was wrong), review flags and incidents, approve time off and swaps, build and copy rosters, read timesheets, pay rates and every report | All of that, plus change the record: create staff, reset PINs, adjust time entries, set up sites and posts |
 | **Money** | — | Reads invoices, pay rates and margin | Sets pay rates (single or bulk, effective-dated); approves and closes payroll periods; raises, issues and voids invoices; manages client portal logins |
 | **Audit log** | — | — | Yes: the 38th destination |
 
@@ -1201,6 +1202,17 @@ and a supervisor can only read is noted where it matters.
   check-in, with the position, geofence verdict, distance from the post, method and
   device. Filter by date range, officer, site, punch type or "outside the geofence only";
   print or export CSV.
+- **Correcting where a punch was made** — when a phone's reading was wrong (GPS drifting
+  in a garage, a stale fix), a supervisor or administrator opens **Correct** on a
+  clock-in, clock-out or check-in in the punch log, or **Correct location** on its flag,
+  and puts it **At the post**, drags the pin, or types the exact coordinates. A reason is
+  required. The punch is judged against its post again, so the punch log, scorecards and
+  site health count the corrected place: corrected inside the geofence its flag closes
+  with the reason; corrected outside, a flag is raised or reopened with the distance.
+  Every correction is kept with the place before and after, who made it and why, so the
+  phone's own reading is never lost (the punch log and its CSV show it). Nobody corrects
+  their own punches, and a place more than about 15 miles from the post is refused as a
+  typing slip.
 - **Timesheets** — hours by officer with the regular/overtime split **driven by
   classification**, unpaid break deductions, exception badges, estimated pay, client
   billing and margin, every individual punch, and **CSV export for payroll**. The
@@ -1633,7 +1645,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 47 steps and stops it:
+One command reseeds the database, starts the API, runs all 48 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -2017,6 +2029,19 @@ The suites, in the order they run:
   answered at the desk is inside; one with a 400 m fix is unverified and not held
   against them; a post switched to no check-ins withdraws the one waiting and queues no
   more.
+- **`test/punch-locations.mjs`** — correcting where a punch was made. The demo's
+  corrected clock-in shows in the punch log with who, why and the phone's own reading,
+  and its flag closed. Officers and clients cannot see or make corrections, and a break
+  has no location to correct. A clock-in the phone put 700 m away: the officer cannot
+  correct it, a reason and a place are required, latitude and longitude swapped (8,000
+  miles) or a place 200 miles off are refused; put at the post it is inside and its flag
+  closes with the reason; nothing changes when it is already there; an administrator's
+  exact coordinates 450 m out reopen the flag with the corrected distance; both
+  corrections are kept in order and the phone's reading is never lost. A check-in 700 m
+  away is put at the post and its flag closes; one not answered yet cannot be corrected.
+  A clock-out 380 m away has its distance in the punch log and is corrected with no flag
+  of its own; a shift still running has no clock-out to correct. A supervisor cannot
+  correct their own clock-in, and an administrator can.
 - **`test/check-in-rules.mjs`** (on a throwaway database, before the API starts) — a
   check-in whose 10 minutes to answer ran out is counted missed, flagged and followed by
   the next as soon as the officer's screen looks, without waiting for the sweep (which a
@@ -2037,7 +2062,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 477
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 488
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -2106,12 +2131,16 @@ The suites, in the order they run:
     check-ins every 30 minutes; an officer clocked in sees when the next check-in is,
     the **Check in** button appears by itself five minutes before it is due (the page's
     clock run forward), and checking in says it was at the post and lands in the punch log;
+  - a supervisor corrects where an officer's phone put three punches: a clock-in 620 m
+    away put **At the post**, which closes its flag and shows as corrected, by whom and
+    why; a clock-out at coordinates typed in (and a typo refused); and a check-in from
+    its flag on the Flags page, which closes the flag;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 136
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 138
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 147 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 149 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens

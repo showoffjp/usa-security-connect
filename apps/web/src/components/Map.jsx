@@ -824,3 +824,103 @@ export function PositionMap({ me, post, height = 240 }) {
     </div>
   );
 }
+
+/* ---------------------------------------------------- punch fix map -- */
+
+/**
+ * Where a punch was made, for a supervisor correcting it: the post and its
+ * geofence, where the phone said the officer was (grey), and the corrected
+ * place (red), which can be dragged or moved with a click. The coordinates
+ * are also typed and shown as text beside the map.
+ */
+export function PunchFixMap({ post, phone, value, onChange, height = 300 }) {
+  const containerRef = useRef(null);
+  const layerRef = useRef(null);
+  const markerRef = useRef(null);
+  const mapRef = useRef(null);
+  const leafletRef = useRef(null);
+  const changeRef = useRef(onChange);
+  changeRef.current = onChange;
+  const fitted = useRef(false);
+
+  const { ready, error } = useMap(containerRef, {
+    center: post?.latitude != null ? [post.latitude, post.longitude] : null,
+    zoom: 16,
+    onReady: (map, L) => {
+      mapRef.current = map;
+      leafletRef.current = L;
+      layerRef.current = L.layerGroup().addTo(map);
+      map.on('click', (e) => changeRef.current?.({ latitude: Number(e.latlng.lat.toFixed(6)), longitude: Number(e.latlng.lng.toFixed(6)) }));
+    },
+  });
+
+  // The post, its geofence and the phone's reading: drawn once.
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!ready || !L || !map || !layer) return;
+    layer.clearLayers();
+    // The whole geofence and the phone's reading, in view together.
+    const bounds = L.latLngBounds([]);
+    if (post?.latitude != null) {
+      const fence = L.circle([post.latitude, post.longitude], { radius: post.radius_m || 150, color: '#0C3F72', fillColor: '#0C3F72', fillOpacity: 0.1, weight: 1.5, interactive: false }).addTo(layer);
+      bounds.extend(fence.getBounds());
+      L.marker([post.latitude, post.longitude], { icon: pinIcon(L, '#062E58', 'P'), interactive: false }).addTo(layer);
+    }
+    if (phone?.latitude != null) {
+      bounds.extend([phone.latitude, phone.longitude]);
+      if (phone.accuracy) L.circle([phone.latitude, phone.longitude], { radius: phone.accuracy, weight: 0, color: '#6B7280', fillOpacity: 0.15, interactive: false }).addTo(layer);
+      L.circleMarker([phone.latitude, phone.longitude], { radius: 7, color: '#fff', weight: 2, fillColor: '#6B7280', fillOpacity: 1 })
+        .addTo(layer)
+        .bindTooltip('Where the phone said');
+    }
+    if (!fitted.current) {
+      fitted.current = true;
+      const fit = () => bounds.isValid() && map.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
+      fit();
+      // In a dialog still opening, the map's size is not final when it is first
+      // drawn, and a fit worked out then leaves the phone's reading off screen.
+      setTimeout(() => {
+        if (mapRef.current !== map) return;
+        map.invalidateSize({ animate: false });
+        fit();
+      }, 350);
+    }
+  }, [ready, post?.latitude, post?.longitude, post?.radius_m, phone?.latitude, phone?.longitude, phone?.accuracy]);
+
+  // The corrected place, which moves.
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!ready || !L || !map) return;
+    if (value?.latitude == null) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+    if (!markerRef.current) {
+      markerRef.current = L.marker([value.latitude, value.longitude], { draggable: true, icon: pinIcon(L, '#AA2F19', '✓') }).addTo(map);
+      markerRef.current.bindTooltip('Corrected');
+      markerRef.current.on('dragend', () => {
+        const pos = markerRef.current.getLatLng();
+        changeRef.current?.({ latitude: Number(pos.lat.toFixed(6)), longitude: Number(pos.lng.toFixed(6)) });
+      });
+    } else {
+      markerRef.current.setLatLng([value.latitude, value.longitude]);
+    }
+    if (!map.getBounds().contains([value.latitude, value.longitude])) map.panTo([value.latitude, value.longitude]);
+  }, [ready, value?.latitude, value?.longitude]);
+
+  return (
+    <div>
+      <div
+        ref={containerRef}
+        role="group"
+        aria-label="Map of the post, where the phone said the punch was made, and the corrected place. The same coordinates are written beside it."
+        style={{ height, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-3)', zIndex: 0 }}
+      />
+      {error && <div className="tiny" style={{ color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}

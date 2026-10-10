@@ -4,6 +4,8 @@ import { api, downloadFile } from '../../lib/api.js';
 import { fmtTime, fmtDateShort, toDateInput } from '../../lib/format.js';
 import { LoadingPage, Empty, Icon, Chip, StatusChip, Stat, useToast } from '../../components/ui.jsx';
 import { formatDistance } from '@shared/domain.js';
+import { useAuth } from '../../lib/auth.jsx';
+import PunchLocationDialog from '../../components/PunchLocationDialog.jsx';
 
 const TYPES = [
   { value: 'clock_in', label: 'Clock in', kind: 'ok' },
@@ -15,8 +17,15 @@ const TYPES = [
 ];
 const KIND = Object.fromEntries(TYPES.map((t) => [t.value, t.kind]));
 
+/** A correction to where a punch was made, in a sentence. */
+const fixNote = (f) =>
+  `Location corrected by ${f.by}: ${f.reason}${f.original.distance_m != null ? ` (the phone said ${formatDistance(f.original.distance_m)} from the post)` : ''}${f.count > 1 ? `, ${f.count} corrections` : ''}`;
+
 export default function PunchesPage() {
   const toast = useToast();
+  const { user } = useAuth();
+  const [fixing, setFixing] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [params] = useSearchParams();
   const [from, setFrom] = useState(toDateInput(new Date(Date.now() - 2 * 86400000)));
   const [to, setTo] = useState(toDateInput(new Date()));
@@ -63,7 +72,7 @@ export default function PunchesPage() {
     return () => {
       alive = false;
     };
-  }, [queryString, toast]);
+  }, [queryString, toast, reloadKey]);
 
   const allRows = useMemo(
     () => (data?.punches || []).filter((p) => !onlyOutside || p.geofence === 'outside'),
@@ -103,7 +112,9 @@ export default function PunchesPage() {
         <div className="page-head" style={{ marginBottom: 0 }}>
           <div className="eyebrow">Workforce</div>
           <h1>Punch log</h1>
-          <p className="lead">Every clock-in, clock-out, break and check-in, with where the officer was standing.</p>
+          <p className="lead">
+            Every clock-in, clock-out, break and check-in, with where the officer was standing. When a phone's reading was wrong, correct it here.
+          </p>
         </div>
         <div className="row wrap">
           <button className="btn btn-ghost" onClick={() => window.print()}>
@@ -187,6 +198,9 @@ export default function PunchesPage() {
                     <th className="num">From post</th>
                     <th>Method</th>
                     <th>Notes</th>
+                    <th className="no-print">
+                      <span className="sr-only">Correct the location</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,6 +224,11 @@ export default function PunchesPage() {
                       </td>
                       <td>
                         {p.geofence ? <StatusChip value={p.geofence} /> : p.latitude != null ? <Chip>GPS recorded</Chip> : <span className="tiny muted">--</span>}
+                        {p.location_fix && (
+                          <div style={{ marginTop: 4 }}>
+                            <Chip kind="info">Corrected</Chip>
+                          </div>
+                        )}
                       </td>
                       <td className="num small">
                         {p.distance_m != null ? formatDistance(p.distance_m) : '--'}
@@ -231,7 +250,20 @@ export default function PunchesPage() {
                         {p.device_id && <div className="tiny muted truncate" style={{ maxWidth: 140 }}>{p.device_id}</div>}
                       </td>
                       <td className="small" style={{ maxWidth: 260 }}>
-                        {p.note || <span className="muted">--</span>}
+                        {p.note || (!p.location_fix && <span className="muted">--</span>)}
+                        {p.location_fix && <div className={p.note ? 'tiny muted' : 'small'}>{fixNote(p.location_fix)}</div>}
+                      </td>
+                      <td className="no-print">
+                        {p.ref_id != null && p.user_id !== user?.id && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm nowrap"
+                            onClick={() => setFixing({ kind: p.type, refId: p.ref_id })}
+                            aria-label={`Correct the location of ${p.officer}'s ${p.label.toLowerCase()} at ${fmtTime(p.at)}`}
+                          >
+                            <Icon name="pin" size={14} /> Correct
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -240,6 +272,18 @@ export default function PunchesPage() {
             </div>
           </div>
         ))
+      )}
+
+      {fixing && (
+        <PunchLocationDialog
+          kind={fixing.kind}
+          refId={fixing.refId}
+          onClose={() => setFixing(null)}
+          onSaved={() => {
+            setFixing(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
       )}
 
       {allRows.length > rows.length && (

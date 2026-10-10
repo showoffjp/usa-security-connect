@@ -2139,6 +2139,87 @@ for (const u of STAFF) {
   }
 }
 
+/* -------------------------------------- round 38: correcting where a punch was made --- */
+{
+  console.log('\n--- Punch locations: a supervisor corrects a clock-in, a clock-out and a check-in the phone put in the wrong place ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const signInApi = async (code, pin) => api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: code, pin }) });
+  const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+  const adminToken = (await signInApi('1001', '2468')).token;
+  const north = (lat, lng, m) => [Number((lat + m / 111320).toFixed(6)), lng];
+
+  // An officer whose phone puts every punch a few hundred metres up the road.
+  const post = (await api('/admin/sites', adminToken)).posts.find((p) => p.post_code === 'PR-01');
+  let who = null;
+  for (let n = 1040; n >= 1025 && !who; n--) {
+    const c = String(n);
+    const r = await signInApi(c, pinFor(c));
+    if (r.token && !r.mustChangePin && !(await api('/timeclock/status', r.token)).onDuty) who = { code: c, token: r.token };
+  }
+  const [inLat, inLng] = north(post.latitude, post.longitude, 620);
+  const clockIn = who && (await api('/timeclock/clock-in', who.token, { method: 'POST', body: JSON.stringify({ postId: post.id, latitude: inLat, longitude: inLng, accuracy: 9, method: 'gps', overrideReason: 'The app has me down the road but I am at the gate' }) }));
+  log(clockIn?.geofence?.status === 'outside', 'an officer\'s phone puts their clock-in 620 m from Palmetto Ridge', who?.code);
+  const checkIn = clockIn?.entry && (await api('/timeclock/check-in', who.token)).checkIn;
+  if (checkIn) await api('/timeclock/check-in', who.token, { method: 'POST', body: JSON.stringify({ checkId: checkIn.id, latitude: inLat, longitude: inLng, accuracy: 9 }) });
+  const [outLat, outLng] = north(post.latitude, post.longitude, 410);
+  if (clockIn?.entry) await api('/timeclock/clock-out', who.token, { method: 'POST', body: JSON.stringify({ latitude: outLat, longitude: outLng, accuracy: 8 }) });
+  const userId = clockIn?.entry?.user_id;
+
+  if (userId) {
+    const sup = await watchedPage({ width: 1440, height: 900 });
+    await staffSignIn(sup.page, '1002', '3571');
+    await sup.page.goto(`${WEB}/admin/punches?userId=${userId}`);
+    const inRow = sup.page.locator('tr', { has: sup.page.locator('.chip:text-is("Clock in")') }).first();
+    await inRow.waitFor({ timeout: 15000 });
+    log(await inRow.locator('.chip:has-text("Outside geofence")').count() === 1, 'the punch log has the clock-in outside the geofence');
+    await inRow.locator('button:has-text("Correct")').click();
+    await sup.page.waitForSelector('#punch-location');
+    log(await sup.page.locator('#punch-location :text("Recorded now")').count() === 1, 'Correct opens the punch, its post and where the phone put it');
+    await checkScreen('supervisor: correct a clock-in location', sup.page, sup.problems);
+    await sup.page.click('#punch-location button:has-text("At the post")');
+    log(await sup.page.locator('#punch-location .chip:has-text("Inside the geofence")').count() === 1, 'At the post puts it inside the geofence');
+    await sup.page.fill('#fix-reason', 'Saw them at the gate on the camera when they clocked in');
+    await sup.page.click('.modal button:has-text("Save the location")');
+    await sup.page.waitForSelector('.toast:has-text("Its flag was closed")', { timeout: 10000 });
+    log(true, 'saving says it is now inside the geofence and its flag was closed');
+    await inRow.locator('.chip:has-text("Corrected")').waitFor({ timeout: 10000 });
+    log(await inRow.locator('.chip:has-text("In geofence")').count() === 1 && await inRow.locator(':text("Location corrected by Renata Diaz")').count() === 1,
+      'the punch log shows it corrected, by whom and why');
+
+    // The clock-out, at exact coordinates typed in.
+    const outRow = sup.page.locator('tr', { has: sup.page.locator('.chip:text-is("Clock out")') }).first();
+    await outRow.locator('button:has-text("Correct")').click();
+    await sup.page.waitForSelector('#punch-location #fix-coordinates');
+    const [exLat, exLng] = north(post.latitude, post.longitude, 60);
+    await sup.page.fill('#fix-coordinates', 'not a place');
+    log(await sup.page.locator('#punch-location :text("Two numbers: latitude, then longitude.")').count() === 1, 'coordinates that are not a pair say so');
+    await sup.page.fill('#fix-coordinates', `${exLat}, ${exLng}`);
+    await sup.page.waitForSelector('#punch-location .chip:has-text("Inside the geofence")');
+    log(await sup.page.locator('#punch-location :text("60 m")').count() >= 1, 'typed coordinates show how far from the post they are');
+    await sup.page.fill('#fix-reason', 'Handed the keys back at the gatehouse');
+    await sup.page.click('.modal button:has-text("Save the location")');
+    await sup.page.waitForSelector('.toast:has-text("Clock-out corrected")', { timeout: 10000 });
+    const outPunch = (await api(`/admin/punches?type=clock_out&userId=${userId}`, adminToken)).punches?.[0];
+    log(outPunch?.latitude === exLat && outPunch?.geofence === 'inside' && outPunch.location_fix?.original.geofence === 'outside',
+      'the clock-out is where they typed, and the phone\'s reading is kept');
+
+    // The check-in, from the flag it raised.
+    await sup.page.goto(`${WEB}/admin/flags`);
+    const flagRow = sup.page.locator('.list-item', { hasText: 'Checked in away from the post' }).filter({ has: sup.page.locator(`.mono:text-is("${who.code}")`) });
+    await flagRow.first().waitFor({ timeout: 10000 });
+    await flagRow.first().locator('button:has-text("Correct location")').click();
+    await sup.page.waitForSelector('#punch-location');
+    await sup.page.click('#punch-location button:has-text("At the post")');
+    await sup.page.fill('#fix-reason', 'Radioed in from the gate at the time');
+    await sup.page.click('.modal button:has-text("Save the location")');
+    await sup.page.waitForSelector('.toast:has-text("Check-in corrected")', { timeout: 10000 });
+    await sup.page.waitForTimeout(500);
+    log(await flagRow.count() === 0, 'the check-in away from the post, corrected from its flag, closes the flag');
+    await sup.context.close();
+  }
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -124,9 +124,27 @@ export const SHIFT_REQUEST_STATUS = [
  * is taken to be wrong. A post with no address of its own should be on its
  * site's property: within `postFromSiteM` of the site pin. A pin set from a
  * phone standing at the post, with a fix good to `surveyAccuracyM` (about
- * 80 ft), is trusted over any address.
+ * 80 ft), is trusted over any address. A supervisor correcting where a punch
+ * was made can put it anywhere within `fixMaxFromPostM` (about 15 miles) of
+ * the post; further than that is a typing slip.
  */
-export const LOCATION_RULES = { pinToleranceM: 120, streetToleranceM: 300, postFromSiteM: 600, surveyAccuracyM: 25, goodFixM: 15, bestFixSeconds: 10 };
+export const LOCATION_RULES = { pinToleranceM: 120, streetToleranceM: 300, postFromSiteM: 600, surveyAccuracyM: 25, goodFixM: 15, bestFixSeconds: 10, fixMaxFromPostM: 25000 };
+
+/** Punches whose location a supervisor or administrator can correct. */
+export const PUNCH_FIX_LABEL = { clock_in: 'Clock-in', clock_out: 'Clock-out', check_in: 'Check-in' };
+
+/**
+ * "30.313263, -81.677997", "30.313263 -81.677997" or a Google Maps link with
+ * @lat,lng in it: the coordinates, or null when it is not a pair on the globe.
+ */
+export function parseCoordinates(text) {
+  const m = String(text ?? '').match(/(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (!m) return null;
+  const latitude = Number(m[1]);
+  const longitude = Number(m[2]);
+  if (!(Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) return null;
+  return { latitude, longitude };
+}
 export const LOCATION_STATE_LABEL = {
   surveyed: 'Set at the post',
   ok: 'Matches the address',
