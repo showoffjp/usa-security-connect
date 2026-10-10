@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { fmtDay, fmtTime, fmtRange, toDateInput, toLocalInput, fmtDate } from '../../lib/format.js';
@@ -6,6 +6,7 @@ import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Banner, Segmented, useToast,
 } from '../../components/ui.jsx';
 import { toHours, FATIGUE_LABEL } from '@shared/domain.js';
+import { AnswerChip, OfferPanel } from './ShiftOffers.jsx';
 
 /** Site training reasons are long; the candidate list says them in a word. */
 const SHORT_REASON = { not_trained: 'Not trained here', training_lapsed: 'Needs a refresher here', attendance_points: 'Over the attendance limit', ...FATIGUE_LABEL };
@@ -40,6 +41,31 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
     setBlocked(null);
     setForm((f) => ({ ...f, [k]: e.target.value }));
   };
+
+  // An open shift, saved and still to come, can be offered to several
+  // officers at once (see ShiftOffers.jsx).
+  const [offer, setOffer] = useState(null);
+  const [asking, setAsking] = useState([]);
+  const loadOffer = useCallback(() => {
+    if (!editing) return;
+    api.get(`/shift-offers/shift/${shift.id}`).then((d) => setOffer(d.offer), () => setOffer(null));
+  }, [editing, shift?.id]);
+  useEffect(() => {
+    loadOffer();
+  }, [loadOffer]);
+  const savedOpen = editing && !shift.user_id && (shift.status || 'scheduled') === 'scheduled' && new Date(shift.starts_at) > new Date();
+  const canOffer = savedOpen && !form.userId;
+  const dirty =
+    editing && (form.postId !== String(shift.post_id) || form.startsAt !== toLocalInput(shift.starts_at) || form.endsAt !== toLocalInput(shift.ends_at));
+  const asked = new Map(offer?.state === 'open' ? offer.recipients.map((r) => [r.user_id, r.answer]) : []);
+  const ask = canOffer
+    ? {
+        asked,
+        selected: asking,
+        toggle: (id) => setAsking((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id])),
+        pick: setAsking,
+      }
+    : null;
 
   const save = async (override = false) => {
     setBusy(true);
@@ -165,6 +191,16 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
             setBlocked(null);
             setForm((f) => ({ ...f, userId: String(id) }));
           }}
+          ask={ask}
+        />
+        <OfferPanel
+          shift={shift}
+          offer={offer}
+          asking={asking}
+          dirty={dirty}
+          canOffer={canOffer}
+          onClear={() => setAsking([])}
+          onChanged={loadOffer}
         />
         <Field label="Notes">
           <textarea value={form.notes} onChange={set('notes')} rows={2} />
@@ -179,7 +215,7 @@ function ShiftDialog({ shift, posts, employees, onClose, onSaved }) {
  * The same eligibility rule that governs claims and swaps, so a supervisor
  * sees the armed-licence and leave problems before saving rather than after.
  */
-function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick }) {
+function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick, ask = null }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -239,9 +275,20 @@ function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick
           <h3 style={{ fontSize: '0.88rem' }}>
             Suggested officers <span className="muted small">({eligible.length} eligible for {data.shift_hours}h{data.post.armed ? ', armed post' : ''})</span>
           </h3>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? 'Eligible only' : `Everyone (${data.candidates.length})`}
-          </button>
+          <div className="row" style={{ gap: 6 }}>
+            {ask && eligible.some((c) => !ask.asked.has(c.user_id)) && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => ask.pick(eligible.filter((c) => !ask.asked.has(c.user_id)).slice(0, 3).map((c) => c.user_id))}
+              >
+                Ask the top 3
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? 'Eligible only' : `Everyone (${data.candidates.length})`}
+            </button>
+          </div>
         </div>
         {list.length === 0 ? (
           <div className="small muted" style={{ padding: 14 }}>
@@ -274,15 +321,34 @@ function Candidates({ postId, startsAt, endsAt, excludeShiftId, selected, onPick
                     {c.home_distance_km != null && !c.home_site_match && ` · home site ${c.home_distance_km} km away`}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${c.eligible ? 'btn-navy' : 'btn-ghost'}`}
-                  onClick={() => onPick(c.user_id)}
-                  disabled={String(c.user_id) === String(selected)}
-                  aria-label={`Assign ${c.name}`}
-                >
-                  {String(c.user_id) === String(selected) ? 'Chosen' : 'Assign'}
-                </button>
+                <div className="stack-sm" style={{ alignItems: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${c.eligible ? 'btn-navy' : 'btn-ghost'}`}
+                    onClick={() => onPick(c.user_id)}
+                    disabled={String(c.user_id) === String(selected)}
+                    aria-label={`Assign ${c.name}`}
+                  >
+                    {String(c.user_id) === String(selected) ? 'Chosen' : 'Assign'}
+                  </button>
+                  {ask &&
+                    (ask.asked.has(c.user_id) ? (
+                      <AnswerChip answer={ask.asked.get(c.user_id)} />
+                    ) : (
+                      c.eligible && (
+                        <label className={`chip-toggle${ask.selected.includes(c.user_id) ? ' on' : ''}`}>
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={ask.selected.includes(c.user_id)}
+                            onChange={() => ask.toggle(c.user_id)}
+                            aria-label={`Ask ${c.name} to cover`}
+                          />
+                          {ask.selected.includes(c.user_id) ? 'Asking' : 'Ask'}
+                        </label>
+                      )
+                    ))}
+                </div>
               </div>
             ))}
           </div>

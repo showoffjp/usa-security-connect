@@ -191,6 +191,16 @@ time this month. Anyone over the limit is marked so and offered after everyone e
 who could take the shift the same way: a warning, never a block, since the supervisor
 may still know best.
 
+**Shift offers** send an open shift to several of those officers at once (tick them,
+or **Ask the top 3**, in the shift dialog). Officers hear by push notification on the
+phone app and see it on their home screen on the web; offers are not texted. With
+**Give it to the first who says yes** on, the first eligible yes is given the shift
+and counts as confirming it, so nobody needs to approve anything; turn it off to have
+each yes arrive in **Shift requests** as a claim instead. Check the alerts inbox: an
+offer everyone said no to, or one still without a yes three hours before the start,
+is raised there. Withdraw an offer that is no longer needed, so nobody says yes to a
+shift you have filled another way; assigning the shift yourself closes it anyway.
+
 **Texts are only as prompt as the sweep.** A long-running server sweeps every
 minute. On Vercel the committed cron is daily (the Hobby plan allows no more), so
 point an external scheduler at `/api/cron/sweep` every minute, or upgrade and set

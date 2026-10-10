@@ -271,6 +271,12 @@ function Row({ o, focused }) {
             {o.call_off.note ? <span className="muted">, "{o.call_off.note}"</span> : ''}
           </div>
         )}
+        {o.offer && (
+          <div className="small">
+            Offered to {o.offer.counts.asked} officer{o.offer.counts.asked === 1 ? '' : 's'}: {o.offer.counts.no} said no, {o.offer.counts.waiting} not answered
+            {o.offer.first_yes ? <span className="muted">. The first yes gets it.</span> : <span className="muted">. A yes comes to you to approve.</span>}
+          </div>
+        )}
         {o.notice && (
           <div className="small">
             Said at {fmtTime(o.notice.created_at)} they would be there by <strong>{fmtTime(o.notice.eta_at)}</strong>

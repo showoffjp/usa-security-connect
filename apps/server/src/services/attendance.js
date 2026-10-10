@@ -29,6 +29,7 @@ import { toSql } from './compliance.js';
 import { pushAsync } from './push.js';
 import { sendSms, displayPhone, maskPhone, smsConfigured, smsKind } from './sms.js';
 import { publicUrl } from './email.js';
+import { openOffersOn } from './shiftOffers.js';
 
 const MIN = 60000;
 /** How far back the sweep looks for shifts that started. */
@@ -612,6 +613,9 @@ export async function attendanceBoard({ now = new Date() } = {}) {
   open.sort((a, b) => rank[a.state] - rank[b.state] || (b.minutes_late ?? -1) - (a.minutes_late ?? -1) || new Date(a.starts_at) - new Date(b.starts_at));
   resolved.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
   const count = (list, state) => list.filter((o) => o.state === state).length;
+  // A called-off shift may already be out to officers as an offer.
+  const offered = await openOffersOn(open.filter((o) => o.state === 'called_off').map((o) => o.shift_id));
+  for (const o of open) o.offer = offered.get(o.shift_id) || null;
   return {
     now: now.toISOString(),
     rules: { lateGraceMinutes: RULES.lateGraceMinutes, noShowMinutes: RULES.noShowMinutes, headsUpHours: RULES.headsUpHours },

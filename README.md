@@ -82,6 +82,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 6. Under **Schedule**, tap **Confirm I'll be there** on tomorrow's shift.
 7. Under **Signed out to you**, check the garage patrol truck before driving.
 8. Read the coaching under **To read and sign**, add your side, and sign it.
+9. Under **Can you cover?**, answer the shift you have been asked to cover.
 
 **Running the operation** (`1002` / `3571`)
 
@@ -98,6 +99,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 11. Open **Handovers**: an officer held over for a late relief, and a post with nobody to take it over. **Chase** the relief.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
 13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. The officer who called off has two more call-offs in the last fortnight: the alerts bell has them over the attendance points limit, and their record offers **Record a step** to coach them, which clears it.
+14. On that board, **Find cover** for the called-off shift: it is already out to four officers as an offer, one of whom said no. Tick another suggestion, or **Ask the top 3**, to ask more.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -271,7 +273,7 @@ Build rosters, answer requests, keep licences current.
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/attendance-points-step.jpg"><img src="docs/screenshots/attendance-points-step.jpg" alt="Recording a coaching on attendance, with the lapses written out"></a><br><b>Record a step</b><br>From the warning: a coaching on attendance, with the lapses already written out. Recording it clears the alert until the next lapse.</td>
-    <td width="50%"></td>
+    <td width="50%" valign="top"><a href="docs/screenshots/shift-offer.jpg"><img src="docs/screenshots/shift-offer.jpg" alt="Offering an open shift to several officers at once from the shift dialog"></a><br><b>Shift offers</b><br>Tick officers in the suggestions, or <b>Ask the top 3</b>, and send an open shift to them all at once. The first yes gets it, already confirmed; the dialog shows who was asked and what each said.</td>
   </tr>
 </table>
 
@@ -358,7 +360,7 @@ On the phone:
   </tr>
   <tr>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-my-attendance.jpg"><img src="docs/screenshots/officer-my-attendance.jpg" alt="An officer's own attendance record on their profile"></a><br><b>My attendance</b><br>The officer sees the same record their supervisors do, with their attendance points and how they are scored, on the profile and the phone's Worked tab.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-shift-offer.jpg"><img src="docs/screenshots/officer-shift-offer.jpg" alt="An officer asked to cover an open shift, with Yes and No"></a><br><b>Can you cover?</b><br>A shift a supervisor has asked about, on the home screen, web and phone: <b>Yes, I can</b> or <b>No</b> in one tap, and then how it went.</td>
     <td width="25%"></td>
     <td width="25%"></td>
   </tr>
@@ -711,6 +713,13 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
   day ahead, an officer who has not confirmed gets one push reminder that opens the
   schedule. A confirmation is for that officer, post and time: if the shift is moved or
   handed to someone else it needs confirming again.
+- **Can you cover?** (home screen, web and mobile) — an open shift a supervisor has
+  asked the officer about: where and when, the supervisor's note, how many were asked
+  (never who) and whether the first yes gets it. **Yes, I can** or **No** is one tap; a
+  no can become a yes while the offer is open. When the first yes takes it, the shift
+  is theirs and confirmed at once; otherwise they see that a supervisor will choose,
+  and then how it went. One they can no longer take, because of another shift at that
+  time, say, says why instead of offering Yes.
 - **Fix a time** — under Schedule → Worked (web and mobile), the officer's punches from
   the last 14 days, each marked if the system closed it, it was late or it has been
   corrected. A wrong one can be sent to the office: the clock-in or clock-out it should
@@ -1014,6 +1023,19 @@ and a supervisor can only read is noted where it matters.
 - **Officers are told** — adding, moving, reassigning or removing an upcoming shift
   sends the officer a push notification, and a recurring roster or copied week sends
   one summary instead of dozens.
+- **Shift offers** — an open shift (a call-off, say) can be sent to several officers at
+  once instead of phoning round: tick them in the suggestions, or **Ask the top 3**, add
+  a note and send. Each gets a push notification and answers **Yes** or **No** in the
+  app. By default the first yes gets the shift there and then, already confirmed;
+  untick **Give it to the first who says yes** and each yes comes to the request queue
+  as a claim for you to approve instead. The dialog shows who was asked and what each
+  said, and more officers can be asked on the same offer. Anyone the eligibility rules
+  block is refused before anybody is asked, and a yes is checked again when it comes
+  in, so an officer who has since taken another shift at that time is told why they
+  cannot. An offer ends however the shift is filled, and whoever is still waiting is
+  told it is covered. The alerts inbox says who took one, and raises an offer
+  everybody said no to, or one with no yes three hours before the start; the Late &
+  no-shows board shows the offer on a called-off shift.
 - **Shift requests** — open shifts officers can claim, swaps they can offer each other,
   and drop requests, all landing in one supervisor queue. Eligibility is checked at
   every step, so an officer without a current Class G licence cannot end up on an armed
@@ -1577,7 +1599,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 44 steps and stops it:
+One command reseeds the database, starts the API, runs all 45 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1931,6 +1953,20 @@ The suites, in the order they run:
   suggestion says how often they were on time; once a supervisor records a coaching on
   attendance the record shows it dealt with and the alert goes. Officers cannot see
   each other's records, clients none, and administrators have none.
+- **`test/offers.mjs`** — on open shifts of its own three weeks out. Only supervisors
+  send offers or see them all; a client session and anyone signed out get nothing. An
+  offer must ask somebody, at most twenty, and only active officers; one the rules
+  block (on another shift at that time) is refused by name and then nobody is asked.
+  Three officers are asked, each sees it with how many were asked but never who, and an
+  officer not asked can neither see nor answer it. A no is recorded; the first yes is
+  given the shift, confirmed and on their schedule, the offer says who took it, a later
+  yes is told somebody else did, and nobody can change their answer after. An offer at
+  the same time is then refused to the officer who took the first, in their own words,
+  and the alerts inbox says who took it. With the supervisor choosing, each yes is a
+  claim in the queue, nobody has the shift until one is approved, and then the other is
+  turned down and sees how it went. Everyone saying no is raised in the alerts; asking
+  more adds to the same offer; a withdrawn offer turns a later answer away, a fresh one
+  can follow, and a supervisor assigning the shift directly closes it as covered.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1943,7 +1979,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 452
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 463
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -2002,12 +2038,17 @@ The suites, in the order they run:
     record, which says why; **Record a step** opens a coaching on attendance with the
     lapses written out, and recording it turns the warning into a note of it and clears
     the alert; an officer sees their own attendance points and how they are scored;
+  - Marcus finds the shift he was asked to cover under **Can you cover?** and says no,
+    with the chance to change his mind; a supervisor opens a new open shift, taps **Ask
+    the top 3** and sends the offer with a note, and the dialog shows who was asked; one
+    of them says **Yes, I can** on their phone and has the shift, and the alerts bell
+    tells the supervisors who took it;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 131
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 133
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 142 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 144 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens

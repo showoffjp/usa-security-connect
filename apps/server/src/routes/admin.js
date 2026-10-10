@@ -27,6 +27,7 @@ import {
   CONFIRM_AHEAD_DAYS,
   EXPENSE_CATEGORY_LABEL,
   COMMENDATION_LABEL,
+  OFFER_ALERT_HOURS,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
@@ -50,6 +51,7 @@ import { handovers } from '../services/handovers.js';
 import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
 import { attendanceBoard, lostShifts, attendancePoints } from '../services/attendance.js';
 import { officerScore, CALL_OFF_WEIGHT } from '../services/scorecards.js';
+import { closeOffersForShift, offerAlerts, whenText } from '../services/shiftOffers.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -1393,6 +1395,9 @@ adminRouter.patch(
 
     await audit(req.user.id, 'shift.updated', 'shift', shift.id, null, req.ip);
     const updated = await db.prepare(`SELECT * FROM shifts WHERE id = ?`).get(shift.id);
+    // Given to somebody, or cancelled: an offer out on it is over.
+    if (updated.status === 'cancelled') await closeOffersForShift(shift.id, { withdrawn: true });
+    else if (updated.user_id) await closeOffersForShift(shift.id, { userId: updated.user_id });
     if (reassigned) {
       await notifyShift(shift.user_id, 'removed', shift);
       await notifyShift(updated.user_id, 'added', updated);
@@ -1414,6 +1419,7 @@ adminRouter.delete(
     if (worked) {
       (await db.prepare(`UPDATE shifts SET status = 'cancelled' WHERE id = ?`).run(shift.id));
       await audit(req.user.id, 'shift.cancelled', 'shift', shift.id, null, req.ip);
+      await closeOffersForShift(shift.id, { withdrawn: true });
       if (upcoming) await notifyShift(shift.user_id, 'removed', shift);
       return res.json({ ok: true, cancelled: true });
     }
@@ -2532,12 +2538,34 @@ async function buildAlerts(userId) {
     if (l.state === 'called_off') {
       push({ key: `call-off:${l.shift_id}`, kind: 'late', severity: 'critical', at: l.call_off.created_at,
         link: `/admin/attendance?shift=${l.shift_id}`, title: `${l.call_off.officer} called off ${l.post_name}`,
-        detail: `${l.site_name} · ${l.call_off.reason_label} · starts ${new Date(l.starts_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · needs cover` });
+        detail: `${l.site_name} · ${l.call_off.reason_label} · starts ${new Date(l.starts_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · ${l.offer ? `offered to ${s(l.offer.counts.asked, 'officer')}, ${l.offer.counts.no} said no` : 'needs cover'}` });
       continue;
     }
     push({ key: `late:${l.shift_id}:${l.user_id}`, kind: 'late', severity: 'warning', at: l.starts_at,
       link: `/admin/attendance?shift=${l.shift_id}`, title: `${l.officer} has not clocked in at ${l.post_name}`,
       detail: `${l.site_name} · ${l.minutes_late} min after the start${l.notice ? ` · said they would be there by ${new Date(l.notice.eta_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''}` });
+  }
+
+  // Shift offers: one taken in the last day, and one nobody has said yes to
+  // when everybody asked has said no, or the start is close.
+  const weekLink = (o) => {
+    const monday = new Date(o.starts_at);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    return `/admin/schedule?week=${toDateString(monday)}&shift=${o.shift_id}`;
+  };
+  const offerNews = await offerAlerts();
+  for (const o of offerNews.filled) {
+    push({ key: `offer-taken:${o.id}`, kind: 'offer', severity: 'info', at: o.closed_at, link: weekLink(o),
+      title: `${o.filled_by_name} took the ${o.post_name} shift`,
+      detail: `${o.site_name} · ${whenText(o.starts_at, o.ends_at)} · offered to ${s(o.counts.asked, 'officer')}` });
+  }
+  for (const o of offerNews.stuck) {
+    const soon = new Date(o.starts_at) - Date.now() <= OFFER_ALERT_HOURS * 3600000;
+    push({ key: `offer-stuck:${o.id}:${o.counts.waiting ? 'soon' : 'all-no'}`, kind: 'offer', severity: soon ? 'critical' : 'warning', at: o.created_at,
+      link: weekLink(o),
+      title: o.counts.waiting ? `Nobody has said yes to ${o.post_name} yet` : `Everyone asked said no to ${o.post_name}`,
+      detail: `${o.site_name} · ${whenText(o.starts_at, o.ends_at)} · ${o.counts.no} no, ${o.counts.waiting} not answered · ask more or assign someone` });
   }
 
   // A shift in the next day that leaves its officer short of rest, over the

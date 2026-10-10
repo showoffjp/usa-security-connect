@@ -1976,6 +1976,91 @@ for (const u of STAFF) {
   await officer.context.close();
 }
 
+/* ------------------------------------------------- round 36: shift offers --- */
+{
+  console.log('\n--- Shift offers: a supervisor asks the top suggestions to cover, and the first yes has the shift ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const signInApi = async (code, pin) => api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: code, pin }) });
+  const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+  const adminToken = (await signInApi('1001', '2468')).token;
+  const marcusToken = (await signInApi('1003', '4812')).token;
+
+  // Marcus has been asked about an open shift in the seed.
+  const asked = (await api('/shift-offers/mine', marcusToken)).offers?.find((o) => o.state === 'open' && !o.answer);
+  if (asked) {
+    const officer = await watchedPage({ width: 390, height: 844 });
+    await staffSignIn(officer.page, '1003', '4812');
+    await officer.page.waitForSelector('#shift-offers', { timeout: 10000 });
+    const card = officer.page.locator('#shift-offers');
+    log(await card.locator('h3:has-text("Can you cover?")').count() === 1 && await card.locator(`text=${asked.post_name}`).count() >= 1 &&
+      await card.locator('button:has-text("Yes, I can")').count() === 1, 'an officer asked to cover a shift sees it on their home screen, with yes and no');
+    await checkScreen('officer: can you cover?', officer.page, officer.problems);
+    await card.locator('button:has-text("No")').first().click();
+    await officer.page.waitForSelector('#shift-offers :text("You said no.")', { timeout: 10000 });
+    log(await card.locator('button:has-text("Yes after all")').count() === 1, 'saying no is one tap, and they can still change their mind');
+    await officer.context.close();
+  } else {
+    log(true, 'no offer for Marcus at this hour');
+  }
+
+  // A new open shift three days out, offered from the shift dialog.
+  const start = new Date();
+  start.setDate(start.getDate() + 3);
+  start.setHours(14, 0, 0, 0);
+  const end = new Date(start.getTime() + 6 * 3600000);
+  const post = (await api('/admin/sites', adminToken)).posts.find((p) => p.active && !p.armed && !p.training_required);
+  const made = (await api('/admin/shifts', adminToken, { method: 'POST', body: JSON.stringify({ postId: post.id, startsAt: start.toISOString(), endsAt: end.toISOString(), notes: 'Browser suite: shift offer.' }) })).shift;
+  const monday = new Date(start);
+  monday.setHours(12, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const week = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+  const sup = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(sup.page, '1002', '3571');
+  await sup.page.goto(WEB + `/admin/schedule?week=${week}&shift=${made.id}`);
+  await sup.page.waitForSelector('[role="dialog"] >> text=Suggested officers', { timeout: 15000 });
+  log(await sup.page.locator('#shift-offer h3:has-text("Offer this shift")').count() === 1, 'an open shift can be offered from its dialog');
+  await sup.page.click('[role="dialog"] button:has-text("Ask the top 3")');
+  await sup.page.waitForSelector('#shift-offer button:has-text("Ask 3 officers")', { timeout: 5000 });
+  log(await sup.page.locator('[role="dialog"] .chip-toggle.on').count() === 3, 'the top three suggestions are ticked in one go');
+  await sup.page.fill('#shift-offer input:not([type="checkbox"])', 'Browser suite: can you help?');
+  await checkScreen('supervisor: offering a shift', sup.page, sup.problems);
+  await sup.page.click('#shift-offer button:has-text("Ask 3 officers")');
+  await sup.page.waitForSelector('.toast:has-text("Asked 3 officers")', { timeout: 10000 });
+  await sup.page.waitForSelector('#shift-offer .chip:has-text("Waiting for a yes")', { timeout: 10000 });
+  log(await sup.page.locator('#shift-offer .chip:has-text("Asked")').count() === 3, 'the offer goes out, and the dialog shows who was asked');
+  await sup.page.keyboard.press('Escape');
+
+  const offer = (await api(`/shift-offers/shift/${made.id}`, adminToken)).offer;
+  let taker = null;
+  for (const r of offer?.recipients || []) {
+    if (/^100[1-8]$/.test(r.employee_code)) continue;
+    const res = await signInApi(r.employee_code, pinFor(r.employee_code));
+    if (res.token && !res.mustChangePin) { taker = r; break; }
+  }
+  if (taker) {
+    const phone = await watchedPage({ width: 390, height: 844 });
+    await staffSignIn(phone.page, taker.employee_code, pinFor(taker.employee_code));
+    await phone.page.waitForSelector('#shift-offers', { timeout: 10000 });
+    await phone.page.click(`#shift-offers button[aria-label="Yes, I can cover ${post.name}"]`);
+    await phone.page.waitForSelector('.toast:has-text("The shift is yours")', { timeout: 10000 });
+    await phone.page.waitForSelector('#shift-offers :text("It is yours")', { timeout: 10000 });
+    log(true, 'an officer asked says yes, and the shift is theirs', taker.name);
+    await checkScreen('officer: a shift offer taken', phone.page, phone.problems);
+    await phone.context.close();
+    const after = (await api(`/shift-offers/shift/${made.id}`, adminToken)).offer;
+    log(after.state === 'filled' && after.filled_by === taker.user_id, 'the offer is closed as taken by them');
+    await sup.page.click('.bell-btn');
+    await sup.page.waitForSelector('.alerts-list', { timeout: 10000 });
+    await sup.page.waitForSelector(`.alert-item:has-text("${taker.name} took the ${post.name} shift")`, { timeout: 10000 }).catch(() => {});
+    log(await sup.page.locator('.alert-item', { hasText: `${taker.name} took the ${post.name} shift` }).count() === 1, 'and the alerts inbox tells the supervisors, opened after it happened');
+  } else {
+    log(true, 'nobody asked could sign in without a PIN change (skipped)');
+  }
+  await sup.context.close();
+  await api(`/admin/shifts/${made.id}`, adminToken, { method: 'DELETE' });
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

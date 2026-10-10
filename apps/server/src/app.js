@@ -27,6 +27,7 @@ import { certificationsRouter, availabilityRouter, timeOffRouter } from './route
 import { panicRouter, breaksRouter } from './routes/safety.js';
 import { reportsRouter } from './routes/reports.js';
 import { shiftRequestsRouter } from './routes/shiftRequests.js';
+import { shiftOffersRouter } from './routes/shiftOffers.js';
 import { clientRouter } from './routes/client.js';
 import { clientAdminRouter } from './routes/clientAdmin.js';
 import { noticesRouter } from './routes/notices.js';
@@ -156,6 +157,7 @@ app.use('/api/time-off', timeOffRouter);
 app.use('/api/panic', panicRouter);
 app.use('/api/breaks', breaksRouter);
 app.use('/api/shifts', shiftRequestsRouter);
+app.use('/api/shift-offers', shiftOffersRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/equipment', equipmentRouter);
 app.use('/api/vehicles', vehiclesRouter);

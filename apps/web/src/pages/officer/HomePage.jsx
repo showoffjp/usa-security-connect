@@ -16,6 +16,7 @@ import { NewCommendations } from './Commendations.jsx';
 import { ConductToSign } from './Conduct.jsx';
 import { HandoverCard } from './Handover.jsx';
 import { HeadsUpCard } from './HeadsUp.jsx';
+import { ShiftOffersCard } from './ShiftOffers.jsx';
 
 /* ------------------------------------------------------ expiry reminder -- */
 
@@ -748,6 +749,7 @@ export default function HomePage() {
       <CallsCard onDuty={onDuty} />
       <HandoverCard />
       <HeadsUpCard onDuty={onDuty} />
+      <ShiftOffersCard />
 
       {/* Changed orders come before anything else on post. */}
       <PostOrdersCard onDuty={onDuty} />

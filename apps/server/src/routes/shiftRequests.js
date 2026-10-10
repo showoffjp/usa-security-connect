@@ -8,6 +8,7 @@ import { trainingStateFor } from '../services/training.js';
 import { suspendedOn } from '../services/conduct.js';
 import { fatigueFor } from '../services/fatigue.js';
 import { pushAsync, supervisorIds } from '../services/push.js';
+import { closeOffersForShift } from '../services/shiftOffers.js';
 
 export const shiftRequestsRouter = Router();
 shiftRequestsRouter.use(requireAuth);
@@ -440,6 +441,8 @@ shiftRequestsRouter.patch(
     })();
 
     await audit(req.user.id, `shift.${request.kind}_approved`, 'shift', shift.id, null, req.ip);
+    // A claimed shift is taken: any offer out on it is over.
+    if (request.kind === 'claim') await closeOffersForShift(shift.id, { userId: request.requested_by });
 
     const tell = [request.requested_by, request.target_user_id].filter(Boolean);
     pushAsync(tell, {
