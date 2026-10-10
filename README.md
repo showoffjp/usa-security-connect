@@ -100,6 +100,7 @@ Three short walk-throughs. Each starts on the live demo's sign-in screen.
 12. Under **Rest & fatigue**, find the officer back on six hours after a late event, and the one on a seventh day in a row.
 13. Open **Late & no-shows**: who has not clocked in for a shift that has started, live, an officer who has said they are running late, and a shift called off sick that needs cover. Under **Text alerts**, add your mobile number and confirm it with the code (on the demo it is shown on screen) to be texted the next late start or no-show. The officer who called off has two more call-offs in the last fortnight: the alerts bell has them over the attendance points limit, and their record offers **Record a step** to coach them, which clears it.
 14. On that board, **Find cover** for the called-off shift: it is already out to four officers as an offer, one of whom said no. Tick another suggestion, or **Ask the top 3**, to ask more.
+15. Open **Sites & posts**: every pin passes the **Location check**, and **Status check-ins** are hourly. Open a post and see **Set from where I'm standing**.
 
 **The client's view** (`riverfront-portal-01`)
 
@@ -264,8 +265,12 @@ Build rosters, answer requests, keep licences current.
     <td width="50%" valign="top"><a href="docs/screenshots/employee-conduct.jpg"><img src="docs/screenshots/employee-conduct.jpg" alt="An officer's coaching and warnings on their employee record"></a><br><b>On their record</b><br>Coached, a verbal warning signed with their side of it, a written warning they refused to sign, with the witness. Each counts for a year.</td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites, their posts, geofence radii and bill rates.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/sites.jpg"><img src="docs/screenshots/sites.jpg" alt="Sites and posts"></a><br><b>Sites &amp; posts</b><br>Ten client sites and their posts, the company's check-in interval, and the location check: every pin against its street address.</td>
     <td width="50%" valign="top"><a href="docs/screenshots/scorecards.jpg"><img src="docs/screenshots/scorecards.jpg" alt="Officer scorecards"></a><br><b>Scorecards</b><br>Every officer ranked out of 100 on punctuality, attendance, check-ins and flags.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/screenshots/location-check.jpg"><img src="docs/screenshots/location-check.jpg" alt="The location check listing a post pin 924 m from its address"></a><br><b>Location check</b><br>Every pin against its street address. A post pin dragged 924 m (3,032 ft) off is listed as wrong; <b>Use the address</b> puts it back on the building.</td>
+    <td width="50%" valign="top"><a href="docs/screenshots/post-location.jpg"><img src="docs/screenshots/post-location.jpg" alt="A post's pin and geofence on the map, with Set from where I'm standing"></a><br><b>A post's pin</b><br>Search the address, drag the pin, or stand at the post and set it from the phone, taken only with a fix good to 25 m (about 80 ft).</td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/screenshots/site-health.jpg"><img src="docs/screenshots/site-health.jpg" alt="Site health board"></a><br><b>Site health</b><br>Every property's month, worst first, scored out of 100 with the reasons: missed shifts, unscanned checkpoints, serious incidents, open issues, unhappy clients.</td>
@@ -361,7 +366,7 @@ On the phone:
   <tr>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-my-attendance.jpg"><img src="docs/screenshots/officer-my-attendance.jpg" alt="An officer's own attendance record on their profile"></a><br><b>My attendance</b><br>The officer sees the same record their supervisors do, with their attendance points and how they are scored, on the profile and the phone's Worked tab.</td>
     <td width="25%" valign="top"><a href="docs/screenshots/officer-shift-offer.jpg"><img src="docs/screenshots/officer-shift-offer.jpg" alt="An officer asked to cover an open shift, with Yes and No"></a><br><b>Can you cover?</b><br>A shift a supervisor has asked about, on the home screen, web and phone: <b>Yes, I can</b> or <b>No</b> in one tap, and then how it went.</td>
-    <td width="25%"></td>
+    <td width="25%" valign="top"><a href="docs/screenshots/officer-check-in.jpg"><img src="docs/screenshots/officer-check-in.jpg" alt="The Check in button on an officer's home screen"></a><br><b>Check in</b><br>Between clock-in and clock-out the card says when the next check-in is; the button appears by itself when it is due, and where the officer is goes with it.</td>
     <td width="25%"></td>
   </tr>
 </table>
@@ -637,14 +642,24 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api npm run mobile
 - **Clock in / out** behind a deliberate slide gesture, with GPS verification against
   the post's geofence. Too far away and the officer must give a reason, which is
   attached to the record and raised with a supervisor.
+- **An accurate fix** — every location the apps send (clock-in, clock-out, check-ins,
+  location sharing) is the best the device gives in a few seconds, not its first rough
+  network guess: it waits for a fix good to 15 m, up to ten seconds, and a fix taken
+  when the screen opened is only reused within the minute. A fix too rough to judge
+  (worse than 100 m) is marked *unverified* rather than held against the officer.
 - **Where you are vs where you should be** — the home screen watches the device's
   position and compares it with the assigned post: "Inside the geofence, 12 m from the
   post", or "340 m from your post - head NE", with a map, the line back, and
   directions. While clocked in the position is shared with dispatch about once a
   minute; off the clock it is compared with the next post **on the device only** and
   nothing is sent. Walking out of the geofence mid-shift raises one flag on the way out.
-- **Status check-ins** on a per-post cadence. Miss the window and it is flagged
-  automatically; the next prompt is still queued so the cadence continues.
+- **Status check-ins** — from clock-in to clock-out a card on the home screen (web and
+  phone) says when the next check-in is due and how the last went. Five minutes before
+  it is due the **Check in** button appears by itself, counting down the ten minutes to
+  answer. Each answer sends where the officer is, judged against the post like a
+  clock-in: "Checked in, at your post", or "Checked in, 340 m (1,115 ft) from your
+  post", which raises a flag and shows in the punch log. Miss the window and it is
+  flagged automatically; the next is still queued so the cadence continues.
 - **Incident reports** — category, severity, what happened, how it was resolved,
   people involved and notified, police report number, cost recovery, and photos
   (camera or library on mobile).
@@ -1161,9 +1176,24 @@ and a supervisor can only read is noted where it matters.
   a supervisor, with **Commend** to add one (a supervisor never commends themselves).
   A client's thanks goes to the alerts inbox for a week; an administrator can remove
   one that should not have been sent, on the audit log.
-- **Sites & posts** — set each post's location **on a map** (search an address, drop or
-  drag the pin, or use your current position), with the geofence drawn to scale.
-  Check-in cadence, post orders and the armed flag live here too.
+- **Sites & posts** — set each site's and post's location **on a map**, with the
+  geofence drawn to scale: search the street address (each answer says whether it found
+  the building or only the street), drop or drag the pin, or, most accurate of all,
+  stand at the post and tap **Set from where I'm standing**, which is only taken with
+  a fix good to 25 m (about 80 ft). Sites can be edited as well as added. Post orders and
+  the armed flag live here too.
+- **Location check** (top of Sites & posts) — every site and post pin against its
+  street address, worst first. A pin within 120 m (about 400 ft) of the building is
+  right; one placed only along the street by the US Census geocoder is allowed 300 m on
+  a big property; a post without its own address should be on its site's property; a
+  pin set at the post with a good fix is trusted over any address. Anything further out
+  is listed as **Check the pin** or **Pin is wrong**, with how far, and **Use the
+  address** puts it back on the building in one click. Saving a site or post says the
+  same. Every officer is judged against these pins, so this is what makes "on post"
+  mean on post.
+- **Status check-ins** (top of Sites & posts) — how often officers check in after
+  clocking in: every 15 minutes to every 4 hours, or off. The administrator sets the
+  company's interval; each post follows it or sets its own.
 
 #### Time & pay
 
@@ -1411,9 +1441,12 @@ Locations use OpenStreetMap through Leaflet, so the map works with **no API key 
 billing account**. Every location also carries an *Open in Google Maps* / *Directions*
 link, which is what an officer or responding supervisor actually wants.
 
-Set `USC_MAPS_API_KEY` and address lookup switches to Google's geocoder; without it the
-app falls back to OpenStreetMap's Nominatim. Either way an admin can always place the
-pin by hand.
+Set `USC_MAPS_API_KEY` and address lookup switches to Google's geocoder, which finds
+most buildings exactly. Without it the app asks OpenStreetMap's Nominatim and the US
+Census Bureau's geocoder together, neither needing a key, and takes the most precise
+answer: a building where OpenStreetMap has one, otherwise the Census address range.
+Answers are cached, so the location check does not ask again each time. Either way an
+admin can always place the pin by hand, or set it standing at the post.
 
 ---
 
@@ -1527,7 +1560,8 @@ icons.
 | `USC_PGLITE_MEMORY` | server | unset | Set to `1` for a throwaway in-memory database (used by tests that run without the API). |
 | `TZ` | server | the machine's | The time zone calendar days are read in; see [Time zones](#time-zones). A deployment with no database defaults to `America/New_York`. |
 | `USC_ALLOWED_ORIGINS` | server | all | Comma-separated list; set this in production. |
-| `USC_MAPS_API_KEY` | server | unset | Google geocoding key. Without it, address lookup uses OpenStreetMap. |
+| `USC_MAPS_API_KEY` | server | unset | Google geocoding key. Without it, address lookup uses OpenStreetMap and the US Census geocoder. |
+| `USC_GEOCODER` | server | unset | Set to `off` to make no address lookups at all (the test run); only cached answers are used. |
 | `USC_PUSH_DISABLED` | server | unset | Set to `1` to switch push delivery off (used by the test suite). |
 | `USC_MIN_PING_GAP_SECONDS` | server | `20` | Location reports closer together than this are acknowledged but not stored. The test run shortens it. |
 | `USC_LOGIN_LIMIT_PER_IP` / `USC_LOGIN_LIMIT_PER_CODE` | server | `60` / `10` | Staff sign-ins allowed per five minutes. Raised only for the local test run; leave unset in production. |
@@ -1599,7 +1633,7 @@ See [apps/mobile/BUILDING.md](apps/mobile/BUILDING.md) for the full build walkth
 
 ### API suites
 
-One command reseeds the database, starts the API, runs all 45 steps and stops it:
+One command reseeds the database, starts the API, runs all 47 steps and stops it:
 
 ```bash
 npm run verify --workspace @usc/server            # add --fresh to wipe the database first
@@ -1967,6 +2001,30 @@ The suites, in the order they run:
   turned down and sees how it went. Everyone saying no is raised in the alerts; asking
   more adds to the same offer; a withdrawn offer turns a later answer away, a fresh one
   can follow, and a supervisor assigning the shift directly closes it as covered.
+- **`test/locations.mjs`** — with no geocoder (the test run asks none), from what the
+  seed cached. Officers and clients cannot see the location check; every demo site is
+  on its geocoded address and every post was set at the post or is on its site. A pin
+  dragged 900 m is saved but called wrong and listed to fix, only an administrator moves
+  it back, and **Use the address** puts it on the building. A pin set from a phone is
+  refused with a 60 m fix (saying so), or with no accuracy given, and by officers, and
+  the post dialog cannot claim a rough fix was taken at the post; a supervisor's 7 m
+  fix is trusted. A site pin 400 m off is wrong too and goes back, an address never
+  looked up cannot be judged, and only administrators edit sites. Check-ins: hourly by
+  default; only an administrator changes the company interval, to a listed one; at 30
+  minutes an officer clocked in at a post following it has their first due 30 minutes
+  later and sees the plan on their home screen. One answered 450 m away counts, says how
+  far, raises one flag and shows in the punch log; the next is queued 30 minutes on; one
+  answered at the desk is inside; one with a 400 m fix is unverified and not held
+  against them; a post switched to no check-ins withdraws the one waiting and queues no
+  more.
+- **`test/check-in-rules.mjs`** (on a throwaway database, before the API starts) — a
+  check-in whose 10 minutes to answer ran out is counted missed, flagged and followed by
+  the next as soon as the officer's screen looks, without waiting for the sweep (which a
+  serverless deployment runs rarely), and the sweep after does not flag it again; one
+  overdue but still inside its window waits; a post with its own interval keeps it.
+  Turning check-ins off for the company withdraws those waiting at posts that follow it
+  but not at a post with its own, turning one post's off withdraws its own, and no sweep
+  later holds a withdrawn one against anybody.
 - **`test/sweep.mjs`** — every endpoint, read from the source so new ones are
   included automatically. Every GET is called signed out, as an officer, a
   supervisor, an administrator and a client, then again with nonsense in every
@@ -1979,7 +2037,7 @@ The suites, in the order they run:
 
 ### Browser suites
 
-- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 463
+- **`apps/web/test/roles-e2e.mjs`** (`npm run test:roles --workspace @usc/web`, 477
   checks) — signs in through the real screens as an administrator, a supervisor, a W-2
   officer, a 1099 contractor, an officer who must change their PIN and a client. It opens
   every screen each one is offered, and fails on any refused or broken request, script
@@ -2043,12 +2101,17 @@ The suites, in the order they run:
     the top 3** and sends the offer with a note, and the dialog shows who was asked; one
     of them says **Yes, I can** on their phone and has the shift, and the alerts bell
     tells the supervisors who took it;
+  - an administrator finds every pin accurate under **Location check**, sees a post pin
+    dragged 900 m listed as wrong and puts it back with **Use the address**, and sets
+    check-ins every 30 minutes; an officer clocked in sees when the next check-in is,
+    the **Check in** button appears by itself five minutes before it is due (the page's
+    clock run forward), and checking in says it was at the post and lands in the punch log;
   - in New York time, a picked date stays the date picked and the overtime watch's next
     week starts on the right Monday.
-- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 133
+- **The accessibility audit** (`npm run test:a11y --workspace @usc/web`) drives 136
   screens and dialogs through axe-core, signed in as an administrator, an officer on post
   and a client, then audits eleven again in night mode with colour contrast enforced (the
-  dark palette is ours, so a contrast failure there fails the run): 144 audits in all. It
+  dark palette is ours, so a contrast failure there fails the run): 147 audits in all. It
   stops rather than carrying on if a sign-in fails, so it cannot quietly audit the sign-in
   screen in place of the real ones. It also fails any screen showing a table without one
   of our table classes, which renders with the browser's defaults; several screens

@@ -1569,4 +1569,40 @@ CREATE TABLE IF NOT EXISTS shift_offer_recipients (
   PRIMARY KEY (offer_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_shift_offer_recipients_user ON shift_offer_recipients(user_id, asked_at DESC);
+-- Where a site or post pin came from - 'address' (its street address, found
+-- by a geocoder), 'map' (placed or dragged by hand), 'survey' (set from a
+-- phone standing there, with the fix's accuracy) - when, and by whom.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS location_source text;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS location_accuracy_m integer;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS location_set_at timestamptz;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS location_set_by integer REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location_source text;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location_accuracy_m integer;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location_set_at timestamptz;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS location_set_by integer REFERENCES users(id) ON DELETE SET NULL;
+-- A post's check-in interval: minutes, 0 for none, or NULL to follow the
+-- company default in company_settings.
+ALTER TABLE posts ALTER COLUMN check_in_interval_min DROP DEFAULT;
+-- Street addresses as a geocoder found them, so the location check does not
+-- ask again every time it is opened. precision: building | street | area | none.
+CREATE TABLE IF NOT EXISTS address_geocodes (
+  query        text PRIMARY KEY,
+  latitude     double precision,
+  longitude    double precision,
+  label        text,
+  precision    text NOT NULL,
+  provider     text,
+  looked_up_at timestamptz NOT NULL DEFAULT now()
+);
+-- Settings for the whole company, one row per key.
+CREATE TABLE IF NOT EXISTS company_settings (
+  key        text PRIMARY KEY,
+  value      jsonb NOT NULL,
+  updated_by integer REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- Where the officer was when they answered a check-in, against the post.
+ALTER TABLE status_checks ADD COLUMN IF NOT EXISTS accuracy double precision;
+ALTER TABLE status_checks ADD COLUMN IF NOT EXISTS geofence text;
+ALTER TABLE status_checks ADD COLUMN IF NOT EXISTS distance_m integer;
 `;

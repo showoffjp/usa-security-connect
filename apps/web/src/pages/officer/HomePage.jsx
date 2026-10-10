@@ -533,23 +533,57 @@ function SiteContactsCard({ onDuty }) {
 
 /* ----------------------------------------------------- check-in prompt -- */
 
-function CheckInPrompt({ checkIn, onAnswered }) {
+/** What a check-in's location said, for the officer. */
+function whereText(loc) {
+  if (!loc) return '';
+  const ft = (m) => `${Math.round(m)} m (${Math.round(m * 3.281).toLocaleString()} ft)`;
+  if (loc.geofence === 'inside') return 'at your post';
+  if (loc.geofence === 'outside') return `${ft(loc.distance_m)} from your post`;
+  if (loc.geofence === 'unverified') return `but your phone's position was too rough to confirm (±${Math.round(loc.accuracy)} m)`;
+  if (loc.geofence === 'no_fix') return 'but your location could not be read';
+  return '';
+}
+
+/**
+ * Status check-ins, from clock-in to clock-out. Between them the card says
+ * when the next is due and how the last went; five minutes before one is due
+ * the Check in button appears by itself, counting down the time left to
+ * answer. Each answer sends this phone's best fix, judged against the post.
+ */
+function CheckInCard({ checkIn, plan, onAnswered }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [left, setLeft] = useState(checkIn.seconds_remaining);
+  const [now, setNow] = useState(Date.now());
+  const due = checkIn ? new Date(checkIn.due_at).getTime() : null;
+  const expires = checkIn ? new Date(checkIn.expires_at).getTime() : null;
+  const opensAt = due ? due - 5 * 60000 : null;
+  const open = Boolean(checkIn) && now >= opensAt;
 
   useEffect(() => {
-    setLeft(checkIn.seconds_remaining);
-    const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
+    // Every second while one is open, for the countdown; otherwise often enough to open it on time.
+    const t = setInterval(() => setNow(Date.now()), open ? 1000 : 15000);
     return () => clearInterval(t);
-  }, [checkIn.id, checkIn.seconds_remaining]);
+  }, [open]);
+  // The window ran out unanswered: look again, once, for the next one.
+  const refetched = useRef(null);
+  useEffect(() => {
+    if (checkIn && now > expires + 2000 && refetched.current !== checkIn.id) {
+      refetched.current = checkIn.id;
+      onAnswered();
+    }
+  }, [now, expires, checkIn, onAnswered]);
+
+  if (!plan || !plan.every_min) return null;
 
   const answer = async () => {
     setBusy(true);
     try {
-      const fix = await getPosition({ timeout: 8000 });
+      const fix = await getPosition({ timeout: 10000 });
       const res = await api.post('/timeclock/check-in', { checkId: checkIn.id, ...geoBody(fix) });
-      toast.success(res.status === 'late' ? 'Check-in recorded (late).' : 'Check-in recorded. Stay safe.');
+      const where = whereText(res.location);
+      const text = `Checked in${res.status === 'late' ? ' late' : ''}${where ? `, ${where}` : ''}.`;
+      if (res.location?.geofence === 'outside') toast.error(`${text} Your supervisor will see where you were.`);
+      else toast.success(res.location?.geofence === 'inside' ? `${text} Stay safe.` : text);
       onAnswered();
     } catch (err) {
       toast.error(err.message);
@@ -558,24 +592,47 @@ function CheckInPrompt({ checkIn, onAnswered }) {
     }
   };
 
-  const overdue = checkIn.is_overdue;
-
-  return (
-    <div className={`card card-pad`} style={{ borderColor: overdue ? '#f3c9c3' : 'var(--line)' }}>
-      <div className="row-between" style={{ marginBottom: 12 }}>
-        <div className="row">
-          <Icon name="shield" size={20} style={{ color: overdue ? 'var(--danger)' : 'var(--navy-700)' }} />
-          <h3>Status check-in {overdue ? 'overdue' : 'due'}</h3>
+  if (open) {
+    const overdue = now > due;
+    const left = Math.max(0, Math.round((expires - now) / 1000));
+    return (
+      <div className="card card-pad" id="check-in" style={{ borderColor: overdue ? 'var(--banner-danger-line)' : 'var(--line)' }}>
+        <div className="row-between" style={{ marginBottom: 12 }}>
+          <div className="row">
+            <Icon name="shield" size={20} style={{ color: overdue ? 'var(--danger)' : 'var(--navy-700)' }} />
+            <h3>Status check-in {overdue ? 'overdue' : 'due'}</h3>
+          </div>
+          <Chip kind={overdue ? 'danger' : 'warn'}>{fmtCountdown(left)} left</Chip>
         </div>
-        <Chip kind={overdue ? 'danger' : 'warn'}>{fmtCountdown(left)} left</Chip>
+        <p className="small muted">
+          Confirm you are safe and still on post. Your location goes with it and is checked against the post. Missing a check-in raises an alert with
+          your supervisor.
+        </p>
+        <button className="btn btn-primary btn-lg btn-block" onClick={answer} disabled={busy}>
+          <Icon name="check" size={18} />
+          {busy ? 'Finding your location...' : "Check in: I'm on post and OK"}
+        </button>
       </div>
-      <p className="small muted">
-        Confirm you are safe and still on post. Missing a check-in raises an alert with your supervisor.
-      </p>
-      <button className="btn btn-primary btn-lg btn-block" onClick={answer} disabled={busy}>
-        <Icon name="check" size={18} />
-        {busy ? 'Sending...' : "I'm on post and OK"}
-      </button>
+    );
+  }
+
+  const last = plan.last;
+  return (
+    <div className="card card-pad row" id="check-in" style={{ gap: 12 }}>
+      <Icon name="shield" size={20} style={{ color: 'var(--navy-700)', flexShrink: 0 }} />
+      <div className="grow">
+        <div className="small strong">
+          {checkIn ? `Next check-in at ${fmtTime(checkIn.due_at)}` : 'Check-ins'} <span className="muted">· {plan.label.toLowerCase()}</span>
+        </div>
+        <div className="tiny muted">
+          {checkIn ? `The Check in button appears here at ${fmtTime(opensAt)}. ` : ''}
+          {last
+            ? `Last checked in ${fmtTime(last.responded_at)}${whereText(last) ? `, ${whereText(last)}` : ''}.`
+            : 'None answered yet this shift.'}
+          {plan.missed > 0 && ` ${plan.missed} missed this shift.`}
+        </div>
+      </div>
+      {last?.geofence === 'outside' && <Chip kind="danger">Away from post</Chip>}
     </div>
   );
 }
@@ -661,6 +718,14 @@ export default function HomePage() {
     load();
   }, [load]);
 
+  // On duty, look again every minute: the next check-in, a call sent, a relief arriving.
+  const onDutyNow = Boolean(status?.onDuty);
+  useEffect(() => {
+    if (!onDutyNow) return undefined;
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [onDutyNow, load]);
+
   // Keep "time on post" honest without hammering the API.
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 30000);
@@ -675,7 +740,8 @@ export default function HomePage() {
   const clockIn = async (overrideReason) => {
     setBusy(true);
     try {
-      const current = fix?.ok ? fix : await getPosition({ timeout: 9000 });
+      // The warmed-up fix only if it is fresh: the officer may have opened this screen elsewhere.
+      const current = fix?.ok && Date.now() - new Date(fix.at).getTime() < 60000 ? fix : await getPosition({ timeout: 9000 });
       setFix(current);
       const res = await api.post('/timeclock/clock-in', {
         ...geoBody(current),
@@ -745,7 +811,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {checkIn?.is_open && <CheckInPrompt checkIn={checkIn} onAnswered={load} />}
+      {onDuty && <CheckInCard checkIn={checkIn} plan={status.checkIns} onAnswered={load} />}
       <CallsCard onDuty={onDuty} />
       <HandoverCard />
       <HeadsUpCard onDuty={onDuty} />

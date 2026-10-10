@@ -37,6 +37,7 @@ import { seedHandovers } from './seed-handovers.js';
 import { seedFatigue } from './seed-fatigue.js';
 import { seedAttendance } from './seed-attendance.js';
 import { seedOffers } from './seed-offers.js';
+import { seedLocations } from './seed-locations.js';
 import { seedHolidays } from './seed-holidays.js';
 
 /**
@@ -54,6 +55,26 @@ const fromToday = (days) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
+
+/**
+ * Where the four original sites are: each street address geocoded to the
+ * building (OpenStreetMap, checked against the US Census Bureau's geocoder),
+ * so the demo's pins and geofences sit on the real places. The other six are
+ * in seed-expansion.js; seed-locations.js says how each pin was set.
+ */
+export const GEO = {
+  riverfront: [30.313263, -81.677997], // 1200 Riverside Ave, Jacksonville
+  palmetto: [28.450983, -81.493835], // 8000 Via Dellagio Way, Orlando
+  gulfport: [27.931963, -82.441167], // 2101 Maritime Blvd, Tampa
+  coral: [26.136973, -80.113585], // 2414 E Sunrise Blvd, Fort Lauderdale
+};
+/** A point `east` and `north` metres from another. */
+export const offsetM = ([lat, lng], east, north) => [
+  Number((lat + north / 111320).toFixed(6)),
+  Number((lng + east / (111320 * Math.cos((lat * Math.PI) / 180))).toFixed(6)),
+];
+/** Riverfront's exterior patrol starts at the corner of the north deck. */
+const RF_PATROL = offsetM(GEO.riverfront, -58, 33);
 
 export async function seedDemo({ reset = false, log = console.log } = {}) {
   await migrate();
@@ -107,22 +128,22 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const siteIds = {
     riverfront: Number((await insertSite.run(
       'Riverfront Commerce Center', 'Riverfront Holdings LLC', '1200 Riverside Ave',
-      'Jacksonville', 'FL', '32204', 30.3196, -81.6795, 'Dana Whitfield', '(904) 555-0142'
+      'Jacksonville', 'FL', '32204', ...GEO.riverfront, 'Dana Whitfield', '(904) 555-0142'
     )).lastInsertRowid),
 
     palmetto: Number((await insertSite.run(
-      'Palmetto Ridge Residences', 'Palmetto Ridge HOA', '8455 Palmetto Ridge Dr',
-      'Orlando', 'FL', '32819', 28.4515, -81.4720, 'Marcus Reyes', '(407) 555-0188'
+      'Palmetto Ridge Residences', 'Palmetto Ridge HOA', '8000 Via Dellagio Way',
+      'Orlando', 'FL', '32819', ...GEO.palmetto, 'Marcus Reyes', '(407) 555-0188'
     )).lastInsertRowid),
 
     gulfport: Number((await insertSite.run(
-      'Gulfport Logistics Yard', 'Gulfport Freight Co', '3301 Industrial Pkwy',
-      'Tampa', 'FL', '33605', 27.9589, -82.4298, 'Alicia Grant', '(813) 555-0173'
+      'Gulfport Logistics Yard', 'Gulfport Freight Co', '2101 Maritime Blvd',
+      'Tampa', 'FL', '33605', ...GEO.gulfport, 'Alicia Grant', '(813) 555-0173'
     )).lastInsertRowid),
 
     coral: Number((await insertSite.run(
-      'Coral Bay Retail Plaza', 'Coral Bay Property Group', '790 Ocean Blvd',
-      'Fort Lauderdale', 'FL', '33301', 26.1224, -80.1373, 'Nina Alvarez', '(954) 555-0119'
+      'Coral Bay Retail Plaza', 'Coral Bay Property Group', '2414 E Sunrise Blvd',
+      'Fort Lauderdale', 'FL', '33304', ...GEO.coral, 'Nina Alvarez', '(954) 555-0119'
     )).lastInsertRowid),
   };
 
@@ -141,13 +162,13 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
        'Monitor lobby cameras 1-8; report any camera offline more than 10 minutes.',
        'Lock the north doors at 19:00 and confirm the loading dock is secured.',
        'Escalate any alarm to dispatch at (904) 555-0100 before responding.'].join('\n'),
-      30.3196, -81.6795, 120, 60, 1, 0
+      ...GEO.riverfront, 120, null, 1, 0
     )).lastInsertRowid),
 
     riverfrontPatrol: Number((await insertPost.run(
       siteIds.riverfront, 'Exterior Patrol', 'RF-02',
       'Walk the perimeter and both parking decks. Complete the exterior tour once per hour.',
-      30.3199, -81.6801, 250, 45, 1, 0
+      ...RF_PATROL, 250, 45, 1, 0
     )).lastInsertRowid),
 
     palmettoGate: Number((await insertPost.run(
@@ -155,7 +176,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       ['Residents enter by transponder; guests must be on the approved list.',
        'Log every contractor vehicle with plate and company name.',
        'Gate arm stays down between 22:00 and 06:00.'].join('\n'),
-      28.4515, -81.4720, 100, 90, 1, 0
+      ...GEO.palmetto, 100, 90, 1, 0
     )).lastInsertRowid),
 
     gulfportYard: Number((await insertPost.run(
@@ -163,13 +184,13 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
       ['Armed post. Weapon check at start and end of every shift.',
        'Inspect all trailer seals on arrival and departure.',
        'No driver enters the yard without a bill of lading.'].join('\n'),
-      27.9589, -82.4298, 300, 30, 1, 1
+      ...GEO.gulfport, 300, 30, 1, 1
     )).lastInsertRowid),
 
     coralRetail: Number((await insertPost.run(
       siteIds.coral, 'Retail Floor Patrol', 'CB-01',
       'High-visibility patrol during mall hours. Coordinate with store managers on shoplifting stops.',
-      26.1224, -80.1373, 180, 60, 1, 0
+      ...GEO.coral, 180, null, 1, 0
     )).lastInsertRowid),
   };
 
@@ -370,11 +391,11 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   );
 
   const postCoords = {
-    [postIds.riverfrontLobby]: [30.3196, -81.6795],
-    [postIds.riverfrontPatrol]: [30.3199, -81.6801],
-    [postIds.palmettoGate]: [28.4515, -81.4720],
-    [postIds.gulfportYard]: [27.9589, -82.4298],
-    [postIds.coralRetail]: [26.1224, -80.1373],
+    [postIds.riverfrontLobby]: GEO.riverfront,
+    [postIds.riverfrontPatrol]: RF_PATROL,
+    [postIds.palmettoGate]: GEO.palmetto,
+    [postIds.gulfportYard]: GEO.gulfport,
+    [postIds.coralRetail]: GEO.coral,
   };
 
   let entryCount = 0;
@@ -487,7 +508,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const liveEntryId = Number(
     (await insertEntry.run(
       users.marcus, liveShiftId, postIds.riverfrontLobby, toSql(liveStart),
-      30.3196, -81.6795, 8, 'inside', 15,
+      ...GEO.riverfront, 8, 'inside', 15,
       null, null, null, null, 'gps', 'demo-device-marcus', null, 0
     )).lastInsertRowid
   );
@@ -500,7 +521,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   );
   if (liveStart.getTime() + 3660000 <= Date.now()) {
     (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 3600000)), 10,
-      toSql(new Date(liveStart.getTime() + 3660000)), 'ok', 30.3196, -81.6795));
+      toSql(new Date(liveStart.getTime() + 3660000)), 'ok', ...GEO.riverfront));
   }
   if (liveStart.getTime() + 7800000 <= Date.now()) {
     (await insertCheck.run(liveEntryId, users.marcus, toSql(new Date(liveStart.getTime() + 7200000)), 10,
@@ -577,7 +598,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   }
 
   const tourRiverfront = await buildTour(siteIds.riverfront, 'Riverfront Interior Round', 'Hourly interior sweep of all occupied floors.', 35, [
-    { name: 'Main Lobby', tag: 'USC-NFC-RF-101', lat: 30.3196, lng: -81.6795,
+    { name: 'Main Lobby', tag: 'USC-NFC-RF-101', lat: GEO.riverfront[0], lng: GEO.riverfront[1],
       tasks: ['Confirm visitor log is current', 'Check lobby doors are secure'] },
     { name: 'Level 2 Corridor', tag: 'USC-NFC-RF-102',
       instructions: 'Check both stairwell doors are latched.',
@@ -592,7 +613,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   ]);
 
   const tourGulfport = await buildTour(siteIds.gulfport, 'Gulfport Perimeter Sweep', 'Full fence line and trailer row inspection.', 45, [
-    { name: 'Gate 1 - Main Entry', tag: 'USC-NFC-GP-201', lat: 27.9589, lng: -82.4298,
+    { name: 'Gate 1 - Main Entry', tag: 'USC-NFC-GP-201', lat: GEO.gulfport[0], lng: GEO.gulfport[1],
       tasks: ['Gate arm operational', 'Visitor log current'] },
     { name: 'Trailer Row A', tag: 'USC-NFC-GP-202',
       instructions: 'Check every trailer seal number against the manifest clipboard.',
@@ -604,7 +625,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   ]);
 
   const tourPalmetto = await buildTour(siteIds.palmetto, 'Palmetto Community Patrol', 'Drive-through of common areas and amenities.', 25, [
-    { name: 'North Gatehouse', tag: 'USC-NFC-PR-301', lat: 28.4515, lng: -81.4720,
+    { name: 'North Gatehouse', tag: 'USC-NFC-PR-301', lat: GEO.palmetto[0], lng: GEO.palmetto[1],
       tasks: ['Gate arm down', 'Guest list current'] },
     { name: 'Clubhouse & Pool', tag: 'USC-NFC-PR-302',
       instructions: 'Pool closes at 22:00. Clear the deck and secure the gate.',
@@ -749,7 +770,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     toSql(at(-2, 11, 30)), 1, 1, 1, 1, 5,
     'Post in good order. Visitor log current and legible. Reviewed the storm annex with the officer.',
     'Supervisor visit to the lobby. Visitor log current; hurricane procedures reviewed with the officer.',
-    30.3196, -81.6795
+    ...GEO.riverfront
   ));
 
   /* ------------------------------------------------------ certifications -- */
@@ -832,7 +853,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     users.dwayne, postIds.gulfportYard, toSql(at(-9, 2, 42)),
-    27.9589, -82.4298, 12, 'resolved',
+    ...GEO.gulfport, 12, 'resolved',
     users.supervisor, toSql(at(-9, 2, 43)), toSql(at(-9, 3, 20)),
     'Reached the officer by radio in under a minute. Aggressive driver at gate 1 had left the property. Tampa PD advised, no injuries, no damage.'
   ));
@@ -1008,8 +1029,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
             skipped ? 'skipped' : 'done',
             toSql(new Date(started.getTime() + gap * (i + 1))),
             skipped ? null : (i % 3 === 0 ? 'nfc' : 'qr'),
-            skipped ? null : 30.3196 + i * 0.0002,
-            skipped ? null : -81.6795 - i * 0.0002,
+            skipped ? null : GEO.riverfront[0] + i * 0.0002,
+            skipped ? null : GEO.riverfront[1] - i * 0.0002,
             skipped ? SKIP_REASONS[(day + i) % SKIP_REASONS.length] : null
           );
         }
@@ -1181,7 +1202,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     users.janelle, postIds.palmettoGate, toSql(at(-16, 21, 34)),
-    28.4515, -81.4720, 9, 'resolved',
+    ...GEO.palmetto, 9, 'resolved',
     users.supervisor, toSql(at(-16, 21, 35)), toSql(at(-16, 21, 58)),
     'Triggered during the gate confrontation logged in the incident report. Supervisor reached her within a minute; no physical contact occurred and no injury. Reviewed afterwards and confirmed the right call to press it.'
   );
@@ -1193,7 +1214,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     users.alicia, postIds.coralRetail, toSql(at(-21, 16, 5)),
-    26.1224, -80.1373, 22, 'false_alarm',
+    ...GEO.coral, 22, 'false_alarm',
     users.supervisor, toSql(at(-21, 16, 6)), toSql(at(-21, 16, 9)),
     'Pressed in a pocket while the officer was moving a barrier. Confirmed safe by phone within three minutes. No action needed - a false alarm costs us nothing and hesitating costs everything.'
   );
@@ -1292,6 +1313,8 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
   const attendanceSeed = await seedAttendance({ db });
   // Open shifts offered to several officers at once, after the call-off above.
   const offerSeed = await seedOffers({ db });
+  // How each pin was set, and every check-in judged against its post.
+  const locationSeed = await seedLocations({ db });
 
   const flagCount = (await db.prepare(`SELECT COUNT(*) AS n FROM flags`).get()).n;
 
@@ -1306,7 +1329,7 @@ export async function seedDemo({ reset = false, log = console.log } = {}) {
     ${postLog.visitors} visitors logged, ${postLog.notes} pass-down notes
     ${postLog.watchlist} watchlist entries, ${postLog.violations} vehicle violations
     ${postLog.activity} activity entries, ${postLog.issues} building issues, ${postLog.found} lost-and-found items
-    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}${fatigueSeed.shortRest ? `, ${fatigueSeed.shortRest} short of rest` : ''}${fatigueSeed.sevenDays ? `, ${fatigueSeed.sevenDays} on seven days in a row` : ''}, ${attendanceSeed.events} late and no-show updates (${attendanceSeed.texts} texts to Vince${attendanceSeed.covered ? `; ${attendanceSeed.covered} covered` : ''})${attendanceSeed.runningLate ? `, ${attendanceSeed.runningLate} running late` : ''}${attendanceSeed.calledOff ? `, ${attendanceSeed.calledOff} called off` : ''}${offerSeed.offers ? `, ${offerSeed.offers} shift offers to ${offerSeed.asked} officers${offerSeed.taken ? ` (one taken by ${offerSeed.taken})` : ''}` : ''}
+    ${postLog.contacts} site contacts, ${postLog.feedback} client ratings, ${postLog.orders} versions of post orders, ${postLog.orderRequests} client change requests, ${postLog.followUps} incident follow-ups, ${postLog.invoiceQueries} invoice questions, ${postLog.notices} client notices, ${postLog.applicants} applicants, ${dispatch.calls} calls for service (${dispatch.live} live), ${corrections.corrections} time corrections, ${agreements.agreements} service agreements, ${confirmations.confirmed} shifts confirmed (${confirmations.waiting} not yet), ${fleetSeed.vehicles} patrol vehicles with ${fleetSeed.trips} trips, ${expenseSeed.claims} expense claims, paid time off for ${ptoSeed.people} employees (${ptoSeed.requests} requests paid from it), ${commendationSeed.commendations} commendations, ${holidaySeed.holidays} company holidays, weeks of hours signed off by clients: ${signoffSeed.approved} (${signoffSeed.disputed} disputed, ${signoffSeed.changed} changed since), site training at ${trainingSeed.posts} posts: ${trainingSeed.trained} officers signed off${trainingSeed.waiting ? `, ${trainingSeed.waiting} waiting` : ''}${trainingSeed.training ? `, ${trainingSeed.training} on a training shift` : ''}${trainingSeed.lapsed ? `, ${trainingSeed.lapsed} due a refresher` : ''}${trainingSeed.revoked ? `, ${trainingSeed.revoked} withdrawn` : ''}, ${conductSeed.records} coaching and discipline records${handoverSeed.late + handoverSeed.uncovered ? `, ${handoverSeed.late + handoverSeed.uncovered} officers held over at a handover` : ''}${fatigueSeed.shortRest ? `, ${fatigueSeed.shortRest} short of rest` : ''}${fatigueSeed.sevenDays ? `, ${fatigueSeed.sevenDays} on seven days in a row` : ''}, ${attendanceSeed.events} late and no-show updates (${attendanceSeed.texts} texts to Vince${attendanceSeed.covered ? `; ${attendanceSeed.covered} covered` : ''})${attendanceSeed.runningLate ? `, ${attendanceSeed.runningLate} running late` : ''}${attendanceSeed.calledOff ? `, ${attendanceSeed.calledOff} called off` : ''}${offerSeed.offers ? `, ${offerSeed.offers} shift offers to ${offerSeed.asked} officers${offerSeed.taken ? ` (one taken by ${offerSeed.taken})` : ''}` : ''}, ${locationSeed.sites} sites placed from their addresses and ${locationSeed.surveyed} posts set at the post, ${locationSeed.judged} check-ins judged against the post${locationSeed.away ? ` (${locationSeed.away})` : ''}
 
     Payroll: week of ${payroll.closed}
              week of ${payroll.due}

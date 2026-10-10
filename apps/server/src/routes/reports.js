@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/db.js';
+import { geocodeSearch } from '../services/geocode.js';
 import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString, idParam, dateParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { ROLES, toHours, minutesBetween } from '../shared.js';
@@ -243,9 +244,9 @@ reportsRouter.get(
 /**
  * Turn a typed address into coordinates for the location picker.
  *
- * Uses Google's geocoder when USC_MAPS_API_KEY is set, and falls back to
- * OpenStreetMap's Nominatim so the feature works before anyone has signed up
- * for a Google billing account.
+ * Google when USC_MAPS_API_KEY is set; otherwise OpenStreetMap and the US
+ * Census geocoder together. Each answer says how precise it is (see
+ * services/geocode.js), most precise first.
  */
 reportsRouter.get(
   '/geocode',
@@ -255,55 +256,7 @@ reportsRouter.get(
       throw new HttpError(422, 'Enter at least three characters of the address.');
     }
 
-    const key = process.env.USC_MAPS_API_KEY;
-
-    try {
-      if (key) {
-        const url =
-          `https://maps.googleapis.com/maps/api/geocode/json` +
-          `?address=${encodeURIComponent(query)}&region=us&key=${key}`;
-        const response = await fetch(url);
-        const payload = await response.json();
-
-        if (payload.status === 'OK') {
-          return res.json({
-            provider: 'google',
-            results: payload.results.slice(0, 5).map((r) => ({
-              label: r.formatted_address,
-              latitude: r.geometry.location.lat,
-              longitude: r.geometry.location.lng,
-            })),
-          });
-        }
-        if (payload.status !== 'ZERO_RESULTS') {
-          console.warn('[usc] google geocode:', payload.status, payload.error_message || '');
-        }
-        return res.json({ provider: 'google', results: [] });
-      }
-
-      // Nominatim asks for a identifying User-Agent, and rate limits politely.
-      const url =
-        `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us` +
-        `&q=${encodeURIComponent(query)}`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'USA-Security-Connect/1.0 (workforce management)' },
-      });
-      const payload = await response.json();
-
-      res.json({
-        provider: 'openstreetmap',
-        results: (Array.isArray(payload) ? payload : []).map((r) => ({
-          label: r.display_name,
-          latitude: Number(r.lat),
-          longitude: Number(r.lon),
-        })),
-      });
-    } catch (err) {
-      // A geocoder being down must not block saving a post; the admin can
-      // still drop the pin by hand.
-      console.error('[usc] geocode failed', err.message);
-      res.json({ provider: key ? 'google' : 'openstreetmap', results: [], error: 'Address lookup is unavailable.' });
-    }
+    res.json(await geocodeSearch(query));
   })
 );
 

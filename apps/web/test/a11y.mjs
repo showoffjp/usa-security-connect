@@ -347,6 +347,21 @@ await page.keyboard.press('Escape');
     console.log('SKIP  shift offers: none open on the demo just now');
   }
 }
+// Where every site and post is: the location check with every pin listed,
+// and the site and post dialogs where pins are set.
+await page.goto(`${WEB}/admin/sites`, { waitUntil: 'networkidle' });
+await page.waitForSelector('#location-check');
+await page.click('#location-check button:has-text("Show all")');
+await page.waitForSelector('#location-check .list-item');
+await audit(page, 'Sites: the location check, every pin', null);
+await page.locator('.card-head', { hasText: 'Riverfront Commerce Center' }).locator('button:has-text("Edit")').click();
+await page.waitForSelector('[role="dialog"]');
+await audit(page, 'Sites: edit a site and its pin', null);
+await page.keyboard.press('Escape');
+await page.locator('tr', { hasText: 'Main Lobby Console' }).locator('button:has-text("Edit")').click();
+await page.waitForSelector('[role="dialog"]');
+await audit(page, "Sites: a post's pin and check-ins", null);
+await page.keyboard.press('Escape');
 await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
 await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click();
 await page.waitForSelector('[role="dialog"]');
