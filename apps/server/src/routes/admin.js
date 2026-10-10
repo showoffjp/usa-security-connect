@@ -28,8 +28,9 @@ import {
   EXPENSE_CATEGORY_LABEL,
   COMMENDATION_LABEL,
   OFFER_ALERT_HOURS,
+  LOCATION_RULES,
 } from '../shared.js';
-import { toSql, sweep } from '../services/compliance.js';
+import { toSql, sweep, withdrawCheckInsTurnedOff } from '../services/compliance.js';
 import { emailKind } from '../services/email.js';
 import { recordPayHistory } from '../services/payHistory.js';
 import { loadPricedEntries, personPay, groupBy } from '../services/payroll.js';
@@ -52,6 +53,7 @@ import { fatigueForAll, fatigueBoard } from '../services/fatigue.js';
 import { attendanceBoard, lostShifts, attendancePoints } from '../services/attendance.js';
 import { officerScore, CALL_OFF_WEIGHT } from '../services/scorecards.js';
 import { closeOffersForShift, offerAlerts, whenText } from '../services/shiftOffers.js';
+import { checkSite } from '../services/locations.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -1647,6 +1649,11 @@ adminRouter.get(
   })
 );
 
+const pinSchema = {
+  locationSource: z.enum(['address', 'map', 'survey']).optional(),
+  locationAccuracyM: z.number().nonnegative().max(100000).nullable().optional(),
+};
+
 const siteSchema = z.object({
   name: z.string().trim().min(2).max(160),
   clientName: z.string().trim().max(160).optional(),
@@ -1659,22 +1666,86 @@ const siteSchema = z.object({
   contactName: z.string().trim().max(120).optional(),
   contactPhone: z.string().trim().max(40).optional(),
   active: z.boolean().default(true),
+  ...pinSchema,
 });
+
+/**
+ * Where a pin set or moved by hand came from: dropped on the map, placed on
+ * the street address, or taken from a phone standing there - which is only
+ * believed with a fix good to LOCATION_RULES.surveyAccuracyM.
+ */
+function pinOrigin(b, before) {
+  const moved =
+    (b.latitude !== undefined && b.latitude !== (before?.latitude ?? null)) ||
+    (b.longitude !== undefined && b.longitude !== (before?.longitude ?? null));
+  if (!moved) return null;
+  if (b.latitude == null || b.longitude == null) return { source: null, accuracy: null };
+  if (b.locationSource === 'survey') {
+    if (b.locationAccuracyM == null || b.locationAccuracyM > LOCATION_RULES.surveyAccuracyM) {
+      throw new HttpError(422, `A pin set from where you are standing needs a position good to ${LOCATION_RULES.surveyAccuracyM} m.`);
+    }
+    return { source: 'survey', accuracy: b.locationAccuracyM };
+  }
+  return { source: b.locationSource || 'map', accuracy: null };
+}
+
+/** A site and its posts judged by the location check, for the answer to a save. */
+async function locationOf(siteId, postId = null) {
+  const site = await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(siteId);
+  const posts = await db.prepare(`SELECT * FROM posts WHERE site_id = ? ORDER BY name`).all(siteId);
+  const judged = await checkSite(site, posts);
+  return postId ? judged.posts.find((p) => p.id === postId) : judged;
+}
 
 adminRouter.post(
   '/sites',
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(siteSchema, req.body);
+    const origin = pinOrigin(b, null);
     const info = (await db
       .prepare(
-        `INSERT INTO sites (name, client_name, address, city, state, postal_code, latitude, longitude, contact_name, contact_phone, active)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO sites (name, client_name, address, city, state, postal_code, latitude, longitude, contact_name, contact_phone, active,
+                            location_source, location_accuracy_m, location_set_at, location_set_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(b.name, b.clientName ?? null, b.address ?? null, b.city ?? null, b.state ?? 'FL',
            b.postalCode ?? null, b.latitude ?? null, b.longitude ?? null,
-           b.contactName ?? null, b.contactPhone ?? null, b.active ? 1 : 0));
-    res.status(201).json({ site: (await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(info.lastInsertRowid)) });
+           b.contactName ?? null, b.contactPhone ?? null, b.active ? 1 : 0,
+           origin?.source ?? null, origin?.accuracy ?? null, origin?.source ? toSql(new Date()) : null, origin?.source ? req.user.id : null));
+    const id = Number(info.lastInsertRowid);
+    res.status(201).json({ site: (await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(id)), location: await locationOf(id) });
+  })
+);
+
+adminRouter.patch(
+  '/sites/:id',
+  onlyAdmin,
+  wrap(async (req, res) => {
+    const b = parse(siteSchema.partial(), req.body);
+    const site = await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(idParam(req.params.id, 'site'));
+    if (!site) throw new HttpError(404, 'Site not found.');
+    const map = {
+      name: 'name', clientName: 'client_name', address: 'address', city: 'city', state: 'state', postalCode: 'postal_code',
+      latitude: 'latitude', longitude: 'longitude', contactName: 'contact_name', contactPhone: 'contact_phone',
+    };
+    const sets = [];
+    const params = [];
+    for (const [k, col] of Object.entries(map)) {
+      if (b[k] !== undefined) { sets.push(`${col} = ?`); params.push(b[k]); }
+    }
+    if (req.body.active !== undefined) { sets.push('active = ?'); params.push(b.active ? 1 : 0); }
+    const origin = pinOrigin(b, site);
+    if (origin) {
+      sets.push('location_source = ?', 'location_accuracy_m = ?', 'location_set_at = now()', 'location_set_by = ?');
+      params.push(origin.source, origin.accuracy, req.user.id);
+    }
+    if (sets.length) {
+      params.push(site.id);
+      await db.prepare(`UPDATE sites SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      await audit(req.user.id, 'site.updated', 'site', site.id, { fields: Object.keys(b).filter((k) => b[k] !== undefined) }, req.ip);
+    }
+    res.json({ site: await db.prepare(`SELECT * FROM sites WHERE id = ?`).get(site.id), location: await locationOf(site.id) });
   })
 );
 
@@ -1687,11 +1758,13 @@ const postSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   geofenceRadiusM: z.number().int().min(25).max(5000).default(150),
-  checkInIntervalMin: z.number().int().min(0).max(480).default(60),
+  /** Minutes between check-ins, 0 for none, or null to follow the company default. */
+  checkInIntervalMin: z.number().int().min(0).max(480).nullable().default(null),
   requiresGps: z.boolean().default(true),
   armed: z.boolean().default(false),
   trainingRequired: z.boolean().default(false),
   active: z.boolean().default(true),
+  ...pinSchema,
 });
 
 adminRouter.post(
@@ -1699,16 +1772,20 @@ adminRouter.post(
   onlyAdmin,
   wrap(async (req, res) => {
     const b = parse(postSchema, req.body);
+    const origin = pinOrigin(b, null);
     const info = (await db
       .prepare(
         `INSERT INTO posts (site_id, name, post_code, instructions, address, latitude, longitude,
-                            geofence_radius_m, check_in_interval_min, requires_gps, armed, training_required, active)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                            geofence_radius_m, check_in_interval_min, requires_gps, armed, training_required, active,
+                            location_source, location_accuracy_m, location_set_at, location_set_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(b.siteId, b.name, b.postCode ?? null, b.instructions ?? null, b.address ?? null,
            b.latitude ?? null, b.longitude ?? null,
-           b.geofenceRadiusM, b.checkInIntervalMin, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.trainingRequired ? 1 : 0, b.active ? 1 : 0));
-    res.status(201).json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(info.lastInsertRowid)) });
+           b.geofenceRadiusM, b.checkInIntervalMin ?? null, b.requiresGps ? 1 : 0, b.armed ? 1 : 0, b.trainingRequired ? 1 : 0, b.active ? 1 : 0,
+           origin?.source ?? null, origin?.accuracy ?? null, origin?.source ? toSql(new Date()) : null, origin?.source ? req.user.id : null));
+    const id = Number(info.lastInsertRowid);
+    res.status(201).json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(id)), location: await locationOf(b.siteId, id) });
   })
 );
 
@@ -1733,6 +1810,11 @@ adminRouter.patch(
     for (const [k, col] of Object.entries({ requiresGps: 'requires_gps', armed: 'armed', trainingRequired: 'training_required', active: 'active' })) {
       if (b[k] !== undefined) { sets.push(`${col} = ?`); params.push(b[k] ? 1 : 0); }
     }
+    const origin = pinOrigin(b, post);
+    if (origin) {
+      sets.push('location_source = ?', 'location_accuracy_m = ?', 'location_set_at = now()', 'location_set_by = ?');
+      params.push(origin.source, origin.accuracy, req.user.id);
+    }
     // A change to the instructions is a new version of the post orders,
     // which the officers on the post then have to acknowledge. The text as it
     // stood is recorded as version 1 first, before the update replaces it.
@@ -1744,7 +1826,9 @@ adminRouter.patch(
     if (b.instructions !== undefined) {
       await reviseOrders(post.id, b.instructions, req.user.id, 'Edited on the Sites screen');
     }
-    res.json({ post: (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(post.id)) });
+    if (b.checkInIntervalMin === 0) await withdrawCheckInsTurnedOff();
+    const saved = await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(post.id);
+    res.json({ post: saved, location: await locationOf(saved.site_id, saved.id) });
   })
 );
 

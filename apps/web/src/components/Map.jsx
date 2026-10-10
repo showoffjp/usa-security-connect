@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
-import { Icon, Field, Spinner, useToast } from './ui.jsx';
+import { getPosition } from '../lib/geo.js';
+import { Chip, Icon, Field, Spinner, useToast } from './ui.jsx';
+import { LOCATION_RULES } from '@shared/domain.js';
 
 /* ------------------------------------------------------------- loading -- */
 
@@ -115,10 +117,14 @@ function useMap(containerRef, { center, zoom = 15, onReady }) {
 
 /* ------------------------------------------------------ location picker -- */
 
+const PRECISION = { building: ['ok', 'Building'], street: ['info', 'Along the street'], area: ['warn', 'Area only'] };
+
 /**
- * Pick a post's exact location: search an address, drop a pin, drag it, or use
- * the browser's own position. The circle shows the geofence the officer will
- * have to be standing inside to clock in.
+ * Pick a post's exact location: search an address, drop a pin, drag it, or -
+ * most accurate of all - stand at the post and set it from this device, which
+ * is only taken with a fix good to LOCATION_RULES.surveyAccuracyM. The circle
+ * shows the geofence the officer will have to be standing inside to clock in.
+ * onChange is told where each pin came from: 'address', 'map' or 'survey'.
  */
 export function LocationPicker({ latitude, longitude, radius = 150, onChange, height = 320 }) {
   const toast = useToast();
@@ -144,7 +150,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
         markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(map);
         markerRef.current.on('dragend', () => {
           const pos = markerRef.current.getLatLng();
-          onChange?.({ latitude: Number(pos.lat.toFixed(6)), longitude: Number(pos.lng.toFixed(6)) });
+          onChange?.({ latitude: Number(pos.lat.toFixed(6)), longitude: Number(pos.lng.toFixed(6)), source: 'map' });
         });
       } else {
         markerRef.current.setLatLng([lat, lng]);
@@ -177,6 +183,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
         onChange?.({
           latitude: Number(e.latlng.lat.toFixed(6)),
           longitude: Number(e.latlng.lng.toFixed(6)),
+          source: 'map',
         });
       });
 
@@ -209,20 +216,20 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
     }
   };
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('This browser cannot report its location.');
-      return;
+  const [surveying, setSurveying] = useState(false);
+  const useMyLocation = async () => {
+    setSurveying(true);
+    const fix = await getPosition({ timeout: 20000, goodEnough: 5 });
+    setSurveying(false);
+    if (!fix.ok) return toast.error(fix.message);
+    if (fix.accuracy == null || fix.accuracy > LOCATION_RULES.surveyAccuracyM) {
+      return toast.error(
+        `Your position is only good to ${fix.accuracy ?? '?'} m; it needs to be within ${LOCATION_RULES.surveyAccuracyM} m. Step outside or near a window, wait a moment and try again.`
+      );
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        onChange?.({
-          latitude: Number(pos.coords.latitude.toFixed(6)),
-          longitude: Number(pos.coords.longitude.toFixed(6)),
-        }),
-      () => toast.error('Could not get your location.'),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    onChange?.({ latitude: fix.latitude, longitude: fix.longitude, source: 'survey', accuracy: fix.accuracy });
+    place(fix.latitude, fix.longitude);
+    toast.success(`Pin set where you are standing, good to ${fix.accuracy} m.`);
   };
 
   return (
@@ -240,10 +247,13 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
           {searching ? <Spinner /> : <Icon name="search" size={15} />}
           Find
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={useMyLocation} title="Use my current location">
-          <Icon name="pin" size={15} />
-        </button>
       </form>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <button type="button" className="btn btn-navy btn-sm" onClick={useMyLocation} disabled={surveying}>
+          <Icon name="gps" size={15} /> {surveying ? 'Getting a precise fix...' : "Set from where I'm standing"}
+        </button>
+        <span className="tiny muted grow">Most accurate: stand at the post with this phone. Taken only with a fix good to {LOCATION_RULES.surveyAccuracyM} m (about {Math.round(LOCATION_RULES.surveyAccuracyM * 3.28)} ft).</span>
+      </div>
 
       {results.length > 0 && (
         <div className="card" style={{ maxHeight: 150, overflowY: 'auto' }}>
@@ -254,7 +264,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
                 type="button"
                 className="list-item"
                 onClick={() => {
-                  onChange?.({ latitude: r.latitude, longitude: r.longitude, label: r.label });
+                  onChange?.({ latitude: r.latitude, longitude: r.longitude, label: r.label, source: 'address' });
                   place(r.latitude, r.longitude);
                   setResults([]);
                   setQuery('');
@@ -262,6 +272,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
               >
                 <Icon name="pin" size={15} />
                 <span className="small grow">{r.label}</span>
+                {PRECISION[r.precision] && <Chip kind={PRECISION[r.precision][0]}>{PRECISION[r.precision][1]}</Chip>}
               </button>
             ))}
           </div>
@@ -299,6 +310,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
               onChange?.({
                 latitude: e.target.value === '' ? null : Number(e.target.value),
                 longitude,
+                source: 'map',
               })
             }
           />
@@ -312,6 +324,7 @@ export function LocationPicker({ latitude, longitude, radius = 150, onChange, he
               onChange?.({
                 latitude,
                 longitude: e.target.value === '' ? null : Number(e.target.value),
+                source: 'map',
               })
             }
           />

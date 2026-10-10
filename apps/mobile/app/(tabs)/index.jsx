@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { api } from '../../src/api.js';
@@ -28,22 +28,53 @@ import { formatDuration, toHours } from '../../src/shared.js';
 
 /* ----------------------------------------------------- check-in prompt -- */
 
-function CheckInCard({ checkIn, onAnswered, notify }) {
+/** What a check-in's location said, for the officer. */
+function whereText(loc) {
+  if (!loc) return '';
+  const ft = (m) => `${Math.round(m)} m (${Math.round(m * 3.281).toLocaleString()} ft)`;
+  if (loc.geofence === 'inside') return 'at your post';
+  if (loc.geofence === 'outside') return `${ft(loc.distance_m)} from your post`;
+  if (loc.geofence === 'unverified') return `but your phone's position was too rough to confirm (±${Math.round(loc.accuracy)} m)`;
+  if (loc.geofence === 'no_fix') return 'but your location could not be read';
+  return '';
+}
+
+/**
+ * Status check-ins, from clock-in to clock-out: when the next is due and how
+ * the last went, and five minutes before one is due the Check in button,
+ * counting down. The same as the web app's.
+ */
+function CheckInCard({ checkIn, plan, onAnswered, notify }) {
   const [busy, setBusy] = useState(false);
-  const [left, setLeft] = useState(checkIn.seconds_remaining);
+  const [now, setNow] = useState(Date.now());
+  const due = checkIn ? new Date(checkIn.due_at).getTime() : null;
+  const expires = checkIn ? new Date(checkIn.expires_at).getTime() : null;
+  const opensAt = due ? due - 5 * 60000 : null;
+  const open = Boolean(checkIn) && now >= opensAt;
 
   useEffect(() => {
-    setLeft(checkIn.seconds_remaining);
-    const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
+    const t = setInterval(() => setNow(Date.now()), open ? 1000 : 15000);
     return () => clearInterval(t);
-  }, [checkIn.id, checkIn.seconds_remaining]);
+  }, [open]);
+  // The window ran out unanswered: look again, once, for the next one.
+  const refetched = useRef(null);
+  useEffect(() => {
+    if (checkIn && now > expires + 2000 && refetched.current !== checkIn.id) {
+      refetched.current = checkIn.id;
+      onAnswered();
+    }
+  }, [now, expires, checkIn, onAnswered]);
+
+  if (!plan || !plan.every_min) return null;
 
   const answer = async () => {
     setBusy(true);
     try {
-      const fix = await getPosition({ timeout: 8000 });
+      const fix = await getPosition({ timeout: 10000 });
       const res = await api.post('/timeclock/check-in', { checkId: checkIn.id, ...geoBody(fix) });
-      notify(res.status === 'late' ? 'Check-in recorded (late).' : 'Check-in recorded. Stay safe.', 'ok');
+      const where = whereText(res.location);
+      const text = `Checked in${res.status === 'late' ? ' late' : ''}${where ? `, ${where}` : ''}.`;
+      notify(res.location?.geofence === 'outside' ? `${text} Your supervisor will see where you were.` : text, res.location?.geofence === 'outside' ? 'err' : 'ok');
       onAnswered();
     } catch (err) {
       notify(err.message, 'err');
@@ -52,17 +83,36 @@ function CheckInCard({ checkIn, onAnswered, notify }) {
     }
   };
 
-  return (
-    <Card style={checkIn.is_overdue ? { borderColor: '#F3C9C3' } : undefined}>
-      <View style={[S.cardPad]}>
-        <View style={S.rowBetween}>
-          <Text style={S.h3}>Status check-in {checkIn.is_overdue ? 'overdue' : 'due'}</Text>
-          <Chip tone={checkIn.is_overdue ? 'danger' : 'warn'}>{fmtCountdown(left)} left</Chip>
+  if (open) {
+    const overdue = now > due;
+    const left = Math.max(0, Math.round((expires - now) / 1000));
+    return (
+      <Card style={overdue ? { borderColor: '#F3C9C3' } : undefined}>
+        <View style={[S.cardPad]}>
+          <View style={S.rowBetween}>
+            <Text style={S.h3}>Status check-in {overdue ? 'overdue' : 'due'}</Text>
+            <Chip tone={overdue ? 'danger' : 'warn'}>{fmtCountdown(left)} left</Chip>
+          </View>
+          <Text style={[S.small, S.muted]}>
+            Confirm you are safe and still on post. Your location goes with it and is checked against the post. A missed check-in alerts your supervisor.
+          </Text>
+          <Button title={busy ? 'Finding your location...' : "Check in: I'm on post and OK"} variant="primary" onPress={answer} busy={busy} />
         </View>
-        <Text style={[S.small, S.muted]}>
-          Confirm you are safe and still on post. A missed check-in alerts your supervisor.
+      </Card>
+    );
+  }
+
+  const last = plan.last;
+  return (
+    <Card>
+      <View style={[S.cardPad, { gap: 4 }]}>
+        <View style={S.rowBetween}>
+          <Text style={[S.small, S.strong]}>{checkIn ? `Next check-in at ${fmtTime(checkIn.due_at)}` : 'Check-ins'}</Text>
+          {last?.geofence === 'outside' ? <Chip tone="danger">Away from post</Chip> : <Chip tone="info">{plan.label}</Chip>}
+        </View>
+        <Text style={[S.tiny, S.muted]}>
+          {`${checkIn ? `The Check in button appears here at ${fmtTime(opensAt)}. ` : ''}${last ? `Last checked in ${fmtTime(last.responded_at)}${whereText(last) ? `, ${whereText(last)}` : ''}.` : 'None answered yet this shift.'}${plan.missed > 0 ? ` ${plan.missed} missed this shift.` : ''}`}
         </Text>
-        <Button title="I'm on post and OK" variant="primary" onPress={answer} busy={busy} />
       </View>
     </Card>
   );
@@ -112,7 +162,8 @@ export default function HomeScreen() {
   const clockIn = async (overrideReason) => {
     setBusy(true);
     try {
-      const current = fix?.ok ? fix : await getPosition({ timeout: 9000 });
+      // The warmed-up fix only if it is fresh: the officer may have opened this screen elsewhere.
+      const current = fix?.ok && Date.now() - new Date(fix.at).getTime() < 60000 ? fix : await getPosition({ timeout: 9000 });
       setFix(current);
       const res = await api.post('/timeclock/clock-in', {
         ...geoBody(current),
@@ -188,7 +239,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {checkIn?.is_open && <CheckInCard checkIn={checkIn} onAnswered={load} notify={notify} />}
+        {onDuty && <CheckInCard checkIn={checkIn} plan={status.checkIns} onAnswered={load} notify={notify} />}
         <CallsCard onDuty={onDuty} notify={notify} refreshKey={pulls} />
         <HandoverCard refreshKey={pulls} />
         {!onDuty && <HeadsUpCard notify={notify} refreshKey={pulls} />}

@@ -52,8 +52,9 @@ const SITES = [
     address: '1611 NW 12th Ave',
     city: 'Miami',
     zip: '33136',
-    lat: 25.7907,
-    lng: -80.2126,
+    // Geocoded: the hospital at this address (OpenStreetMap).
+    lat: 25.79167,
+    lng: -80.212602,
     contact: ['Carla Mendez', '(305) 555-0147', 'carla.mendez@harborviewhealth.org'],
     posts: [
       {
@@ -92,8 +93,9 @@ const SITES = [
     address: '300 Bayshore Dr NE',
     city: 'St. Petersburg',
     zip: '33701',
-    lat: 27.7738,
-    lng: -82.6282,
+    // Geocoded: US Census address range.
+    lat: 27.774964,
+    lng: -82.631225,
     contact: ['Graham Whitlock', '(727) 555-0162', 'gwhitlock@bayfrontmarina.com'],
     posts: [
       {
@@ -114,8 +116,9 @@ const SITES = [
     address: '215 S Monroe St',
     city: 'Tallahassee',
     zip: '32301',
-    lat: 30.4389,
-    lng: -84.2806,
+    // Geocoded: the building at this address (OpenStreetMap).
+    lat: 30.440218,
+    lng: -84.280076,
     contact: ['Denise Faulkner', '(850) 555-0118', 'dfaulkner@capitalplazart.com'],
     posts: [
       {
@@ -142,11 +145,12 @@ const SITES = [
     key: 'research',
     name: 'Sunshine State University Research Park',
     client: 'SSU Research Foundation',
-    address: '3400 SW Innovation Way',
+    address: '3200 SW 34th St',
     city: 'Gainesville',
     zip: '32608',
-    lat: 29.638,
-    lng: -82.37,
+    // Geocoded: the building at this address (OpenStreetMap; Census agrees within 8 m).
+    lat: 29.624554,
+    lng: -82.372631,
     contact: ['Dr. Anil Rao', '(352) 555-0133', 'arao@ssuresearch.org'],
     posts: [
       {
@@ -176,8 +180,9 @@ const SITES = [
     address: '1800 N Atlantic Ave',
     city: 'Daytona Beach',
     zip: '32118',
-    lat: 29.226,
-    lng: -81.006,
+    // Geocoded: the building at this address (OpenStreetMap).
+    lat: 29.254751,
+    lng: -81.021166,
     contact: ['Monica Travers', '(386) 555-0171', 'mtravers@seasideretail.com'],
     posts: [
       {
@@ -198,8 +203,9 @@ const SITES = [
     address: '5600 N W St',
     city: 'Pensacola',
     zip: '32505',
-    lat: 30.47,
-    lng: -87.25,
+    // Geocoded: US Census address range.
+    lat: 30.467104,
+    lng: -87.253237,
     contact: ['Russell Pike', '(850) 555-0190', 'rpike@emeraldcoastlogistics.com'],
     posts: [
       {
@@ -441,7 +447,7 @@ export async function seedExpansion(ctx) {
                             geofence_radius_m, check_in_interval_min, requires_gps, armed, bill_rate_cents)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(id, p.name, p.code, p.instructions.join('\n'), `${site.address}, ${site.city}`, lat, lng,
-        p.radius, p.interval, true, p.armed, p.bill)).lastInsertRowid);
+        p.radius, p.interval === RULES.defaultCheckInIntervalMinutes ? null : p.interval, true, p.armed, p.bill)).lastInsertRowid);
       posts[p.key] = { id: postId, siteId: id, siteKey: site.key, latitude: lat, longitude: lng,
         geofence_radius_m: p.radius, interval: p.interval, armed: p.armed, name: p.name, code: p.code };
     }

@@ -23,6 +23,8 @@ const env = {
   ...process.env,
   USC_PUSH_DISABLED: '1',
   USC_EMAIL_DISABLED: '1',
+  // No address lookups leave the machine: the suites work from what the seed cached.
+  USC_GEOCODER: 'off',
   PORT: String(PORT),
   // The suites call the API this starts, on whatever port that is.
   USC_TEST_BASE: process.env.USC_TEST_BASE || BASE,
@@ -80,7 +82,7 @@ if (fresh) {
 // Pure unit test of the SQL translation layer. It needs no database and no
 // server, and if it is wrong then every failure downstream is noise, so it
 // runs first and stops the run.
-console.log('1/45  SQL dialect translation\n');
+console.log('1/47  SQL dialect translation\n');
 const dialect = await run('test/dialect.mjs');
 if (dialect !== 0) {
   console.error('\nThe SQL translation is wrong; everything downstream would be noise.');
@@ -89,33 +91,37 @@ if (dialect !== 0) {
 
 // Also runs before anything starts: it opens a throwaway database of its own,
 // and covers the one case no HTTP suite can reach because no route passes it.
-console.log('\n2/45  Flag detail encoding\n');
+console.log('\n2/47  Flag detail encoding\n');
 const flags = await run('test/flags.mjs');
 
 // Also before anything starts, on a throwaway database: the compliance sweep's
 // handling of an officer held over for a late relief.
-console.log('\n3/45  Holdovers: an officer waiting for a late relief stays on the clock\n');
+console.log('\n3/47  Holdovers: an officer waiting for a late relief stays on the clock\n');
 const holdover = await run('test/holdover.mjs');
 
 // Also on a throwaway database, at a moment it picks: who relieves whom.
-console.log('\n4/45  Handover board: where each relief stands\n');
+console.log('\n4/47  Handover board: where each relief stands\n');
 const handoverBoard = await run('test/handover-board.mjs');
 
 // The rest and fatigue rule, and shifts as worked, on a throwaway database.
-console.log('\n5/45  Rest and fatigue rules\n');
+console.log('\n5/47  Rest and fatigue rules\n');
 const fatigueRules = await run('test/fatigue-rules.mjs');
 
 // Late and no-show stages, and who is texted, on a throwaway database.
-console.log('\n6/45  Late and no-show rules\n');
+console.log('\n6/47  Late and no-show rules\n');
 const attendanceRules = await run('test/attendance-rules.mjs');
 
-console.log('\n7/45  Seeding\n');
+// Check-ins whose window ran out, and check-ins turned off, on a throwaway database.
+console.log('\n7/47  Check-in rules\n');
+const checkInRules = await run('test/check-in-rules.mjs');
+
+console.log('\n8/47  Seeding\n');
 if ((await run('src/seed.js', ['--reset'])) !== 0) {
   console.error('\nSeeding failed.');
   process.exit(1);
 }
 
-console.log('\n8/45  Starting the API');
+console.log('\n9/47  Starting the API');
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: serverRoot,
   env,
@@ -144,122 +150,125 @@ if (!(await waitForHealth())) {
 }
 console.log('     up\n');
 
-console.log('9/45  Core suite\n');
+console.log('10/47  Core suite\n');
 const core = await run('test/smoke.mjs');
 
-console.log('\n10/45  Feature suite\n');
+console.log('\n11/47  Feature suite\n');
 const features = await run('test/features.mjs');
 
-console.log('\n11/45  Shift request suite\n');
+console.log('\n12/47  Shift request suite\n');
 const shifts = await run('test/shifts.mjs');
 
-console.log('\n12/45  Client portal suite\n');
+console.log('\n13/47  Client portal suite\n');
 const portal = await run('test/portal.mjs');
 
-console.log('\n13/45  Invoicing suite\n');
+console.log('\n14/47  Invoicing suite\n');
 const invoices = await run('test/invoices.mjs');
 
-console.log('\n14/45  Email suite\n');
+console.log('\n15/47  Email suite\n');
 const email = await run('test/email.mjs');
 
-console.log('\n15/45  Security suite\n');
+console.log('\n16/47  Security suite\n');
 const security = await run('test/security.mjs');
 
-console.log('\n16/45  Role permission suite\n');
+console.log('\n17/47  Role permission suite\n');
 const roles = await run('test/roles.mjs');
 
-console.log('\n17/45  Tracking, pay rates and reports suite\n');
+console.log('\n18/47  Tracking, pay rates and reports suite\n');
 const tracking = await run('test/tracking.mjs');
 
-console.log('\n18/45  Keys and equipment suite\n');
+console.log('\n19/47  Keys and equipment suite\n');
 const equipment = await run('test/equipment.mjs');
 
-console.log('\n19/45  Payroll close suite\n');
+console.log('\n20/47  Payroll close suite\n');
 const payroll = await run('test/payroll.mjs');
 
-console.log('\n20/45  Client coverage requests and officer pay suite\n');
+console.log('\n21/47  Client coverage requests and officer pay suite\n');
 const requests = await run('test/requests.mjs');
 
-console.log('\n21/45  Visitor log, pass-down notes and quick search suite\n');
+console.log('\n22/47  Visitor log, pass-down notes and quick search suite\n');
 const postlog = await run('test/postlog.mjs');
 
-console.log('\n22/45  Watchlist, vehicle violations and scorecards suite\n');
+console.log('\n23/47  Watchlist, vehicle violations and scorecards suite\n');
 const watch = await run('test/watch.mjs');
 
-console.log('\n23/45  Activity log, building issues and lost and found suite\n');
+console.log('\n24/47  Activity log, building issues and lost and found suite\n');
 const sitelog = await run('test/sitelog.mjs');
 
-console.log('\n24/45  Site contacts, client feedback and CSV exports suite\n');
+console.log('\n25/47  Site contacts, client feedback and CSV exports suite\n');
 const contactsSuite = await run('test/contacts.mjs');
 
-console.log('\n25/45  Post orders, alerts inbox, QR tags and incident follow-ups suite\n');
+console.log('\n26/47  Post orders, alerts inbox, QR tags and incident follow-ups suite\n');
 const ordersSuite = await run('test/orders.mjs');
 
-console.log('\n26/45  Supervisor field visits suite\n');
+console.log('\n27/47  Supervisor field visits suite\n');
 const visitsSuite = await run('test/visits.mjs');
 
-console.log('\n27/45  Hiring pipeline suite\n');
+console.log('\n28/47  Hiring pipeline suite\n');
 const hiringSuite = await run('test/hiring.mjs');
 
-console.log('\n28/45  Dispatch: calls for service suite\n');
+console.log('\n29/47  Dispatch: calls for service suite\n');
 const dispatchSuite = await run('test/dispatch.mjs');
 
-console.log('\n29/45  Time corrections suite\n');
+console.log('\n30/47  Time corrections suite\n');
 const correctionsSuite = await run('test/corrections.mjs');
 
-console.log('\n30/45  Service agreements suite\n');
+console.log('\n31/47  Service agreements suite\n');
 const agreementsSuite = await run('test/agreements.mjs');
 
-console.log('\n31/45  Shift confirmations suite\n');
+console.log('\n32/47  Shift confirmations suite\n');
 const confirmationsSuite = await run('test/confirmations.mjs');
 
-console.log('\n32/45  Patrol vehicles suite\n');
+console.log('\n33/47  Patrol vehicles suite\n');
 const vehiclesSuite = await run('test/vehicles.mjs');
 
-console.log('\n33/45  Expense claims suite\n');
+console.log('\n34/47  Expense claims suite\n');
 const expensesSuite = await run('test/expenses.mjs');
 
-console.log('\n34/45  Paid time off suite\n');
+console.log('\n35/47  Paid time off suite\n');
 const ptoSuite = await run('test/pto.mjs');
 
-console.log('\n35/45  Commendations suite\n');
+console.log('\n36/47  Commendations suite\n');
 const commendationsSuite = await run('test/commendations.mjs');
 
-console.log('\n36/45  Overtime watch suite\n');
+console.log('\n37/47  Overtime watch suite\n');
 const overtimeSuite = await run('test/overtime.mjs');
 
-console.log('\n37/45  Holiday pay and billing suite\n');
+console.log('\n38/47  Holiday pay and billing suite\n');
 const holidaysSuite = await run('test/holidays.mjs');
 
-console.log('\n38/45  Client sign-off of hours suite\n');
+console.log('\n39/47  Client sign-off of hours suite\n');
 const signoffsSuite = await run('test/signoffs.mjs');
 
-console.log('\n39/45  Site training suite\n');
+console.log('\n40/47  Site training suite\n');
 const trainingSuite = await run('test/site-training.mjs');
 
-console.log('\n40/45  Coaching and discipline suite\n');
+console.log('\n41/47  Coaching and discipline suite\n');
 const conductSuite = await run('test/conduct.mjs');
 
-console.log('\n41/45  Shift handovers suite\n');
+console.log('\n42/47  Shift handovers suite\n');
 const handoversSuite = await run('test/handovers.mjs');
 
-console.log('\n42/45  Rest and fatigue suite\n');
+console.log('\n43/47  Rest and fatigue suite\n');
 const fatigueSuite = await run('test/fatigue.mjs');
 
-console.log('\n43/45  Late and no-show alerts suite\n');
+console.log('\n44/47  Late and no-show alerts suite\n');
 const attendanceSuite = await run('test/attendance.mjs');
 
-console.log('\n44/45  Shift offers suite\n');
+console.log('\n45/47  Shift offers suite\n');
 const offersSuite = await run('test/offers.mjs');
+
+console.log('\n46/47  Locations and check-ins suite\n');
+const locationsSuite = await run('test/locations.mjs');
 
 // Last on purpose: it sends malformed writes to every endpoint, some of which
 // change things, and it signs its own sessions out at the end.
-console.log('\n45/45  Endpoint sweep: every route, every caller, good and bad input\n');
+console.log('\n47/47  Endpoint sweep: every route, every caller, good and bad input\n');
 const sweepSuite = await run('test/sweep.mjs');
 
 stop();
 
-const failed = dialect !== 0 || offersSuite !== 0 || attendanceRules !== 0 || attendanceSuite !== 0 || holdover !== 0 || fatigueRules !== 0 || fatigueSuite !== 0 || handoverBoard !== 0 || handoversSuite !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0 || sitelog !== 0 || sweepSuite !== 0 || contactsSuite !== 0 || ordersSuite !== 0 || visitsSuite !== 0 || hiringSuite !== 0 || dispatchSuite !== 0 || correctionsSuite !== 0 || agreementsSuite !== 0 || confirmationsSuite !== 0 || vehiclesSuite !== 0 || expensesSuite !== 0 || ptoSuite !== 0 || commendationsSuite !== 0 || overtimeSuite !== 0 || holidaysSuite !== 0 || signoffsSuite !== 0 || trainingSuite !== 0 || conductSuite !== 0;
+const failed = dialect !== 0 || checkInRules !== 0 || offersSuite !== 0 || locationsSuite !== 0 || attendanceRules !== 0 || attendanceSuite !== 0 || holdover !== 0 || fatigueRules !== 0 || fatigueSuite !== 0 || handoverBoard !== 0 || handoversSuite !== 0 || equipment !== 0 || flags !== 0 || core !== 0 || features !== 0 || shifts !== 0 || portal !== 0 || invoices !== 0 || email !== 0 || security !== 0 || roles !== 0 || tracking !== 0 || payroll !== 0 || requests !== 0 || postlog !== 0 || watch !== 0 || sitelog !== 0 || sweepSuite !== 0 || contactsSuite !== 0 || ordersSuite !== 0 || visitsSuite !== 0 || hiringSuite !== 0 || dispatchSuite !== 0 || correctionsSuite !== 0 || agreementsSuite !== 0 || confirmationsSuite !== 0 || vehiclesSuite !== 0 || expensesSuite !== 0 || ptoSuite !== 0 || commendationsSuite !== 0 || overtimeSuite !== 0 || holidaysSuite !== 0 || signoffsSuite !== 0 || trainingSuite !== 0 || conductSuite !== 0;
 if (failed && serverLog.includes('error')) {
   console.error('\nServer-side errors during the run:\n');
   const lines = serverLog

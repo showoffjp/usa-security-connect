@@ -2061,6 +2061,84 @@ for (const u of STAFF) {
   await api(`/admin/shifts/${made.id}`, adminToken, { method: 'DELETE' });
 }
 
+/* ------------------------------- round 37: accurate pins, and check-ins on time --- */
+{
+  console.log('\n--- Locations and check-ins: every pin against its address, and the Check in button appearing on time ---');
+  const api = async (path, token, init = {}) =>
+    (await fetch(`${WEB}/api${path}`, { ...init, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })).json();
+  const signInApi = async (code, pin) => api('/auth/login', null, { method: 'POST', body: JSON.stringify({ employeeCode: code, pin }) });
+  const pinFor = (code) => String(((Number(code) * 7919) % 9000) + 1000);
+  const adminToken = (await signInApi('1001', '2468')).token;
+  const supToken = (await signInApi('1002', '3571')).token;
+
+  const admin = await watchedPage({ width: 1440, height: 900 });
+  await staffSignIn(admin.page, '1001', '2468');
+  await admin.page.goto(WEB + '/admin/sites');
+  await admin.page.waitForSelector('#location-check');
+  log(await admin.page.locator('#location-check .chip:has-text("All accurate")').count() === 1,
+    'every site and post pin is on its address, or was set at the post');
+  log(await admin.page.locator('#check-in-every').inputValue() === '60', 'check-ins are hourly unless set otherwise');
+  await checkScreen('admin: location check', admin.page, admin.problems);
+
+  // A pin dragged 900 m off is caught, and put back on the building in one click.
+  const check = await api('/admin/locations', adminToken);
+  const allPosts = check.sites.flatMap((s) => s.posts);
+  const desk = allPosts.find((p) => p.post_code === 'HV-03');
+  await api(`/admin/posts/${desk.id}`, adminToken, { method: 'PATCH', body: JSON.stringify({ latitude: desk.latitude + 900 / 111320, longitude: desk.longitude }) });
+  await admin.page.reload();
+  await admin.page.waitForSelector('#location-check .list-item');
+  const row = admin.page.locator('#location-check .list-item', { hasText: desk.name });
+  log(await row.locator('.chip:has-text("Pin is wrong")').count() === 1, 'a pin moved 900 m is listed as wrong, with how far');
+  await checkScreen('admin: a pin in the wrong place', admin.page, admin.problems);
+  await row.locator('button:has-text("Use the address")').click();
+  await admin.page.waitForSelector('#location-check .chip:has-text("All accurate")', { timeout: 10000 });
+  log(true, 'Use the address puts it back on the building');
+  await api(`/admin/locations/post/${desk.id}/survey`, supToken, { method: 'POST', body: JSON.stringify({ latitude: desk.latitude, longitude: desk.longitude, accuracy: desk.accuracy_m }) });
+
+  await admin.page.selectOption('#check-in-every', '30');
+  await admin.page.click('#check-in-settings button:has-text("Save")');
+  await admin.page.waitForSelector('.toast:has-text("every 30 min")', { timeout: 10000 });
+  log((await api('/admin/settings/check-ins', adminToken)).everyMin === 30, 'an administrator sets check-ins every 30 minutes for the company');
+  await api('/admin/settings/check-ins', adminToken, { method: 'PUT', body: JSON.stringify({ everyMin: 60 }) });
+  await admin.context.close();
+
+  // An officer clocked in: the card says when the next is due, and the
+  // button appears by itself five minutes before. The page's clock is run
+  // forward rather than waited out.
+  const lobby = allPosts.find((p) => p.post_code === 'CP-01');
+  let who = null;
+  for (let n = 1041; n >= 1025 && !who; n--) {
+    const c = String(n);
+    const r = await signInApi(c, pinFor(c));
+    if (r.token && !r.mustChangePin && !(await api('/timeclock/status', r.token)).onDuty) who = { code: c, token: r.token };
+  }
+  const clockIn = who && (await api('/timeclock/clock-in', who.token, { method: 'POST', body: JSON.stringify({ postId: lobby.id, latitude: lobby.latitude, longitude: lobby.longitude, accuracy: 5, method: 'gps' }) }));
+  log(Boolean(clockIn?.entry), 'an officer clocks in at the Capital Plaza lobby', who?.code);
+  if (clockIn?.entry) {
+    const phone = await watchedPage({ width: 390, height: 844 });
+    await phone.context.grantPermissions(['geolocation']);
+    await phone.context.setGeolocation({ latitude: lobby.latitude, longitude: lobby.longitude, accuracy: 5 });
+    await phone.page.clock.install();
+    await staffSignIn(phone.page, who.code, pinFor(who.code));
+    await phone.page.waitForSelector('#check-in', { timeout: 10000 });
+    log(await phone.page.locator('#check-in :text("Next check-in at")').count() === 1 && await phone.page.locator('#check-in button').count() === 0,
+      'their home screen says when the next check-in is, with no button yet');
+    await checkScreen('officer: next check-in', phone.page, phone.problems);
+    await phone.page.clock.fastForward('56:00');
+    await phone.page.waitForSelector('#check-in button:has-text("Check in")', { timeout: 20000 });
+    log(true, 'five minutes before it is due, the Check in button appears by itself');
+    await checkScreen('officer: check-in due', phone.page, phone.problems);
+    await phone.page.click('#check-in button:has-text("Check in")');
+    await phone.page.waitForSelector('.toast:has-text("at your post")', { timeout: 20000 });
+    await phone.page.waitForSelector('#check-in :text("Last checked in")', { timeout: 10000 });
+    log(true, 'checking in sends where they are, says it was at the post, and the card goes back to the next one');
+    const punch = (await api(`/admin/punches?type=check_in&userId=${clockIn.entry.user_id}`, adminToken)).punches?.[0];
+    log(punch?.geofence === 'inside', 'the punch log has the check-in, inside the geofence');
+    await phone.context.close();
+    await api('/timeclock/clock-out', who.token, { method: 'POST', body: JSON.stringify({ latitude: lobby.latitude, longitude: lobby.longitude, accuracy: 5 }) });
+  }
+}
+
 await browser.close();
 console.log(`\n${failures === 0 ? `Every role: all ${checks} checks passed.` : `Every role: ${failures} of ${checks} CHECK(S) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

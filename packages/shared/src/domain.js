@@ -116,6 +116,32 @@ export const SHIFT_REQUEST_STATUS = [
 ];
 
 /**
+ * Where sites and posts are. Each pin is compared with its street address as
+ * a geocoder finds it. A match on the building itself should be within
+ * `pinToleranceM` (about 400 ft); a match only placed along the street (US
+ * Census address ranges) can be a few hundred metres out on a big property,
+ * so it is judged to `streetToleranceM`. Past three times the tolerance a pin
+ * is taken to be wrong. A post with no address of its own should be on its
+ * site's property: within `postFromSiteM` of the site pin. A pin set from a
+ * phone standing at the post, with a fix good to `surveyAccuracyM` (about
+ * 80 ft), is trusted over any address.
+ */
+export const LOCATION_RULES = { pinToleranceM: 120, streetToleranceM: 300, postFromSiteM: 600, surveyAccuracyM: 25, goodFixM: 15, bestFixSeconds: 10 };
+export const LOCATION_STATE_LABEL = {
+  surveyed: 'Set at the post',
+  ok: 'Matches the address',
+  check: 'Check the pin',
+  wrong: 'Pin is wrong',
+  no_pin: 'No pin',
+  no_match: 'Address not found',
+  unchecked: 'Not checked yet',
+};
+/** Check-in cadences an administrator picks from, in minutes; 0 is off. */
+export const CHECK_IN_CHOICES = [0, 15, 30, 45, 60, 90, 120, 180, 240];
+export const checkInLabel = (min) =>
+  !min ? 'Off' : min < 60 ? `Every ${min} min` : min === 60 ? 'Every hour' : min % 60 ? `Every ${Math.floor(min / 60)} h ${min % 60} min` : `Every ${min / 60} hours`;
+
+/**
  * Shift offers: an open shift sent to several officers at once. Where one
  * stands, worked out from the offer and its shift together, so an offer
  * whose shift was taken some other way reads as covered on its own.
@@ -578,6 +604,7 @@ export const FLAG_TYPES = {
   UNSCHEDULED_SHIFT: 'unscheduled_shift',
   OFF_POST: 'off_post',
   EQUIPMENT_NOT_RETURNED: 'equipment_not_returned',
+  CHECK_IN_AWAY: 'check_in_away',
 };
 
 export const FLAG_LABEL = {
@@ -590,10 +617,12 @@ export const FLAG_LABEL = {
   unscheduled_shift: 'Unscheduled shift',
   equipment_not_returned: 'Equipment not returned',
   off_post: 'Left the post geofence',
+  check_in_away: 'Checked in away from the post',
 };
 
 export const FLAG_SEVERITY = {
   equipment_not_returned: 'warning',
+  check_in_away: 'warning',
   late_clock_in: 'warning',
   missed_clock_out: 'warning',
   missed_check_in: 'critical',

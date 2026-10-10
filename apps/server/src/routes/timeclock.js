@@ -9,8 +9,10 @@ import {
   evaluateGeofence,
   locationOffset,
   minutesBetween,
+  checkInLabel,
 } from '../shared.js';
 import { recordPing } from '../services/tracking.js';
+import { checkInMinutesFor } from '../services/settings.js';
 import { confirmable, withConfirmation } from '../services/confirmations.js';
 import { flagOutstanding, outstandingForShift } from '../services/equipment.js';
 import { releaseCallsOnClockOut, OPEN_SQL } from '../services/dispatch.js';
@@ -32,6 +34,30 @@ const geoSchema = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   accuracy: z.number().nonnegative().nullable().optional(),
 });
+
+/** How often this officer checks in on this shift, and how the last one went. */
+async function checkInPlan(entry, post) {
+  const every = await checkInMinutesFor(post);
+  const last = await db
+    .prepare(
+      `SELECT responded_at, status, geofence, distance_m, accuracy FROM status_checks
+       WHERE time_entry_id = ? AND status IN ('ok','late') ORDER BY responded_at DESC LIMIT 1`
+    )
+    .get(entry.id);
+  const n = await db
+    .prepare(
+      `SELECT COUNT(*) FILTER (WHERE status IN ('ok','late')) AS answered, COUNT(*) FILTER (WHERE status = 'missed') AS missed
+       FROM status_checks WHERE time_entry_id = ?`
+    )
+    .get(entry.id);
+  return {
+    every_min: every,
+    label: checkInLabel(every),
+    last: last ? isoFields(last, ['responded_at']) : null,
+    answered: Number(n.answered || 0),
+    missed: Number(n.missed || 0),
+  };
+}
 
 async function openEntryFor(userId) {
   return (await db
@@ -107,11 +133,13 @@ timeclockRouter.get(
       .get(req.user.id));
 
     let checkIn = null;
+    let checkIns = null;
     let minutesOnPost = null;
     if (openEntry) {
       const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(openEntry.post_id));
       await scheduleNextCheckIn(openEntry, post);
       checkIn = await currentCheckIn(openEntry.id);
+      checkIns = await checkInPlan(openEntry, post);
       minutesOnPost = minutesBetween(sqlToIso(openEntry.clock_in_at), new Date().toISOString());
     }
 
@@ -165,6 +193,7 @@ timeclockRouter.get(
         : null,
       lastEntry: lastEntry ? isoFields(lastEntry, ENTRY_TIMES) : null,
       checkIn,
+      checkIns,
       weekMinutes: week.minutes,
       unreadBroadcasts: unread.n,
       trainingDue: trainingDue.n,
@@ -453,7 +482,7 @@ timeclockRouter.get(
     if (!entry) return res.json({ checkIn: null });
     const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
     await scheduleNextCheckIn(entry, post);
-    res.json({ checkIn: await currentCheckIn(entry.id) });
+    res.json({ checkIn: await currentCheckIn(entry.id), checkIns: await checkInPlan(entry, post) });
   })
 );
 
@@ -471,6 +500,7 @@ timeclockRouter.post(
       userId: req.user.id,
       lat: body.latitude ?? null,
       lng: body.longitude ?? null,
+      accuracy: body.accuracy ?? null,
       note: body.note,
     });
     if (!result) throw new HttpError(409, 'That check-in has already been answered or is no longer active.');
@@ -487,10 +517,15 @@ timeclockRouter.post(
         source: 'check_in',
       });
     }
+    const post = entry ? await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id) : null;
     res.json({
       status: result.status,
       respondedAt: result.responded_at,
+      // Where they were, against the post: inside, outside (with how far), or
+      // unverified when the phone's fix was too rough to judge.
+      location: { geofence: result.geofence, distance_m: result.distance_m, radius_m: result.radius_m, accuracy: result.accuracy },
       next: entry ? await currentCheckIn(entry.id) : null,
+      checkIns: entry ? await checkInPlan(entry, post) : null,
     });
   })
 );

@@ -469,7 +469,7 @@ export async function loadPunches(query) {
     const rows = await db
       .prepare(
         `SELECT ${who}, sc.id AS check_id, sc.status AS check_status, sc.due_at, sc.responded_at,
-                sc.latitude, sc.longitude, sc.note AS check_note
+                sc.latitude, sc.longitude, sc.note AS check_note, sc.accuracy, sc.geofence, sc.distance_m
          FROM status_checks sc
          JOIN time_entries te ON te.id = sc.time_entry_id
          JOIN users u ON u.id = te.user_id

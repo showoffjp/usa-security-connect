@@ -11,8 +11,9 @@
 
 import { db } from '../lib/db.js';
 import { sqlToIso, pruneRateLimits } from '../lib/http.js';
-import { RULES, FLAG_TYPES, FLAG_SEVERITY, minutesBetween } from '../shared.js';
+import { RULES, FLAG_TYPES, FLAG_SEVERITY, minutesBetween, evaluateGeofence } from '../shared.js';
 import { notifyDueCheckIns, notifyNewFlags } from './push.js';
+import { checkInMinutesFor, defaultCheckInMinutes } from './settings.js';
 
 /** Store timestamps the way SQLite's datetime() does, so comparisons line up. */
 /**
@@ -50,20 +51,22 @@ export async function raiseFlag({ userId, type, occurredAt, refType, refId, deta
 /* ------------------------------------------------------------ check-ins --- */
 
 /**
- * Queue the next status check-in for an open shift.
+ * Queue the next status check-in for an open shift: the post's interval, or
+ * the company's when the post follows the default, counted from the clock-in
+ * and then from each one due. 0 means no check-ins at that post.
  * Officers must acknowledge within `window_minutes` or the check is missed.
  */
+const pendingCheckIn = (timeEntryId) =>
+  db.prepare(`SELECT * FROM status_checks WHERE time_entry_id = ? AND status = 'pending' ORDER BY due_at LIMIT 1`).get(timeEntryId);
+
 export async function scheduleNextCheckIn(timeEntry, post) {
-  const interval = post?.check_in_interval_min || RULES.defaultCheckInIntervalMinutes;
+  const interval = await checkInMinutesFor(post);
   if (!interval || interval <= 0) return null;
 
-  const open = (await db
-    .prepare(
-      `SELECT * FROM status_checks
-       WHERE time_entry_id = ? AND status = 'pending'
-       ORDER BY due_at LIMIT 1`
-    )
-    .get(timeEntry.id));
+  const open = await pendingCheckIn(timeEntry.id);
+  // Its window ran out unanswered and no sweep has been since (a serverless
+  // deployment sweeps on a timer): count it missed now, which queues the next.
+  if (open && windowClosed(open)) return (await missCheckIn(open)) || pendingCheckIn(timeEntry.id);
   if (open) return open;
 
   const last = (await db
@@ -83,15 +86,26 @@ export async function scheduleNextCheckIn(timeEntry, post) {
   return (await db.prepare(`SELECT * FROM status_checks WHERE id = ?`).get(info.lastInsertRowid));
 }
 
+/**
+ * Check-ins still waiting at posts where they have since been turned off, for
+ * the whole company or the one post: withdrawn, so nobody is pushed for one or
+ * marked as having missed it. Returns how many.
+ */
+export async function withdrawCheckInsTurnedOff() {
+  const { changes } = await db
+    .prepare(
+      `UPDATE status_checks SET status = 'cancelled'
+       WHERE status = 'pending' AND time_entry_id IN (
+         SELECT te.id FROM time_entries te JOIN posts p ON p.id = te.post_id
+         WHERE COALESCE(p.check_in_interval_min, ?) = 0)`
+    )
+    .run(await defaultCheckInMinutes());
+  return changes;
+}
+
 /** The check-in the officer is being asked for right now, if any. */
 export async function currentCheckIn(timeEntryId) {
-  const row = (await db
-    .prepare(
-      `SELECT * FROM status_checks
-       WHERE time_entry_id = ? AND status = 'pending'
-       ORDER BY due_at LIMIT 1`
-    )
-    .get(timeEntryId));
+  const row = await pendingCheckIn(timeEntryId);
   if (!row) return null;
 
   const dueAt = new Date(fromSql(row.due_at));
@@ -109,7 +123,12 @@ export async function currentCheckIn(timeEntryId) {
   };
 }
 
-export async function answerCheckIn({ checkId, userId, lat, lng, note }) {
+/**
+ * The officer answers a check-in. Where they were is judged against the post
+ * like a clock-in: answered from outside the geofence it still counts, but
+ * raises a flag saying how far away they were.
+ */
+export async function answerCheckIn({ checkId, userId, lat, lng, accuracy = null, note }) {
   const row = (await db.prepare(`SELECT * FROM status_checks WHERE id = ? AND user_id = ?`).get(checkId, userId));
   if (!row || row.status !== 'pending') return null;
 
@@ -117,12 +136,28 @@ export async function answerCheckIn({ checkId, userId, lat, lng, note }) {
   const now = new Date();
   // Answering after the window still counts, but it is recorded as late.
   const status = now > new Date(dueAt.getTime() + row.window_minutes * 60000) ? 'late' : 'ok';
+  const at = await db
+    .prepare(`SELECT p.* FROM time_entries te JOIN posts p ON p.id = te.post_id WHERE te.id = ?`)
+    .get(row.time_entry_id);
+  const fence = evaluateGeofence({ lat: lat ?? null, lng: lng ?? null, accuracy, post: at });
 
   (await db.prepare(
     `UPDATE status_checks
-     SET responded_at = ?, status = ?, latitude = ?, longitude = ?, note = ?
+     SET responded_at = ?, status = ?, latitude = ?, longitude = ?, note = ?, accuracy = ?, geofence = ?, distance_m = ?
      WHERE id = ?`
-  ).run(toSql(now), status, lat ?? null, lng ?? null, note ?? null, checkId));
+  ).run(toSql(now), status, lat ?? null, lng ?? null, note ?? null, accuracy ?? null, fence.status, fence.distance ?? null, checkId));
+
+  if (fence.status === 'outside') {
+    await raiseFlag({
+      userId,
+      type: FLAG_TYPES.CHECK_IN_AWAY,
+      occurredAt: now,
+      refType: 'status_check',
+      refId: checkId,
+      severity: 'warning',
+      detail: { distance_m: fence.distance, radius_m: fence.radius, accuracy: accuracy ?? null, post: at?.name },
+    });
+  }
 
   if (status === 'late') {
     await raiseFlag({
@@ -142,10 +177,36 @@ export async function answerCheckIn({ checkId, userId, lat, lng, note }) {
     await scheduleNextCheckIn(entry, post);
   }
 
-  return { ...row, status, responded_at: now.toISOString() };
+  return { ...row, status, responded_at: now.toISOString(), geofence: fence.status, distance_m: fence.distance ?? null, radius_m: fence.radius ?? null, accuracy: accuracy ?? null };
 }
 
 /* --------------------------------------------------------------- sweeps --- */
+
+const windowClosed = (check, now = new Date()) =>
+  new Date(fromSql(check.due_at)).getTime() + check.window_minutes * 60000 < now.getTime();
+
+/**
+ * A check-in whose window ran out unanswered: marked missed, flagged, and the
+ * next one queued so the officer still gets the next prompt. Only once, if the
+ * sweep and the officer's own screen get to it together. Returns the next
+ * check-in, or null when it had already been dealt with or the shift is over.
+ */
+async function missCheckIn(check) {
+  const { changes } = await db.prepare(`UPDATE status_checks SET status = 'missed' WHERE id = ? AND status = 'pending'`).run(check.id);
+  if (!changes) return null;
+  await raiseFlag({
+    userId: check.user_id,
+    type: FLAG_TYPES.MISSED_CHECK_IN,
+    occurredAt: fromSql(check.due_at),
+    refType: 'status_check',
+    refId: check.id,
+    detail: { due_at: fromSql(check.due_at), answered: false },
+  });
+  const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(check.time_entry_id));
+  if (!entry || entry.clock_out_at) return null;
+  const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
+  return (await scheduleNextCheckIn(entry, post)) || null;
+}
 
 /** Status check-ins whose window has fully elapsed with no answer. */
 async function sweepMissedCheckIns(now) {
@@ -159,25 +220,9 @@ async function sweepMissedCheckIns(now) {
     )
     .all(toSql(now)));
 
-  for (const check of overdue) {
-    (await db.prepare(`UPDATE status_checks SET status = 'missed' WHERE id = ?`).run(check.id));
-    await raiseFlag({
-      userId: check.user_id,
-      type: FLAG_TYPES.MISSED_CHECK_IN,
-      occurredAt: fromSql(check.due_at),
-      refType: 'status_check',
-      refId: check.id,
-      detail: { due_at: fromSql(check.due_at), answered: false },
-    });
-
-    // Keep the cadence going so the officer still gets the next prompt.
-    const entry = (await db.prepare(`SELECT * FROM time_entries WHERE id = ?`).get(check.time_entry_id));
-    if (entry && !entry.clock_out_at) {
-      const post = (await db.prepare(`SELECT * FROM posts WHERE id = ?`).get(entry.post_id));
-      await scheduleNextCheckIn(entry, post);
-    }
-  }
-  return overdue.length;
+  let missed = 0;
+  for (const check of overdue) if (await missCheckIn(check)) missed += 1;
+  return missed;
 }
 
 /** Scheduled shifts nobody ever clocked into. */

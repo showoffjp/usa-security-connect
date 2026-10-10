@@ -28,6 +28,7 @@ import { panicRouter, breaksRouter } from './routes/safety.js';
 import { reportsRouter } from './routes/reports.js';
 import { shiftRequestsRouter } from './routes/shiftRequests.js';
 import { shiftOffersRouter } from './routes/shiftOffers.js';
+import { locationsRouter } from './routes/locations.js';
 import { clientRouter } from './routes/client.js';
 import { clientAdminRouter } from './routes/clientAdmin.js';
 import { noticesRouter } from './routes/notices.js';
@@ -188,6 +189,7 @@ app.use('/api/admin/pay-rates', payRatesRouter);
 app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin/payroll', payrollRouter);
 app.use('/api/admin/coverage-requests', coverageRequestsRouter);
+app.use('/api/admin', locationsRouter);
 app.use('/api/admin', adminRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

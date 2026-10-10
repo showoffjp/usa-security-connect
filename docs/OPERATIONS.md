@@ -12,11 +12,16 @@ and the API, web app and mobile app all follow.
 | `earlyClockInMinutes` | 30 | How early an officer may start the clock. Earlier is refused. |
 | `earlyDepartureMinutes` | 10 | Leaving more than this before shift end is flagged. |
 | `noShowMinutes` | 30 | No clock-in this long after start ⇒ the shift is a no-show. |
-| `defaultCheckInIntervalMinutes` | 60 | Status check-in cadence (overridable per post). |
+| `defaultCheckInIntervalMinutes` | 60 | The company's status check-in interval until an administrator sets another on Sites & posts (stored as `checkIns.everyMin`). Each post follows it or sets its own; 0 is off. |
 | `checkInWindowMinutes` | 10 | How long the officer has to answer before it is missed. |
 | `autoClockOutAfterMinutes` | 120 | Shift left open this long past its end is auto-closed and flagged. An officer whose relief has not clocked in is held over instead, for up to 8 hours; once the relief clocks in, a forgotten clock-out closes at the handover, so the held-over time is paid. |
 | `defaultGeofenceRadiusM` | 150 | Accepted distance from the post (overridable per post). |
 | `maxTrustedAccuracyM` | 100 | Worse GPS accuracy than this is reported as *unverified*, not a violation. |
+| `LOCATION_RULES.goodFixM` / `bestFixSeconds` | 15 / 10 | The apps wait up to this long for a fix this good before sending a position, keeping the best one seen. |
+| `LOCATION_RULES.pinToleranceM` | 120 | A pin this close to its address geocoded to the building is right (about 400 ft). |
+| `LOCATION_RULES.streetToleranceM` | 300 | The same for an address only placed along the street (US Census ranges). |
+| `LOCATION_RULES.postFromSiteM` | 600 | A post with no address of its own should be this close to its site's pin. |
+| `LOCATION_RULES.surveyAccuracyM` | 25 | A pin set from a phone at the post needs a fix this good (about 80 ft). |
 | `maxPinAttempts` / `lockoutMinutes` | 5 / 15 | Failed PIN attempts before lockout, and for how long. |
 | `overtimeWeeklyHours` | 40 | Federal FLSA weekly line used for the overtime split. |
 | `locationPingSeconds` | 60 | How often an on-duty device reports its position. |
@@ -42,6 +47,7 @@ which is kept on the officer's record.
 | `early_departure` | warning | Clocked out more than 10 minutes early. |
 | `no_show` | critical | Scheduled shift with no clock-in 30 minutes after start. |
 | `unscheduled_shift` | info | Clocked in at a post with no matching shift. Not a fault — it tells dispatch coverage happened off-roster. |
+| `check_in_away` | warning | A status check-in answered from outside the post's geofence, with how far away. It still counts as answered. |
 | `off_post` | warning | A position reported mid-shift is outside the post's geofence. Raised once, on the way out — staying out does not raise another, walking back in and out again does. |
 
 ### Deliberate design choices
@@ -89,6 +95,48 @@ about where an off-duty worker is, is not a question this app should answer for 
 The mobile app tracks in the foreground only - while the app is open. Tracking with
 the phone in a pocket needs background location permission, which both app stores
 review closely and which is a policy decision to take deliberately.
+
+## Site and post locations
+
+The geofence every clock-in, check-in and position is judged against is drawn
+round the post's pin, so a pin in the wrong place is wrong for everyone. The
+**Location check** at the top of Sites & posts compares every pin with its street
+address and lists anything that does not match, with how far out it is.
+
+- **Best: set the pin standing at the post.** On a phone at the post (the gate, the
+  desk, the dock door), open the post and tap **Set from where I'm standing**. It is
+  only taken with a fix good to 25 m; indoors, step outside or near a window first.
+  A pin set this way is trusted over any address.
+- **Next best: the street address.** Search it in the post or site dialog. Each answer
+  says whether it found the building or only placed the number along the street; pick
+  a building answer and check the pin on the map. **Use the address** in the location
+  check does the same in one click.
+- With `USC_MAPS_API_KEY` set, Google answers and finds most buildings exactly.
+  Without it, OpenStreetMap and the US Census Bureau answer together: OpenStreetMap
+  finds many buildings, and the Census places the rest along the street, which on a
+  large property can be a few hundred metres out. That is why a street-only match is
+  allowed 300 m, and why setting large sites from the post itself is worth doing.
+- A post on a big property with no address of its own (a parking deck, a patrol
+  route) should be within 600 m of its site's pin; set it at the post.
+
+Answers are cached for 90 days; **Look up again** asks afresh.
+
+## Status check-ins
+
+After clocking in, an officer's home screen (web and phone) shows when the next
+check-in is due. Five minutes before, the **Check in** button appears by itself,
+and they have ten minutes from the due time to answer. Each answer carries the
+phone's best fix: inside the geofence it is simply recorded; outside it still counts
+but raises `check_in_away` with the distance, and the punch log shows it; a fix
+too rough to judge is *unverified* and not held against them. Missing one raises
+`missed_check_in`, and the next is queued either way: by the sweep, or by the
+officer's own screen when it looks first, so a deployment that sweeps rarely still
+moves them on to the next one on time (and the flag is raised only once).
+
+Set the company's interval on Sites & posts (administrators), and override it on
+any post that needs more or fewer; a post set to *Off* has none. Turning check-ins
+off, for the company or one post, withdraws any already waiting there, so nobody is
+pushed for one or marked as having missed it.
 
 ## Handovers
 
