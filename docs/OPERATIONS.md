@@ -22,6 +22,7 @@ and the API, web app and mobile app all follow.
 | `LOCATION_RULES.streetToleranceM` | 300 | The same for an address only placed along the street (US Census ranges). |
 | `LOCATION_RULES.postFromSiteM` | 600 | A post with no address of its own should be this close to its site's pin. |
 | `LOCATION_RULES.surveyAccuracyM` | 25 | A pin set from a phone at the post needs a fix this good (about 80 ft). |
+| `LOCATION_RULES.fixMaxFromPostM` | 25000 | A supervisor correcting where a punch was made can put it at most this far from the post (about 15 miles); further is refused as a typing slip. |
 | `maxPinAttempts` / `lockoutMinutes` | 5 / 15 | Failed PIN attempts before lockout, and for how long. |
 | `overtimeWeeklyHours` | 40 | Federal FLSA weekly line used for the overtime split. |
 | `locationPingSeconds` | 60 | How often an on-duty device reports its position. |
@@ -137,6 +138,40 @@ Set the company's interval on Sites & posts (administrators), and override it on
 any post that needs more or fewer; a post set to *Off* has none. Turning check-ins
 off, for the company or one post, withdraws any already waiting there, so nobody is
 pushed for one or marked as having missed it.
+
+## Correcting where a punch was made
+
+A phone's reading can be wrong: GPS drifting in a parking garage, a stale fix from
+before the officer arrived, a phone reporting the cell tower. When a supervisor or
+administrator knows where the officer really was (they saw them, the camera did, the
+client called), they correct the punch:
+
+- **Punch log**: **Correct** on any clock-in, clock-out or answered check-in.
+- **Flags**: **Correct location** on a clock-in outside the geofence
+  (`geofence_violation`) or a check-in away from the post (`check_in_away`).
+
+The dialog shows the post and its geofence, where the phone said, and a pin to move:
+**At the post** puts it on the post's own pin, or drag it, click the map, or type the
+exact coordinates (latitude, then longitude; a Google Maps link pasted in works too).
+It says before saving whether the place is inside the geofence and how far from the
+post. A reason is required.
+
+Saving judges the punch against its post again, exactly as the phone's reading was:
+
+| Corrected to | The punch | Its flag |
+|--------------|-----------|----------|
+| Inside the geofence | Counts as on post in the punch log, scorecards and site health | An open one is closed, the reason as its note |
+| Outside the geofence | Counts as away, with the corrected distance | Raised if there was none, reopened if closed, brought up to date if open |
+| A clock-out, either way | The verdict and distance change | Clock-outs raise no flag of their own |
+
+Every correction is kept (`punch_location_fixes`) with the place before and after, the
+verdict and distance each way, who made it, when and why; the first one's "before" is
+what the phone reported, so that is never lost. The punch log shows **Corrected** with
+the latest, and its CSV adds who corrected it, why, and the phone's coordinates. The
+GPS trail (`gps_pings`) is left as the phone reported it. Nobody can correct their own
+punches; officers and clients cannot correct any. A place more than
+`fixMaxFromPostM` from the post is refused, which catches a dropped minus sign or the
+two numbers swapped.
 
 ## Handovers
 

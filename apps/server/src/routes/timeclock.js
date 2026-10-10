@@ -405,7 +405,7 @@ timeclockRouter.post(
     (await db.prepare(
       `UPDATE time_entries
        SET clock_out_at = ?, clock_out_lat = ?, clock_out_lng = ?, clock_out_accuracy = ?,
-           clock_out_geofence = ?, minutes_worked = ?
+           clock_out_geofence = ?, clock_out_distance_m = ?, minutes_worked = ?
        WHERE id = ?`
     ).run(
       toSql(now),
@@ -413,6 +413,7 @@ timeclockRouter.post(
       body.longitude ?? null,
       body.accuracy ?? null,
       fence.status,
+      fence.distance ?? null,
       minutes,
       entry.id
     ));

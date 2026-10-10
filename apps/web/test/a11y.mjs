@@ -362,6 +362,20 @@ await page.locator('tr', { hasText: 'Main Lobby Console' }).locator('button:has-
 await page.waitForSelector('[role="dialog"]');
 await audit(page, "Sites: a post's pin and check-ins", null);
 await page.keyboard.press('Escape');
+// Correcting where a punch was made: the punch log with a corrected clock-in,
+// and the dialog with the map, the coordinates and the earlier correction.
+await page.goto(`${WEB}/admin/punches`, { waitUntil: 'networkidle' });
+{
+  const d = new Date(Date.now() - 5 * 86400000);
+  await page.fill('#p-from', `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+}
+const corrected = page.locator('tr', { has: page.locator('.chip:text-is("Corrected")') }).first();
+await corrected.waitFor({ timeout: 15000 });
+await audit(page, 'Punch log: a corrected clock-in', null);
+await corrected.locator('button:has-text("Correct")').click();
+await page.waitForSelector('#punch-location #fix-coordinates');
+await audit(page, 'Punch log: correct where a punch was made', null);
+await page.keyboard.press('Escape');
 await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
 await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click();
 await page.waitForSelector('[role="dialog"]');

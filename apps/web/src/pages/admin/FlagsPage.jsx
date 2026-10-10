@@ -6,6 +6,16 @@ import {
   LoadingPage, Empty, Icon, Chip, StatusChip, Modal, Field, Segmented, useToast,
 } from '../../components/ui.jsx';
 import { FLAG_LABEL, FLAG_TYPES } from '@shared/domain.js';
+import { useAuth } from '../../lib/auth.jsx';
+import PunchLocationDialog from '../../components/PunchLocationDialog.jsx';
+
+/** The punch a location flag is about, when its location can be corrected. */
+const punchOf = (f) =>
+  f.type === FLAG_TYPES.GEOFENCE_VIOLATION && f.ref_type === 'time_entry'
+    ? { kind: 'clock_in', refId: f.ref_id }
+    : f.type === FLAG_TYPES.CHECK_IN_AWAY && f.ref_type === 'status_check'
+      ? { kind: 'check_in', refId: f.ref_id }
+      : null;
 
 /** Human sentence for the JSON we stored alongside each flag. */
 function describe(flag) {
@@ -27,7 +37,14 @@ function describe(flag) {
     case FLAG_TYPES.GEOFENCE_VIOLATION:
       return [
         d.distance_m != null ? `Clocked in ${d.distance_m}m from the post (limit ${d.radius_m}m).` : 'Location could not be verified.',
-        d.reason ? `Officer's reason: "${d.reason}"` : null,
+        d.corrected ? `Location corrected: "${d.reason}"` : d.reason ? `Officer's reason: "${d.reason}"` : null,
+      ]
+        .filter(Boolean)
+        .join(' ');
+    case FLAG_TYPES.CHECK_IN_AWAY:
+      return [
+        `Checked in ${d.distance_m}m from ${d.post || 'the post'} (limit ${d.radius_m}m).`,
+        d.corrected ? `Location corrected: "${d.reason}"` : null,
       ]
         .filter(Boolean)
         .join(' ');
@@ -109,6 +126,8 @@ export default function FlagsPage() {
   const [resolved, setResolved] = useState('open');
   const [typeFilter, setTypeFilter] = useState('');
   const [active, setActive] = useState(null);
+  const [fixing, setFixing] = useState(null);
+  const { user } = useAuth();
 
   const load = async () => {
     try {
@@ -144,7 +163,7 @@ export default function FlagsPage() {
         <div className="eyebrow">Compliance</div>
         <h1>Flags</h1>
         <p className="lead">
-          Raised automatically from clock, check-in and geofence data. Closing one records what you did about it.
+          Raised automatically from clock, check-in and geofence data. Closing one records what you did about it. A punch the phone put in the wrong place can have its location corrected, which closes its flag.
         </p>
       </div>
 
@@ -217,15 +236,38 @@ export default function FlagsPage() {
                     </div>
                   )}
                 </div>
-                {!f.resolved_at && (
-                  <button className="btn btn-sm btn-primary" onClick={() => setActive(f)}>
-                    Resolve
-                  </button>
-                )}
+                <div className="row wrap" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                  {punchOf(f) && f.user_id !== user?.id && (
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setFixing(punchOf(f))}
+                      aria-label={`Correct the location: ${f.label}, ${f.officer}`}
+                    >
+                      <Icon name="pin" size={14} /> Correct location
+                    </button>
+                  )}
+                  {!f.resolved_at && (
+                    <button className="btn btn-sm btn-primary" onClick={() => setActive(f)}>
+                      Resolve
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {fixing && (
+        <PunchLocationDialog
+          kind={fixing.kind}
+          refId={fixing.refId}
+          onClose={() => setFixing(null)}
+          onSaved={() => {
+            setFixing(null);
+            load();
+          }}
+        />
       )}
 
       {active && (

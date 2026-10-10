@@ -8,8 +8,9 @@
  */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { db } from '../lib/db.js';
-import { HttpError, wrap, isoFields, sqlToIso, parseDay, toDateString, limitParam } from '../lib/http.js';
+import { HttpError, wrap, parse, isoFields, sqlToIso, parseDay, toDateString, limitParam } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import {
   ROLES,
@@ -23,6 +24,7 @@ import {
   toHours,
 } from '../shared.js';
 import { toSql, sweep } from '../services/compliance.js';
+import { fixPunchLocation, fixKey, fixSummary, fixesForEntries, groupFixes, loadPunch } from '../services/punchLocations.js';
 
 export const liveRouter = Router();
 liveRouter.use(requireAuth, requireRole(ROLES.SUPERVISOR));
@@ -427,7 +429,7 @@ export async function loadPunches(query) {
     const rows = await db
       .prepare(
         `SELECT ${who}, te.clock_out_at AS at, te.clock_out_lat AS latitude, te.clock_out_lng AS longitude,
-                te.clock_out_accuracy AS accuracy, te.clock_out_geofence AS geofence,
+                te.clock_out_accuracy AS accuracy, te.clock_out_geofence AS geofence, te.clock_out_distance_m AS distance_m,
                 te.method, te.device_id, te.minutes_worked, te.auto_closed, te.unpaid_break_minutes
          ${base} WHERE te.clock_out_at >= ? AND te.clock_out_at < ? ${filters()}`
       )
@@ -436,7 +438,7 @@ export async function loadPunches(query) {
       const notes = [`${toHours(r.minutes_worked)}h worked`];
       if (r.unpaid_break_minutes) notes.push(`${r.unpaid_break_minutes} min unpaid break`);
       if (r.auto_closed) notes.push('auto-closed: officer never clocked out');
-      out.push({ ...r, type: 'clock_out', distance_m: null, note: notes.join('; ') });
+      out.push({ ...r, type: 'clock_out', note: notes.join('; ') });
     }
   }
 
@@ -494,9 +496,15 @@ export async function loadPunches(query) {
     }
   }
 
+  // Corrections a supervisor made to where a punch was, with the phone's own reading.
+  const fixes = groupFixes(await fixesForEntries(out.filter((r) => FIXABLE.includes(r.type)).map((r) => r.entry_id)));
+
   const punches = out
     .map((r) => ({
       id: `${r.type}-${r.check_id ?? r.break_id ?? r.entry_id}`,
+      // What /punches/:type/:ref_id/location corrects: the check-in, or the time entry.
+      ref_id: FIXABLE.includes(r.type) ? (r.type === 'check_in' ? r.check_id : r.entry_id) : null,
+      location_fix: FIXABLE.includes(r.type) ? fixSummary(fixes.get(fixKey(r.type, r.type === 'check_in' ? r.check_id : r.entry_id))) : null,
       type: r.type,
       label: PUNCH_LABEL[r.type],
       at: sqlToIso(r.at),
@@ -521,6 +529,9 @@ export async function loadPunches(query) {
 
   return { from: toDateString(from), to: toDateString(toDay), punches };
 }
+
+/** Punches whose location a supervisor can correct: the ones made with a location. */
+const FIXABLE = ['clock_in', 'clock_out', 'check_in'];
 
 punchesRouter.get(
   '/',
@@ -555,6 +566,7 @@ punchesRouter.get(
     const header = [
       'When (UTC)', 'Punch', 'Employee code', 'Officer', 'Classification', 'Site', 'Post',
       'Latitude', 'Longitude', 'Accuracy (m)', 'Geofence', 'Distance from post (m)', 'Method', 'Device', 'Note',
+      'Location corrected by', 'Correction reason', 'Phone reported latitude', 'Phone reported longitude',
     ];
     const lines = [header.join(',')];
     for (const p of punches) {
@@ -563,6 +575,7 @@ punchesRouter.get(
           p.at, p.label, p.employee_code, p.officer, p.employment_type === '1099' ? '1099' : 'W-2',
           p.site_name, p.post_name, p.latitude, p.longitude, p.accuracy, p.geofence, p.distance_m,
           p.method, p.device_id, p.note,
+          p.location_fix?.by, p.location_fix?.reason, p.location_fix?.original.latitude, p.location_fix?.original.longitude,
         ]
           .map(csvCell)
           .join(',')
@@ -571,5 +584,54 @@ punchesRouter.get(
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="punches-${from}-to-${to}.csv"`);
     res.send(lines.join('\n'));
+  })
+);
+
+/* ======================================================= location fixes === */
+
+const fixParams = (req) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(404, 'Punch not found.');
+  return { kind: req.params.kind, id };
+};
+
+/** One punch's location, its post, and every correction made to it. */
+punchesRouter.get(
+  '/:kind/:id/location',
+  wrap(async (req, res) => {
+    const { kind, id } = fixParams(req);
+    const punch = await loadPunch(kind, id);
+    const fixes = (await fixesForEntries([punch.time_entry_id])).filter((f) => f.kind === kind && (kind !== 'check_in' || f.status_check_id === punch.id));
+    res.json({ punch, fixes, summary: fixSummary(fixes) });
+  })
+);
+
+const fixSchema = z
+  .object({
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    atPost: z.boolean().optional(),
+    reason: z.string().trim().min(5, 'Say why the location is being corrected (at least a few words).').max(500),
+  })
+  .refine((b) => b.atPost || (b.latitude != null && b.longitude != null), 'Give the latitude and longitude, or put it at the post.');
+
+/**
+ * Correct where a clock-in, clock-out or check-in was made: supervisors and
+ * administrators, never on their own punches. See services/punchLocations.js.
+ */
+punchesRouter.post(
+  '/:kind/:id/location',
+  wrap(async (req, res) => {
+    const { kind, id } = fixParams(req);
+    const b = parse(fixSchema, req.body);
+    const result = await fixPunchLocation({
+      kind,
+      id,
+      place: b.atPost ? { atPost: true } : { latitude: b.latitude, longitude: b.longitude },
+      reason: b.reason,
+      by: req.user.id,
+      ip: req.ip,
+    });
+    res.json(result);
   })
 );
