@@ -320,6 +320,33 @@ await page.keyboard.press('Escape');
     console.log('SKIP  over the attendance limit: no call-off on the demo just now');
   }
 }
+// An open shift out to officers as an offer: who was asked and what they
+// said in the shift dialog, then more of the suggestions ticked to ask.
+{
+  const API = process.env.USC_API_URL || 'http://localhost:4000/api';
+  const token = await page.evaluate(() => localStorage.getItem('usc.token'));
+  const out = await (await fetch(`${API}/shift-offers`, { headers: { authorization: `Bearer ${token}` } })).json();
+  const o = (out.offers || []).find((x) => x.state === 'open');
+  if (o) {
+    const d = new Date(o.starts_at);
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const week = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await page.goto(`${WEB}/admin/schedule?week=${week}&shift=${o.shift_id}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#shift-offer');
+    await page.waitForSelector('[role="dialog"] >> text=Suggested officers');
+    await audit(page, 'Schedule: a shift offered to officers', null);
+    const top = page.locator('[role="dialog"] button:has-text("Ask the top 3")');
+    if (await top.count()) {
+      await top.click();
+      await page.waitForSelector('#shift-offer button:has-text("Ask ")');
+      await audit(page, 'Schedule: asking more officers to cover', null);
+    }
+    await page.keyboard.press('Escape');
+  } else {
+    console.log('SKIP  shift offers: none open on the demo just now');
+  }
+}
 await page.goto(`${WEB}/admin/time-off`, { waitUntil: 'networkidle' });
 await page.locator('.list-item', { hasText: 'Marcus Bell' }).first().locator('button:has-text("Approve")').click();
 await page.waitForSelector('[role="dialog"]');

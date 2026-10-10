@@ -98,7 +98,8 @@ export function pathForNotification(data) {
     case 'call':
     case 'vehicle':
     case 'handover':
-      // A call sent to the officer sits at the top of the home screen.
+    case 'shift_offer':
+      // A call sent to the officer, or a shift they are asked to cover, sits on the home screen.
       return '/';
     case 'attendance':
       // A late start or no-show, for a supervisor.

@@ -116,6 +116,23 @@ export const SHIFT_REQUEST_STATUS = [
 ];
 
 /**
+ * Shift offers: an open shift sent to several officers at once. Where one
+ * stands, worked out from the offer and its shift together, so an offer
+ * whose shift was taken some other way reads as covered on its own.
+ */
+export const OFFER_STATE_LABEL = {
+  open: 'Waiting for a yes',
+  filled: 'Taken',
+  covered: 'Covered another way',
+  withdrawn: 'Withdrawn',
+  expired: 'Started with nobody on it',
+};
+/** At most this many officers are asked about one shift. */
+export const OFFER_MAX_RECIPIENTS = 20;
+/** With nobody yet saying yes, an offer is raised in the alerts this close to the start. */
+export const OFFER_ALERT_HOURS = 3;
+
+/**
  * Why an officer may not take a given shift.
  *
  * Returned as a list so the UI can show every reason at once rather than
@@ -125,11 +142,11 @@ export function shiftEligibility({ post, officer, certifications = [], conflicts
   const reasons = [];
 
   if (suspended) {
-    reasons.push({ code: 'suspended', message: 'They are suspended on this date.' });
+    reasons.push({ code: 'suspended', message: 'They are suspended on this date.', officerMessage: 'You are suspended on this date.' });
   }
 
   if (officer?.status !== 'active') {
-    reasons.push({ code: 'inactive', message: 'The officer is not active.' });
+    reasons.push({ code: 'inactive', message: 'The officer is not active.', officerMessage: 'Your account is not active.' });
   }
 
   // An armed post needs a current Class G. This is the rule that actually
@@ -141,22 +158,22 @@ export function shiftEligibility({ post, officer, certifications = [], conflicts
     ].find((c) => /class g|firearm/i.test(c.type || ''));
 
     if (!armedLicence) {
-      reasons.push({ code: 'no_armed_licence', message: 'Armed post: no Class G licence on file.' });
+      reasons.push({ code: 'no_armed_licence', message: 'Armed post: no Class G licence on file.', officerMessage: 'It is an armed post, and there is no Class G licence on file for you.' });
     } else if (armedLicence.expires && expiryState(armedLicence.expires).state === 'expired') {
-      reasons.push({ code: 'expired_armed_licence', message: 'Armed post: their Class G licence has expired.' });
+      reasons.push({ code: 'expired_armed_licence', message: 'Armed post: their Class G licence has expired.', officerMessage: 'It is an armed post, and your Class G licence has expired.' });
     }
   }
 
   if (officer?.license_expires_on && expiryState(officer.license_expires_on).state === 'expired') {
-    reasons.push({ code: 'expired_licence', message: 'Their security licence has expired.' });
+    reasons.push({ code: 'expired_licence', message: 'Their security licence has expired.', officerMessage: 'Your security licence has expired.' });
   }
 
   if (conflicts.length) {
-    reasons.push({ code: 'conflict', message: 'They already have a shift overlapping this one.' });
+    reasons.push({ code: 'conflict', message: 'They already have a shift overlapping this one.', officerMessage: 'You already have a shift at that time.' });
   }
 
   if (timeOff.length) {
-    reasons.push({ code: 'time_off', message: 'They have approved time off covering this date.' });
+    reasons.push({ code: 'time_off', message: 'They have approved time off covering this date.', officerMessage: 'You have approved time off that day.' });
   }
 
   // Availability is advisory: officers pick up shifts outside their stated

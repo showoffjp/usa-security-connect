@@ -22,6 +22,7 @@ import { NewCommendations } from '../../src/Commendations.jsx';
 import { ConductToSign } from '../../src/Conduct.jsx';
 import { HandoverCard } from '../../src/Handover.jsx';
 import { HeadsUpCard } from '../../src/HeadsUp.jsx';
+import { ShiftOffersCard } from '../../src/ShiftOffers.jsx';
 import { C, S } from '../../src/theme.js';
 import { formatDuration, toHours } from '../../src/shared.js';
 
@@ -191,6 +192,7 @@ export default function HomeScreen() {
         <CallsCard onDuty={onDuty} notify={notify} refreshKey={pulls} />
         <HandoverCard refreshKey={pulls} />
         {!onDuty && <HeadsUpCard notify={notify} refreshKey={pulls} />}
+        <ShiftOffersCard notify={notify} refreshKey={pulls} />
 
         {/* Changed orders and unread pass-down come before anything else on post. */}
         <PostLogCards postLog={postLog} notify={notify} />
